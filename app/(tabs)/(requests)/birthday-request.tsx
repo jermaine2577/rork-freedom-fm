@@ -20,7 +20,7 @@ export default function BirthdayRequestScreen() {
   const [alias, setAlias] = useState('');
   const [address, setAddress] = useState('');
   const [birthDate, setBirthDate] = useState('');
-  const [message, setMessage] = useState('');
+  const [messageDedication, setMessageDedication] = useState('');
 
   const clearForm = () => {
     setFirstName('');
@@ -28,7 +28,7 @@ export default function BirthdayRequestScreen() {
     setAlias('');
     setAddress('');
     setBirthDate('');
-    setMessage('');
+    setMessageDedication('');
   };
 
   const handleSubmit = async () => {
@@ -54,7 +54,7 @@ export default function BirthdayRequestScreen() {
       formData.append('alias', alias);
       formData.append('address', address);
       formData.append('birth_date', birthDate);
-      formData.append('message', message);
+      formData.append('message_dedication', messageDedication);
 
       const response = await fetch('https://freedomfm1065.com/wp-content/themes/dj-rainflow-child/form-handler.php', {
         method: 'POST',
@@ -180,8 +180,8 @@ export default function BirthdayRequestScreen() {
               style={[styles.input, styles.textArea]}
               placeholder="Add a message or dedication..."
               placeholderTextColor={colors.textSecondary}
-              value={message}
-              onChangeText={setMessage}
+              value={messageDedication}
+              onChangeText={setMessageDedication}
               multiline
               numberOfLines={4}
               maxLength={500}

@@ -50,7 +50,7 @@ export default function SongRequestScreen() {
       formData.append('your_name', yourName);
       formData.append('to_name', toName);
       formData.append('requested_song', requestedSong);
-      formData.append('message', message);
+      formData.append('message_dedication', message);
       formData.append('dj', dj);
 
       const response = await fetch('https://freedomfm1065.com/wp-content/themes/dj-rainflow-child/form-handler.php', {
