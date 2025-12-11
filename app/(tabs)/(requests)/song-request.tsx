@@ -1,258 +1,37 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  Modal,
-  Pressable,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Music, ChevronDown } from 'lucide-react-native';
-import colors from '@/constants/colors';
-
-const DJ_OPTIONS = [
-  { label: 'Select DJ', value: '' },
-  { label: 'DJ Mike', value: 'DJ Mike' },
-  { label: 'DJ Sarah', value: 'DJ Sarah' },
-  { label: 'DJ Chris', value: 'DJ Chris' },
-  { label: 'DJ Maria', value: 'DJ Maria' },
-  { label: 'DJ John', value: 'DJ John' },
-  { label: 'Any DJ', value: 'Any DJ' },
-];
+import React from 'react';
+import { View, StyleSheet, Platform } from 'react-native';
+import { WebView } from 'react-native-webview';
 
 export default function SongRequestScreen() {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [yourName, setYourName] = useState('');
-  const [toName, setToName] = useState('');
-  const [requestedSong, setRequestedSong] = useState('');
-  const [message, setMessage] = useState('');
-  const [dj, setDj] = useState('');
-  const [showDjPicker, setShowDjPicker] = useState(false);
+  const url = 'https://freedomfm1065.com/song-request/';
 
-  const clearForm = () => {
-    setYourName('');
-    setToName('');
-    setRequestedSong('');
-    setMessage('');
-    setDj('');
-    setShowDjPicker(false);
-  };
-
-  const getSelectedDjLabel = () => {
-    const selected = DJ_OPTIONS.find(option => option.value === dj);
-    return selected ? selected.label : 'Select DJ';
-  };
-
-  const handleSubmit = async () => {
-    if (!yourName.trim()) {
-      Alert.alert('Missing Information', 'Please enter your name.');
-      return;
-    }
-    if (!toName.trim()) {
-      Alert.alert('Missing Information', 'Please enter the recipient name.');
-      return;
-    }
-    if (!requestedSong.trim()) {
-      Alert.alert('Missing Information', 'Please enter the requested song.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const formData = new FormData();
-      formData.append('form_type', 'song_request');
-      formData.append('your_name', yourName);
-      formData.append('to_name', toName);
-      formData.append('requested_song', requestedSong);
-      formData.append('message_dedication', message);
-      formData.append('dj', dj);
-
-      const response = await fetch('https://freedomfm1065.com/wp-content/themes/dj-rainflow-child/form-handler.php', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const result = await response.json();
-      console.log('Song request result:', result);
-      
-      if (result.success) {
-        Alert.alert(
-          'Request Submitted!',
-          result.message || 'Thank you! Your song request has been received.',
-          [{ text: 'OK', onPress: clearForm }]
-        );
-      } else {
-        Alert.alert(
-          'Error',
-          result.message || 'There was an error submitting your request. Please try again.',
-          [{ text: 'OK' }]
-        );
-      }
-    } catch (error) {
-      console.log('Song request error:', error);
-      Alert.alert(
-        'Error',
-        'Unable to submit your request. Please check your connection and try again.',
-        [{ text: 'OK' }]
-      );
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.container}>
+        <iframe
+          src={url}
+          style={{
+            width: '100%',
+            height: '100%',
+            border: 'none',
+          }}
+          title="Song Request"
+        />
+      </View>
+    );
+  }
 
   return (
-    <LinearGradient
-      colors={[colors.gradientStart, colors.gradientMiddle, colors.gradientEnd]}
-      locations={[0, 0.5, 1]}
-      style={styles.container}
-    >
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.header}>
-          <View style={styles.iconContainer}>
-            <Music size={32} color={colors.yellow} />
-          </View>
-          <Text style={styles.title}>Song Request</Text>
-          <Text style={styles.subtitle}>Request your favorite song to be played</Text>
-        </View>
-
-        <View style={styles.form}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.labelText}>Your Name *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your name"
-              placeholderTextColor={colors.textSecondary}
-              value={yourName}
-              onChangeText={setYourName}
-              maxLength={100}
-              editable={!isSubmitting}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.labelText}>To Name *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Who is this request for?"
-              placeholderTextColor={colors.textSecondary}
-              value={toName}
-              onChangeText={setToName}
-              maxLength={100}
-              editable={!isSubmitting}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.labelText}>Requested Song *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Artist - Song title"
-              placeholderTextColor={colors.textSecondary}
-              value={requestedSong}
-              onChangeText={setRequestedSong}
-              maxLength={200}
-              editable={!isSubmitting}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.labelText}>Message/Dedication (Optional)</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="Add a message or dedication..."
-              placeholderTextColor={colors.textSecondary}
-              value={message}
-              onChangeText={setMessage}
-              multiline
-              numberOfLines={4}
-              maxLength={500}
-              editable={!isSubmitting}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.labelText}>DJ (Optional)</Text>
-            <TouchableOpacity
-              style={styles.pickerButton}
-              onPress={() => setShowDjPicker(true)}
-              disabled={isSubmitting}
-            >
-              <Text style={[styles.pickerButtonText, !dj && styles.pickerPlaceholder]}>
-                {getSelectedDjLabel()}
-              </Text>
-              <ChevronDown size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
-          onPress={handleSubmit}
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator color={colors.text} size="small" />
-          ) : (
-            <Text style={styles.submitButtonText}>Submit Request</Text>
-          )}
-        </TouchableOpacity>
-
-        <View style={styles.info}>
-          <Text style={styles.infoText}>* Required fields</Text>
-          <Text style={styles.infoText}>
-            Your request will be sent to Freedom FM 106.5.
-          </Text>
-        </View>
-      </ScrollView>
-
-      <Modal
-        visible={showDjPicker}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowDjPicker(false)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setShowDjPicker(false)}>
-          <View style={styles.pickerModal}>
-            <View style={styles.pickerHeader}>
-              <Text style={styles.pickerTitle}>Select DJ</Text>
-            </View>
-            <ScrollView style={styles.pickerOptions}>
-              {DJ_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[
-                    styles.pickerOption,
-                    dj === option.value && styles.pickerOptionSelected,
-                  ]}
-                  onPress={() => {
-                    setDj(option.value);
-                    setShowDjPicker(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.pickerOptionText,
-                      dj === option.value && styles.pickerOptionTextSelected,
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </Pressable>
-      </Modal>
-    </LinearGradient>
+    <View style={styles.container}>
+      <WebView
+        source={{ uri: url }}
+        style={styles.webview}
+        startInLoadingState
+        scalesPageToFit
+        javaScriptEnabled
+        domStorageEnabled
+      />
+    </View>
   );
 }
 
@@ -260,157 +39,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollView: {
+  webview: {
     flex: 1,
-  },
-  content: {
-    paddingTop: 20,
-    paddingBottom: 40,
-    paddingHorizontal: 20,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  iconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700' as const,
-    color: colors.text,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  form: {
-    gap: 20,
-  },
-  inputGroup: {
-    gap: 8,
-  },
-  labelText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: colors.textSecondary,
-  },
-  input: {
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: colors.text,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  submitButton: {
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    marginTop: 8,
-    minHeight: 56,
-  },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitButtonText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: colors.text,
-  },
-  info: {
-    marginTop: 24,
-    gap: 8,
-  },
-  infoText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    lineHeight: 18,
-  },
-  pickerButton: {
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  pickerButtonText: {
-    fontSize: 16,
-    color: colors.text,
-  },
-  pickerPlaceholder: {
-    color: colors.textSecondary,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  pickerModal: {
-    backgroundColor: 'rgba(20, 20, 40, 0.98)',
-    borderRadius: 16,
-    width: '100%',
-    maxWidth: 400,
-    maxHeight: 400,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  pickerHeader: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  pickerTitle: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: colors.text,
-    textAlign: 'center',
-  },
-  pickerOptions: {
-    maxHeight: 300,
-  },
-  pickerOption: {
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  pickerOptionSelected: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  pickerOptionText: {
-    fontSize: 16,
-    color: colors.text,
-  },
-  pickerOptionTextSelected: {
-    fontWeight: '600' as const,
-    color: colors.yellow,
   },
 });
