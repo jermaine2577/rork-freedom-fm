@@ -22,7 +22,15 @@ export default function SongRequestScreen() {
               const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
               if (iframeDoc) {
                 const style = iframeDoc.createElement('style');
-                style.textContent = 'header, footer, .site-header, .site-footer { display: none !important; }';
+                style.textContent = `
+                  header, footer, .site-header, .site-footer,
+                  nav, .navigation, .navbar, .menu,
+                  #header, #footer, #masthead, #site-header, #site-footer,
+                  .header, .footer, [role="banner"], [role="contentinfo"],
+                  .top-bar, .header-info, .contact-info,
+                  .site-branding, .main-navigation
+                  { display: none !important; visibility: hidden !important; height: 0 !important; }
+                `;
                 iframeDoc.head.appendChild(style);
               }
             } catch (err) {
@@ -51,13 +59,19 @@ export default function SongRequestScreen() {
                 header, footer, .site-header, .site-footer,
                 nav, .navigation, .navbar, .menu,
                 #header, #footer, #masthead, #site-header, #site-footer,
-                .header, .footer, [role="banner"], [role="contentinfo"] {
+                .header, .footer, [role="banner"], [role="contentinfo"],
+                .top-bar, .header-info, .contact-info,
+                .site-branding, .main-navigation,
+                .breadcrumbs, .breadcrumb,
+                .page-header, .entry-header
+                {
                   display: none !important;
                   visibility: hidden !important;
                   height: 0 !important;
                   overflow: hidden !important;
                 }
-                body { padding-top: 0 !important; }
+                body { padding-top: 0 !important; margin-top: 0 !important; }
+                .site-content, .main-content, #content { padding-top: 0 !important; margin-top: 0 !important; }
               \`;
               document.head.appendChild(style);
             }
