@@ -45,10 +45,28 @@ export default function SongRequestScreen() {
         domStorageEnabled
         injectedJavaScript={`
           (function() {
-            const style = document.createElement('style');
-            style.textContent = 'header, footer, .site-header, .site-footer { display: none !important; }';
-            document.head.appendChild(style);
+            function hideElements() {
+              const style = document.createElement('style');
+              style.textContent = \`
+                header, footer, .site-header, .site-footer,
+                nav, .navigation, .navbar, .menu,
+                #header, #footer, #masthead, #site-header, #site-footer,
+                .header, .footer, [role="banner"], [role="contentinfo"] {
+                  display: none !important;
+                  visibility: hidden !important;
+                  height: 0 !important;
+                  overflow: hidden !important;
+                }
+                body { padding-top: 0 !important; }
+              \`;
+              document.head.appendChild(style);
+            }
+            hideElements();
+            setTimeout(hideElements, 100);
+            setTimeout(hideElements, 500);
+            setTimeout(hideElements, 1000);
           })();
+          true;
         `}
       />
     </View>
