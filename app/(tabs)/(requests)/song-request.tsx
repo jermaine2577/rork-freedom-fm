@@ -16,6 +16,19 @@ export default function SongRequestScreen() {
             border: 'none',
           }}
           title="Song Request"
+          onLoad={(e: any) => {
+            try {
+              const iframe = e.target;
+              const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+              if (iframeDoc) {
+                const style = iframeDoc.createElement('style');
+                style.textContent = 'header { display: none !important; }';
+                iframeDoc.head.appendChild(style);
+              }
+            } catch (err) {
+              console.log('Cannot access iframe content due to CORS');
+            }
+          }}
         />
       </View>
     );
@@ -30,6 +43,13 @@ export default function SongRequestScreen() {
         scalesPageToFit
         javaScriptEnabled
         domStorageEnabled
+        injectedJavaScript={`
+          (function() {
+            const style = document.createElement('style');
+            style.textContent = 'header { display: none !important; }';
+            document.head.appendChild(style);
+          })();
+        `}
       />
     </View>
   );
