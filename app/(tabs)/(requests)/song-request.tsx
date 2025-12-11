@@ -8,10 +8,22 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Music } from 'lucide-react-native';
+import { Music, ChevronDown } from 'lucide-react-native';
 import colors from '@/constants/colors';
+
+const DJ_OPTIONS = [
+  { label: 'Select DJ', value: '' },
+  { label: 'DJ Mike', value: 'DJ Mike' },
+  { label: 'DJ Sarah', value: 'DJ Sarah' },
+  { label: 'DJ Chris', value: 'DJ Chris' },
+  { label: 'DJ Maria', value: 'DJ Maria' },
+  { label: 'DJ John', value: 'DJ John' },
+  { label: 'Any DJ', value: 'Any DJ' },
+];
 
 export default function SongRequestScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -20,6 +32,7 @@ export default function SongRequestScreen() {
   const [requestedSong, setRequestedSong] = useState('');
   const [message, setMessage] = useState('');
   const [dj, setDj] = useState('');
+  const [showDjPicker, setShowDjPicker] = useState(false);
 
   const clearForm = () => {
     setYourName('');
@@ -27,6 +40,12 @@ export default function SongRequestScreen() {
     setRequestedSong('');
     setMessage('');
     setDj('');
+    setShowDjPicker(false);
+  };
+
+  const getSelectedDjLabel = () => {
+    const selected = DJ_OPTIONS.find(option => option.value === dj);
+    return selected ? selected.label : 'Select DJ';
   };
 
   const handleSubmit = async () => {
@@ -162,15 +181,16 @@ export default function SongRequestScreen() {
 
           <View style={styles.inputGroup}>
             <Text style={styles.labelText}>DJ (Optional)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Preferred DJ (if any)"
-              placeholderTextColor={colors.textSecondary}
-              value={dj}
-              onChangeText={setDj}
-              maxLength={100}
-              editable={!isSubmitting}
-            />
+            <TouchableOpacity
+              style={styles.pickerButton}
+              onPress={() => setShowDjPicker(true)}
+              disabled={isSubmitting}
+            >
+              <Text style={[styles.pickerButtonText, !dj && styles.pickerPlaceholder]}>
+                {getSelectedDjLabel()}
+              </Text>
+              <ChevronDown size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -193,6 +213,45 @@ export default function SongRequestScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={showDjPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDjPicker(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowDjPicker(false)}>
+          <View style={styles.pickerModal}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Select DJ</Text>
+            </View>
+            <ScrollView style={styles.pickerOptions}>
+              {DJ_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.pickerOption,
+                    dj === option.value && styles.pickerOptionSelected,
+                  ]}
+                  onPress={() => {
+                    setDj(option.value);
+                    setShowDjPicker(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.pickerOptionText,
+                      dj === option.value && styles.pickerOptionTextSelected,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </Pressable>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -288,5 +347,70 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textSecondary,
     lineHeight: 18,
+  },
+  pickerButton: {
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  pickerButtonText: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  pickerPlaceholder: {
+    color: colors.textSecondary,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  pickerModal: {
+    backgroundColor: 'rgba(20, 20, 40, 0.98)',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: 400,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  pickerHeader: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  pickerTitle: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  pickerOptions: {
+    maxHeight: 300,
+  },
+  pickerOption: {
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  pickerOptionSelected: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  pickerOptionText: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  pickerOptionTextSelected: {
+    fontWeight: '600' as const,
+    color: colors.yellow,
   },
 });
