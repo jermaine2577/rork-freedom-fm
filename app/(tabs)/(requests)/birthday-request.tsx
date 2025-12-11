@@ -22,7 +22,7 @@ export default function BirthdayRequestScreen() {
               const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
               if (iframeDoc) {
                 const style = iframeDoc.createElement('style');
-                style.textContent = 'header { display: none !important; }';
+                style.textContent = 'header, footer, .site-header, .site-footer { display: none !important; }';
                 iframeDoc.head.appendChild(style);
               }
             } catch (err) {
@@ -46,7 +46,7 @@ export default function BirthdayRequestScreen() {
         injectedJavaScript={`
           (function() {
             const style = document.createElement('style');
-            style.textContent = 'header { display: none !important; }';
+            style.textContent = 'header, footer, .site-header, .site-footer { display: none !important; }';
             document.head.appendChild(style);
           })();
         `}
