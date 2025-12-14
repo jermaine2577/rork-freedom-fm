@@ -41,6 +41,7 @@ interface WordPressPost {
 
 const decodeHtmlEntities = (text: string): string => {
   return text
+    .replace(/&#038;/g, '&')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
