@@ -43,18 +43,44 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
 
 
+  const onPlaybackStatusUpdate = useCallback((status: any) => {
+    console.log('Playback status:', status);
+    
+    if (status.isLoaded) {
+      if (status.isPlaying) {
+        console.log('Audio is playing');
+        setIsPlaying(true);
+        setIsLoading(false);
+        setError(null);
+      } else if (status.isBuffering) {
+        console.log('Audio is buffering...');
+        setIsLoading(true);
+      } else {
+        console.log('Audio loaded but not playing');
+        setIsPlaying(false);
+      }
+    } else if (status.error) {
+      console.error('Playback error:', status.error);
+      setError('Playback error: ' + status.error);
+      setIsPlaying(false);
+      setIsLoading(false);
+    }
+  }, []);
+
   const play = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
+      console.log('Play requested...');
       
       if (soundRef.current) {
         try {
           const status = await soundRef.current.getStatusAsync();
+          console.log('Current sound status:', status);
           if (status.isLoaded) {
+            await soundRef.current.setVolumeAsync(volume);
             await soundRef.current.playAsync();
-            setIsPlaying(true);
-            setIsLoading(false);
+            console.log('Resumed existing sound');
             return;
           }
         } catch (e) {
@@ -71,32 +97,41 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         soundRef.current = null;
       }
       
-      console.log('Creating new audio stream...');
+      console.log('Creating new audio stream from:', STREAM_URL);
+      console.log('Initial volume:', volume);
+      
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: STREAM_URL },
         { 
           shouldPlay: true, 
-          volume,
+          volume: volume,
           isLooping: false,
+          progressUpdateIntervalMillis: 1000,
         },
-        null
+        onPlaybackStatusUpdate
       );
       
       soundRef.current = newSound;
-      setIsPlaying(true);
-      console.log('Audio stream started successfully');
+      
+      const status = await newSound.getStatusAsync();
+      console.log('New sound created, status:', status);
+      
+      if (status.isLoaded) {
+        console.log('Sound loaded successfully, volume:', status.volume);
+      }
+      
     } catch (error: any) {
       console.error('Error playing stream:', error);
-      setError('Unable to play stream. Please try again.');
+      setError('Unable to play stream: ' + (error.message || 'Unknown error'));
+      setIsPlaying(false);
       
       if (soundRef.current) {
         await soundRef.current.unloadAsync().catch(() => {});
         soundRef.current = null;
       }
-    } finally {
       setIsLoading(false);
     }
-  }, [volume]);
+  }, [volume, onPlaybackStatusUpdate]);
 
   const pause = useCallback(async () => {
     try {
