@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
 import { Platform } from 'react-native';
 
-const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/radio.mp3';
+const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/mobile.mp3';
 
 export const [RadioProvider, useRadio] = createContextHook(() => {
   const [isPlaying, setIsPlaying] = useState(false);
