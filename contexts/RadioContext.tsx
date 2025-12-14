@@ -25,8 +25,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             interruptionModeIOS: 1,
             interruptionModeAndroid: 1,
           });
+          console.log('Audio setup complete (native)');
+        } else {
+          console.log('Audio setup complete (web)');
         }
-        console.log('Audio setup complete');
       } catch (error) {
         console.error('Error setting up audio:', error);
       }
@@ -44,11 +46,17 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
 
   const onPlaybackStatusUpdate = useCallback((status: any) => {
-    console.log('Playback status:', status);
+    console.log('Playback status update:', {
+      isLoaded: status.isLoaded,
+      isPlaying: status.isPlaying,
+      isBuffering: status.isBuffering,
+      volume: status.volume,
+      error: status.error,
+    });
     
     if (status.isLoaded) {
       if (status.isPlaying) {
-        console.log('Audio is playing');
+        console.log('Audio is actively playing');
         setIsPlaying(true);
         setIsLoading(false);
         setError(null);
@@ -58,6 +66,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       } else {
         console.log('Audio loaded but not playing');
         setIsPlaying(false);
+        setIsLoading(false);
       }
     } else if (status.error) {
       console.error('Playback error:', status.error);
@@ -72,56 +81,48 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       setIsLoading(true);
       setError(null);
       console.log('Play requested...');
-      
-      if (soundRef.current) {
-        try {
-          const status = await soundRef.current.getStatusAsync();
-          console.log('Current sound status:', status);
-          if (status.isLoaded) {
-            await soundRef.current.setVolumeAsync(volume);
-            await soundRef.current.playAsync();
-            console.log('Resumed existing sound');
-            return;
-          }
-        } catch (e) {
-          console.warn('Reusing existing sound failed, creating new one:', e);
-        }
-      }
+      console.log('Stream URL:', STREAM_URL);
       
       if (soundRef.current) {
         try {
           await soundRef.current.unloadAsync();
+          console.log('Previous sound unloaded');
         } catch (e) {
           console.warn('Error cleaning up previous sound:', e);
         }
         soundRef.current = null;
       }
       
-      console.log('Creating new audio stream from:', STREAM_URL);
-      console.log('Initial volume:', volume);
+      console.log('Creating new audio stream...');
       
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: STREAM_URL },
         { 
           shouldPlay: true, 
-          volume: volume,
+          volume: 1.0,
           isLooping: false,
-          progressUpdateIntervalMillis: 1000,
+          progressUpdateIntervalMillis: 500,
         },
         onPlaybackStatusUpdate
       );
       
       soundRef.current = newSound;
+      console.log('New sound created');
       
       const status = await newSound.getStatusAsync();
-      console.log('New sound created, status:', status);
-      
-      if (status.isLoaded) {
-        console.log('Sound loaded successfully, volume:', status.volume);
-      }
+      console.log('Sound status after creation:', {
+        isLoaded: status.isLoaded,
+        isPlaying: status.isLoaded && status.isPlaying,
+        volume: status.isLoaded && status.volume,
+      });
       
     } catch (error: any) {
       console.error('Error playing stream:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        stack: error.stack,
+      });
       setError('Unable to play stream: ' + (error.message || 'Unknown error'));
       setIsPlaying(false);
       
@@ -131,7 +132,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       }
       setIsLoading(false);
     }
-  }, [volume, onPlaybackStatusUpdate]);
+  }, [onPlaybackStatusUpdate]);
 
   const pause = useCallback(async () => {
     try {
@@ -166,7 +167,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     try {
       setVolume(newVolume);
       if (soundRef.current) {
-        await soundRef.current.setVolumeAsync(newVolume);
+        const status = await soundRef.current.getStatusAsync();
+        if (status.isLoaded) {
+          await soundRef.current.setVolumeAsync(newVolume);
+          console.log('Volume changed to:', newVolume);
+        }
       }
     } catch (error) {
       console.error('Error changing volume:', error);
