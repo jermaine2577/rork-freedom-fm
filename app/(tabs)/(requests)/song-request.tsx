@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -31,6 +31,26 @@ export default function SongRequestScreen() {
   const [requestedSong, setRequestedSong] = useState('');
   const [recaptchaToken, setRecaptchaToken] = useState<string>('');
   const webViewRef = useRef<WebView>(null);
+  const recaptchaContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const script = document.createElement('script');
+      script.src = 'https://www.google.com/recaptcha/api.js';
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+
+      (window as any).onRecaptchaSuccess = (token: string) => {
+        setRecaptchaToken(token);
+      };
+
+      return () => {
+        document.head.removeChild(script);
+        delete (window as any).onRecaptchaSuccess;
+      };
+    }
+  }, []);
 
   const submitMutation = useMutation({
     mutationFn: async (data: SongRequestData) => {
@@ -170,37 +190,51 @@ export default function SongRequestScreen() {
           </View>
 
           <View style={styles.recaptchaContainer}>
-            <WebView
-              ref={webViewRef}
-              style={styles.recaptcha}
-              source={{
-                html: `
-                  <!DOCTYPE html>
-                  <html>
-                    <head>
-                      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                      <script src="https://www.google.com/recaptcha/api.js" async defer></script>
-                      <style>
-                        body { margin: 0; padding: 10px; display: flex; justify-content: center; }
-                      </style>
-                    </head>
-                    <body>
-                      <div class="g-recaptcha" data-sitekey="${RECAPTCHA_SITE_KEY}" data-callback="onRecaptchaSuccess"></div>
-                      <script>
-                        function onRecaptchaSuccess(token) {
-                          window.ReactNativeWebView.postMessage(token);
-                        }
-                      </script>
-                    </body>
-                  </html>
-                `,
-              }}
-              onMessage={(event) => {
-                setRecaptchaToken(event.nativeEvent.data);
-              }}
-              javaScriptEnabled
-              scrollEnabled={false}
-            />
+            {Platform.OS === 'web' ? (
+              <div
+                ref={recaptchaContainerRef as any}
+                className="g-recaptcha"
+                data-sitekey={RECAPTCHA_SITE_KEY}
+                data-callback="onRecaptchaSuccess"
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  padding: 10,
+                }}
+              />
+            ) : (
+              <WebView
+                ref={webViewRef}
+                style={styles.recaptcha}
+                source={{
+                  html: `
+                    <!DOCTYPE html>
+                    <html>
+                      <head>
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                        <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+                        <style>
+                          body { margin: 0; padding: 10px; display: flex; justify-content: center; }
+                        </style>
+                      </head>
+                      <body>
+                        <div class="g-recaptcha" data-sitekey="${RECAPTCHA_SITE_KEY}" data-callback="onRecaptchaSuccess"></div>
+                        <script>
+                          function onRecaptchaSuccess(token) {
+                            window.ReactNativeWebView.postMessage(token);
+                          }
+                        </script>
+                      </body>
+                    </html>
+                  `,
+                }}
+                onMessage={(event) => {
+                  setRecaptchaToken(event.nativeEvent.data);
+                }}
+                javaScriptEnabled
+                scrollEnabled={false}
+              />
+            )}
           </View>
 
           <TouchableOpacity
