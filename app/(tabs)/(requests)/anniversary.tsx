@@ -1,83 +1,232 @@
-import React from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
-import { WebView } from 'react-native-webview';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import { useMutation } from '@tanstack/react-query';
+import { Heart } from 'lucide-react-native';
+
+interface AnniversaryListData {
+  names: string;
+  anniversary_type: string;
+  date: string;
+}
 
 export default function AnniversaryScreen() {
-  const url = 'https://freedomfm1065.com/anniversary-list/';
+  const [names, setNames] = useState('');
+  const [anniversaryType, setAnniversaryType] = useState('');
+  const [date, setDate] = useState('');
 
-  if (Platform.OS === 'web') {
-    return (
-      <View style={styles.container}>
-        <iframe
-          src={url}
-          style={{
-            width: '100%',
-            height: '100%',
-            border: 'none',
-          }}
-          title="Anniversary List"
-          onLoad={(e: any) => {
-            try {
-              const iframe = e.target;
-              const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-              if (iframeDoc) {
-                const style = iframeDoc.createElement('style');
-                style.textContent = 'header, footer, .site-header, .site-footer { display: none !important; }';
-                iframeDoc.head.appendChild(style);
-              }
-            } catch (err) {
-              console.log('Cannot access iframe content due to CORS');
-            }
-          }}
-        />
-      </View>
-    );
-  }
+  const submitMutation = useMutation({
+    mutationFn: async (data: AnniversaryListData) => {
+      const response = await fetch(
+        'https://freedomfm1065.com/wp-json/chatroom/v1/forms/submit',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            form_type: 'anniversary_list',
+            form_data: data,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Failed to submit');
+      }
+
+      return result;
+    },
+    onSuccess: (data) => {
+      Alert.alert('Success', data.message || 'Added to anniversary list successfully!');
+      setNames('');
+      setAnniversaryType('');
+      setDate('');
+    },
+    onError: (error: Error) => {
+      Alert.alert('Error', error.message || 'Failed to submit');
+    },
+  });
+
+  const handleSubmit = () => {
+    if (!names.trim() || !anniversaryType.trim() || !date.trim()) {
+      Alert.alert('Required Fields', 'Please fill in all required fields');
+      return;
+    }
+
+    submitMutation.mutate({
+      names: names.trim(),
+      anniversary_type: anniversaryType.trim(),
+      date: date.trim(),
+    });
+  };
 
   return (
-    <View style={styles.container}>
-      <WebView
-        source={{ uri: url }}
-        style={styles.webview}
-        startInLoadingState
-        scalesPageToFit
-        javaScriptEnabled
-        domStorageEnabled
-        injectedJavaScript={`
-          (function() {
-            function hideElements() {
-              const style = document.createElement('style');
-              style.textContent = \`
-                header, footer, .site-header, .site-footer,
-                nav, .navigation, .navbar, .menu,
-                #header, #footer, #masthead, #site-header, #site-footer,
-                .header, .footer, [role="banner"], [role="contentinfo"] {
-                  display: none !important;
-                  visibility: hidden !important;
-                  height: 0 !important;
-                  overflow: hidden !important;
-                }
-                body { padding-top: 0 !important; }
-              \`;
-              document.head.appendChild(style);
-            }
-            hideElements();
-            setTimeout(hideElements, 100);
-            setTimeout(hideElements, 500);
-            setTimeout(hideElements, 1000);
-          })();
-          true;
-        `}
-      />
-    </View>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.header}>
+          <Heart size={48} color="#9C27B0" strokeWidth={2} />
+          <Text style={styles.title}>Anniversary List</Text>
+          <Text style={styles.subtitle}>Add your anniversary to our list</Text>
+        </View>
+
+        <View style={styles.form}>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>
+              Names <Text style={styles.required}>*</Text>
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={names}
+              onChangeText={setNames}
+              placeholder="e.g., John & Jane Smith"
+              placeholderTextColor="#999"
+              editable={!submitMutation.isPending}
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>
+              Anniversary Type <Text style={styles.required}>*</Text>
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={anniversaryType}
+              onChangeText={setAnniversaryType}
+              placeholder="e.g., Wedding, Business, etc."
+              placeholderTextColor="#999"
+              editable={!submitMutation.isPending}
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>
+              Date <Text style={styles.required}>*</Text>
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={date}
+              onChangeText={setDate}
+              placeholder="MM/DD/YYYY"
+              placeholderTextColor="#999"
+              editable={!submitMutation.isPending}
+            />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.submitButton, submitMutation.isPending && styles.submitButtonDisabled]}
+            onPress={handleSubmit}
+            disabled={submitMutation.isPending}
+          >
+            {submitMutation.isPending ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <Text style={styles.submitButtonText}>Add to List</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#F8F9FA',
   },
-  webview: {
+  scrollView: {
     flex: 1,
+  },
+  content: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 32,
+    paddingTop: 20,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700' as const,
+    color: '#1A1A1A',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+  },
+  form: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#1A1A1A',
+    marginBottom: 8,
+  },
+  required: {
+    color: '#E63946',
+  },
+  input: {
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: '#1A1A1A',
+  },
+  submitButton: {
+    backgroundColor: '#9C27B0',
+    borderRadius: 12,
+    padding: 18,
+    alignItems: 'center',
+    marginTop: 12,
+    shadowColor: '#9C27B0',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
+  submitButtonText: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: '700' as const,
   },
 });
