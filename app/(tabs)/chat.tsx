@@ -38,7 +38,7 @@ export default function ChatScreen() {
     return (
       <View style={styles.container}>
         <iframe
-          src="https://freedomfm1065.com/freedom-wall/"
+          src="https://freedomfm1065.com/mobile-chatroom/"
           style={{
             width: '100%',
             height: '100%',
@@ -60,7 +60,7 @@ export default function ChatScreen() {
   return (
     <View style={styles.container}>
       <WebView
-        source={{ uri: 'https://freedomfm1065.com/freedom-wall/' }}
+        source={{ uri: 'https://freedomfm1065.com/mobile-chatroom/' }}
         style={styles.webview}
         injectedJavaScript={injectedJavaScript}
         onMessage={() => {}}
