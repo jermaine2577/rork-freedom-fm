@@ -50,7 +50,7 @@ export default function PlayerScreen() {
       pulseAnim.setValue(1);
       rotateAnim.setValue(0);
     }
-  }, [isPlaying]);
+  }, [isPlaying, pulseAnim, rotateAnim]);
 
   const rotate = rotateAnim.interpolate({
     inputRange: [0, 1],
