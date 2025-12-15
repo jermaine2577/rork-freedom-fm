@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -13,40 +13,15 @@ import {
 } from 'react-native';
 import { useMutation } from '@tanstack/react-query';
 import { CalendarDays } from 'lucide-react-native';
-import { WebView } from 'react-native-webview';
 
 interface BirthdayListData {
   first_name: string;
   last_name: string;
 }
 
-const RECAPTCHA_SITE_KEY = '6LeL9SQsAAAAALTfO1y4_SJ9bLPVM9Z5L65E2RXf';
-
 export default function BirthdayListScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [recaptchaToken, setRecaptchaToken] = useState<string>('');
-  const webViewRef = useRef<WebView>(null);
-  const recaptchaContainerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const script = document.createElement('script');
-      script.src = 'https://www.google.com/recaptcha/api.js';
-      script.async = true;
-      script.defer = true;
-      document.head.appendChild(script);
-
-      (window as any).onRecaptchaSuccess = (token: string) => {
-        setRecaptchaToken(token);
-      };
-
-      return () => {
-        document.head.removeChild(script);
-        delete (window as any).onRecaptchaSuccess;
-      };
-    }
-  }, []);
 
   const submitMutation = useMutation({
     mutationFn: async (data: BirthdayListData) => {
@@ -60,7 +35,6 @@ export default function BirthdayListScreen() {
           body: JSON.stringify({
             form_type: 'birthday_list',
             form_data: data,
-            'g-recaptcha-response': recaptchaToken,
           }),
         }
       );
@@ -77,8 +51,6 @@ export default function BirthdayListScreen() {
       Alert.alert('Success', data.message || 'Added to birthday list successfully!');
       setFirstName('');
       setLastName('');
-      setRecaptchaToken('');
-      webViewRef.current?.reload();
     },
     onError: (error: Error) => {
       Alert.alert('Error', error.message || 'Failed to submit');
@@ -141,22 +113,6 @@ export default function BirthdayListScreen() {
               editable={!submitMutation.isPending}
             />
           </View>
-
-          {Platform.OS === 'web' && (
-            <View style={styles.recaptchaContainer}>
-              <div
-                ref={recaptchaContainerRef as any}
-                className="g-recaptcha"
-                data-sitekey={RECAPTCHA_SITE_KEY}
-                data-callback="onRecaptchaSuccess"
-                style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  padding: 10,
-                }}
-              />
-            </View>
-          )}
 
           <TouchableOpacity
             style={[styles.submitButton, submitMutation.isPending && styles.submitButtonDisabled]}
@@ -254,15 +210,5 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 18,
     fontWeight: '700' as const,
-  },
-  recaptchaContainer: {
-    marginBottom: 20,
-    borderRadius: 8,
-    overflow: 'hidden',
-    backgroundColor: '#F8F9FA',
-  },
-  recaptcha: {
-    height: 80,
-    backgroundColor: 'transparent',
   },
 });
