@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,15 +13,20 @@ import {
 } from 'react-native';
 import { useMutation } from '@tanstack/react-query';
 import { CalendarDays } from 'lucide-react-native';
+import { WebView } from 'react-native-webview';
 
 interface BirthdayListData {
   first_name: string;
   last_name: string;
 }
 
+const RECAPTCHA_SITE_KEY = '6LeL9SQsAAAAALTfO1y4_SJ9bLPVM9Z5L65E2RXf';
+
 export default function BirthdayListScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [recaptchaToken, setRecaptchaToken] = useState<string>('');
+  const webViewRef = useRef<WebView>(null);
 
   const submitMutation = useMutation({
     mutationFn: async (data: BirthdayListData) => {
@@ -35,6 +40,7 @@ export default function BirthdayListScreen() {
           body: JSON.stringify({
             form_type: 'birthday_list',
             form_data: data,
+            'g-recaptcha-response': recaptchaToken,
           }),
         }
       );
@@ -51,6 +57,8 @@ export default function BirthdayListScreen() {
       Alert.alert('Success', data.message || 'Added to birthday list successfully!');
       setFirstName('');
       setLastName('');
+      setRecaptchaToken('');
+      webViewRef.current?.reload();
     },
     onError: (error: Error) => {
       Alert.alert('Error', error.message || 'Failed to submit');
@@ -60,6 +68,11 @@ export default function BirthdayListScreen() {
   const handleSubmit = () => {
     if (!firstName.trim() || !lastName.trim()) {
       Alert.alert('Required Fields', 'Please fill in first name and last name');
+      return;
+    }
+
+    if (!recaptchaToken) {
+      Alert.alert('Verification Required', 'Please complete the reCAPTCHA verification');
       return;
     }
 
@@ -111,6 +124,40 @@ export default function BirthdayListScreen() {
               placeholder="Enter last name"
               placeholderTextColor="#999"
               editable={!submitMutation.isPending}
+            />
+          </View>
+
+          <View style={styles.recaptchaContainer}>
+            <WebView
+              ref={webViewRef}
+              style={styles.recaptcha}
+              source={{
+                html: `
+                  <!DOCTYPE html>
+                  <html>
+                    <head>
+                      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                      <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+                      <style>
+                        body { margin: 0; padding: 10px; display: flex; justify-content: center; }
+                      </style>
+                    </head>
+                    <body>
+                      <div class="g-recaptcha" data-sitekey="${RECAPTCHA_SITE_KEY}" data-callback="onRecaptchaSuccess"></div>
+                      <script>
+                        function onRecaptchaSuccess(token) {
+                          window.ReactNativeWebView.postMessage(token);
+                        }
+                      </script>
+                    </body>
+                  </html>
+                `,
+              }}
+              onMessage={(event) => {
+                setRecaptchaToken(event.nativeEvent.data);
+              }}
+              javaScriptEnabled
+              scrollEnabled={false}
             />
           </View>
 
@@ -210,5 +257,15 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 18,
     fontWeight: '700' as const,
+  },
+  recaptchaContainer: {
+    marginBottom: 20,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#F8F9FA',
+  },
+  recaptcha: {
+    height: 80,
+    backgroundColor: 'transparent',
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useMutation } from '@tanstack/react-query';
 import { Heart } from 'lucide-react-native';
+import { WebView } from 'react-native-webview';
 
 interface AnniversaryListData {
   names: string;
@@ -20,10 +21,14 @@ interface AnniversaryListData {
   date: string;
 }
 
+const RECAPTCHA_SITE_KEY = '6LeL9SQsAAAAALTfO1y4_SJ9bLPVM9Z5L65E2RXf';
+
 export default function AnniversaryScreen() {
   const [names, setNames] = useState('');
   const [anniversaryType, setAnniversaryType] = useState('');
   const [date, setDate] = useState('');
+  const [recaptchaToken, setRecaptchaToken] = useState<string>('');
+  const webViewRef = useRef<WebView>(null);
 
   const submitMutation = useMutation({
     mutationFn: async (data: AnniversaryListData) => {
@@ -37,6 +42,7 @@ export default function AnniversaryScreen() {
           body: JSON.stringify({
             form_type: 'anniversary_list',
             form_data: data,
+            'g-recaptcha-response': recaptchaToken,
           }),
         }
       );
@@ -54,6 +60,8 @@ export default function AnniversaryScreen() {
       setNames('');
       setAnniversaryType('');
       setDate('');
+      setRecaptchaToken('');
+      webViewRef.current?.reload();
     },
     onError: (error: Error) => {
       Alert.alert('Error', error.message || 'Failed to submit');
@@ -63,6 +71,11 @@ export default function AnniversaryScreen() {
   const handleSubmit = () => {
     if (!names.trim() || !anniversaryType.trim() || !date.trim()) {
       Alert.alert('Required Fields', 'Please fill in all required fields');
+      return;
+    }
+
+    if (!recaptchaToken) {
+      Alert.alert('Verification Required', 'Please complete the reCAPTCHA verification');
       return;
     }
 
@@ -129,6 +142,40 @@ export default function AnniversaryScreen() {
               placeholder="MM/DD/YYYY"
               placeholderTextColor="#999"
               editable={!submitMutation.isPending}
+            />
+          </View>
+
+          <View style={styles.recaptchaContainer}>
+            <WebView
+              ref={webViewRef}
+              style={styles.recaptcha}
+              source={{
+                html: `
+                  <!DOCTYPE html>
+                  <html>
+                    <head>
+                      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                      <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+                      <style>
+                        body { margin: 0; padding: 10px; display: flex; justify-content: center; }
+                      </style>
+                    </head>
+                    <body>
+                      <div class="g-recaptcha" data-sitekey="${RECAPTCHA_SITE_KEY}" data-callback="onRecaptchaSuccess"></div>
+                      <script>
+                        function onRecaptchaSuccess(token) {
+                          window.ReactNativeWebView.postMessage(token);
+                        }
+                      </script>
+                    </body>
+                  </html>
+                `,
+              }}
+              onMessage={(event) => {
+                setRecaptchaToken(event.nativeEvent.data);
+              }}
+              javaScriptEnabled
+              scrollEnabled={false}
             />
           </View>
 
@@ -228,5 +275,15 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 18,
     fontWeight: '700' as const,
+  },
+  recaptchaContainer: {
+    marginBottom: 20,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#F8F9FA',
+  },
+  recaptcha: {
+    height: 80,
+    backgroundColor: 'transparent',
   },
 });

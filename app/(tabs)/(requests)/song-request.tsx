@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useMutation } from '@tanstack/react-query';
 import { Music } from 'lucide-react-native';
+import { WebView } from 'react-native-webview';
 
 interface SongRequestData {
   your_name: string;
@@ -21,11 +22,15 @@ interface SongRequestData {
   requested_song?: string;
 }
 
+const RECAPTCHA_SITE_KEY = '6LeL9SQsAAAAALTfO1y4_SJ9bLPVM9Z5L65E2RXf';
+
 export default function SongRequestScreen() {
   const [yourName, setYourName] = useState('');
   const [toName, setToName] = useState('');
   const [message, setMessage] = useState('');
   const [requestedSong, setRequestedSong] = useState('');
+  const [recaptchaToken, setRecaptchaToken] = useState<string>('');
+  const webViewRef = useRef<WebView>(null);
 
   const submitMutation = useMutation({
     mutationFn: async (data: SongRequestData) => {
@@ -39,6 +44,7 @@ export default function SongRequestScreen() {
           body: JSON.stringify({
             form_type: 'song_request',
             form_data: data,
+            'g-recaptcha-response': recaptchaToken,
           }),
         }
       );
@@ -57,6 +63,8 @@ export default function SongRequestScreen() {
       setToName('');
       setMessage('');
       setRequestedSong('');
+      setRecaptchaToken('');
+      webViewRef.current?.reload();
     },
     onError: (error: Error) => {
       Alert.alert('Error', error.message || 'Failed to submit request');
@@ -66,6 +74,11 @@ export default function SongRequestScreen() {
   const handleSubmit = () => {
     if (!yourName.trim() || !toName.trim() || !message.trim()) {
       Alert.alert('Required Fields', 'Please fill in your name, recipient name, and message');
+      return;
+    }
+
+    if (!recaptchaToken) {
+      Alert.alert('Verification Required', 'Please complete the reCAPTCHA verification');
       return;
     }
 
@@ -153,6 +166,40 @@ export default function SongRequestScreen() {
               numberOfLines={4}
               textAlignVertical="top"
               editable={!submitMutation.isPending}
+            />
+          </View>
+
+          <View style={styles.recaptchaContainer}>
+            <WebView
+              ref={webViewRef}
+              style={styles.recaptcha}
+              source={{
+                html: `
+                  <!DOCTYPE html>
+                  <html>
+                    <head>
+                      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                      <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+                      <style>
+                        body { margin: 0; padding: 10px; display: flex; justify-content: center; }
+                      </style>
+                    </head>
+                    <body>
+                      <div class="g-recaptcha" data-sitekey="${RECAPTCHA_SITE_KEY}" data-callback="onRecaptchaSuccess"></div>
+                      <script>
+                        function onRecaptchaSuccess(token) {
+                          window.ReactNativeWebView.postMessage(token);
+                        }
+                      </script>
+                    </body>
+                  </html>
+                `,
+              }}
+              onMessage={(event) => {
+                setRecaptchaToken(event.nativeEvent.data);
+              }}
+              javaScriptEnabled
+              scrollEnabled={false}
             />
           </View>
 
@@ -256,5 +303,15 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 18,
     fontWeight: '700' as const,
+  },
+  recaptchaContainer: {
+    marginBottom: 20,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#F8F9FA',
+  },
+  recaptcha: {
+    height: 80,
+    backgroundColor: 'transparent',
   },
 });
