@@ -91,11 +91,6 @@ export default function BirthdayListScreen() {
       return;
     }
 
-    if (Platform.OS === 'web' && !recaptchaToken) {
-      Alert.alert('Verification Required', 'Please complete the reCAPTCHA verification');
-      return;
-    }
-
     submitMutation.mutate({
       first_name: firstName.trim(),
       last_name: lastName.trim(),

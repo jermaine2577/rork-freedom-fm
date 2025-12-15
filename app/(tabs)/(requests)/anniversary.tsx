@@ -94,11 +94,6 @@ export default function AnniversaryScreen() {
       return;
     }
 
-    if (Platform.OS === 'web' && !recaptchaToken) {
-      Alert.alert('Verification Required', 'Please complete the reCAPTCHA verification');
-      return;
-    }
-
     submitMutation.mutate({
       names: names.trim(),
       anniversary_type: anniversaryType.trim(),

@@ -97,11 +97,6 @@ export default function SongRequestScreen() {
       return;
     }
 
-    if (Platform.OS === 'web' && !recaptchaToken) {
-      Alert.alert('Verification Required', 'Please complete the reCAPTCHA verification');
-      return;
-    }
-
     const data: SongRequestData = {
       your_name: yourName.trim(),
       to_name: toName.trim(),
