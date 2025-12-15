@@ -97,7 +97,7 @@ export default function BirthdayRequestScreen() {
       return;
     }
 
-    if (!recaptchaToken) {
+    if (Platform.OS === 'web' && !recaptchaToken) {
       Alert.alert('Verification Required', 'Please complete the reCAPTCHA verification');
       return;
     }
@@ -186,8 +186,8 @@ export default function BirthdayRequestScreen() {
             />
           </View>
 
-          <View style={styles.recaptchaContainer}>
-            {Platform.OS === 'web' ? (
+          {Platform.OS === 'web' && (
+            <View style={styles.recaptchaContainer}>
               <div
                 ref={recaptchaContainerRef as any}
                 className="g-recaptcha"
@@ -199,40 +199,8 @@ export default function BirthdayRequestScreen() {
                   padding: 10,
                 }}
               />
-            ) : (
-              <WebView
-                ref={webViewRef}
-                style={styles.recaptcha}
-                source={{
-                  html: `
-                    <!DOCTYPE html>
-                    <html>
-                      <head>
-                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                        <script src="https://www.google.com/recaptcha/api.js" async defer></script>
-                        <style>
-                          body { margin: 0; padding: 10px; display: flex; justify-content: center; }
-                        </style>
-                      </head>
-                      <body>
-                        <div class="g-recaptcha" data-sitekey="${RECAPTCHA_SITE_KEY}" data-callback="onRecaptchaSuccess"></div>
-                        <script>
-                          function onRecaptchaSuccess(token) {
-                            window.ReactNativeWebView.postMessage(token);
-                          }
-                        </script>
-                      </body>
-                    </html>
-                  `,
-                }}
-                onMessage={(event) => {
-                  setRecaptchaToken(event.nativeEvent.data);
-                }}
-                javaScriptEnabled
-                scrollEnabled={false}
-              />
-            )}
-          </View>
+            </View>
+          )}
 
           <TouchableOpacity
             style={[styles.submitButton, submitMutation.isPending && styles.submitButtonDisabled]}
