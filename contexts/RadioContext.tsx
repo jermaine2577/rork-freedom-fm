@@ -3,13 +3,19 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
 import { Platform } from 'react-native';
 
-const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/mobile.mp3';
+const STREAM_URLS = {
+  version1: 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/mobile.mp3',
+  version2: 'https://media.slactech.com:8012/stream',
+} as const;
+
+type StreamVersion = keyof typeof STREAM_URLS;
 
 export const [RadioProvider, useRadio] = createContextHook(() => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [volume, setVolume] = useState(1.0);
   const [error, setError] = useState<string | null>(null);
+  const [currentStream, setCurrentStream] = useState<StreamVersion>('version1');
   const soundRef = useRef<Audio.Sound | null>(null);
 
   useEffect(() => {
@@ -76,12 +82,17 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     }
   }, []);
 
-  const play = useCallback(async () => {
+  const play = useCallback(async (streamVersion?: StreamVersion) => {
     try {
       setIsLoading(true);
       setError(null);
+      
+      const streamToUse = streamVersion || currentStream;
+      const streamUrl = STREAM_URLS[streamToUse];
+      
       console.log('Play requested...');
-      console.log('Stream URL:', STREAM_URL);
+      console.log('Stream URL:', streamUrl);
+      console.log('Stream Version:', streamToUse);
       
       if (soundRef.current) {
         try {
@@ -96,7 +107,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       console.log('Creating new audio stream...');
       
       const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: STREAM_URL },
+        { uri: streamUrl },
         { 
           shouldPlay: true, 
           volume: 1.0,
@@ -107,6 +118,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       );
       
       soundRef.current = newSound;
+      setCurrentStream(streamToUse);
       console.log('New sound created');
       
       const status = await newSound.getStatusAsync();
@@ -132,7 +144,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       }
       setIsLoading(false);
     }
-  }, [onPlaybackStatusUpdate]);
+  }, [onPlaybackStatusUpdate, currentStream]);
 
   const pause = useCallback(async () => {
     try {
@@ -179,17 +191,40 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     }
   }, []);
 
+  const switchStream = useCallback(async (streamVersion: StreamVersion) => {
+    console.log('Switching to stream:', streamVersion);
+    const wasPlaying = isPlaying;
+    
+    if (soundRef.current) {
+      try {
+        await soundRef.current.unloadAsync();
+      } catch (e) {
+        console.warn('Error unloading sound:', e);
+      }
+      soundRef.current = null;
+    }
+    
+    setIsPlaying(false);
+    setCurrentStream(streamVersion);
+    
+    if (wasPlaying) {
+      await play(streamVersion);
+    }
+  }, [isPlaying, play]);
+
   return useMemo(
     () => ({
       isPlaying,
       isLoading,
       volume,
       error,
+      currentStream,
       play,
       pause,
       stop,
       changeVolume,
+      switchStream,
     }),
-    [isPlaying, isLoading, volume, error, play, pause, stop, changeVolume]
+    [isPlaying, isLoading, volume, error, currentStream, play, pause, stop, changeVolume, switchStream]
   );
 });

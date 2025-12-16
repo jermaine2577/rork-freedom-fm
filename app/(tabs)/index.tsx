@@ -17,7 +17,7 @@ import colors from '@/constants/colors';
 const { width } = Dimensions.get('window');
 
 export default function PlayerScreen() {
-  const { isPlaying, isLoading, error, play, pause } = useRadio();
+  const { isPlaying, isLoading, error, play, pause, currentStream, switchStream } = useRadio();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
@@ -167,6 +167,46 @@ export default function PlayerScreen() {
           <View style={styles.liveDot} />
           <Text style={styles.liveText}>LIVE</Text>
           <Volume2 size={16} color={colors.textSecondary} />
+        </View>
+
+        <View style={styles.streamSelector}>
+          <Text style={styles.streamSelectorLabel}>Stream Quality</Text>
+          <View style={styles.streamButtons}>
+            <TouchableOpacity
+              style={[
+                styles.streamButton,
+                currentStream === 'version1' && styles.streamButtonActive,
+              ]}
+              onPress={() => switchStream('version1')}
+              disabled={isLoading}
+            >
+              <Text
+                style={[
+                  styles.streamButtonText,
+                  currentStream === 'version1' && styles.streamButtonTextActive,
+                ]}
+              >
+                Stream 1
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.streamButton,
+                currentStream === 'version2' && styles.streamButtonActive,
+              ]}
+              onPress={() => switchStream('version2')}
+              disabled={isLoading}
+            >
+              <Text
+                style={[
+                  styles.streamButtonText,
+                  currentStream === 'version2' && styles.streamButtonTextActive,
+                ]}
+              >
+                Stream 2
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {error && (
@@ -325,5 +365,40 @@ const styles = StyleSheet.create({
     width: 240,
     height: 80,
     marginBottom: 0,
+  },
+  streamSelector: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginTop: 8,
+  },
+  streamSelectorLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    letterSpacing: 1,
+    marginBottom: 12,
+  },
+  streamButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  streamButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  streamButtonActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: colors.text,
+  },
+  streamButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: colors.textSecondary,
+  },
+  streamButtonTextActive: {
+    color: colors.text,
   },
 });
