@@ -1,12 +1,25 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, Platform } from 'react-native';
 import WebView from 'react-native-webview';
 
 export default function BirthdayListScreen() {
+  const url = 'https://freedomfm1065.com/mobile-forms/?type=birthday_list';
+
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.container}>
+        <iframe
+          src={url}
+          style={{ flex: 1, border: 'none', width: '100%', height: '100%' }}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <WebView
-        source={{ uri: 'https://freedomfm1065.com/mobile-forms/?type=birthday_list' }}
+        source={{ uri: url }}
         style={styles.webview}
       />
     </View>
