@@ -4,8 +4,8 @@ import createContextHook from '@nkzw/create-context-hook';
 import { Platform } from 'react-native';
 
 const STREAM_URLS = {
-  version1: 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/mobile.mp3',
-  version2: 'https://media.slactech.com:8012/stream',
+  version1: 'https://media.slactech.com:8012/stream',
+  version2: 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/mobile.mp3',
 } as const;
 
 type StreamVersion = keyof typeof STREAM_URLS;
