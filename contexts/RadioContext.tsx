@@ -29,10 +29,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           allowsRecordingIOS: false,
           playsInSilentModeIOS: true,
           staysActiveInBackground: true,
-          shouldDuckAndroid: true,
+          shouldDuckAndroid: false,
           playThroughEarpieceAndroid: false,
-          interruptionModeIOS: 1,
-          interruptionModeAndroid: 1,
+          interruptionModeIOS: 2,
+          interruptionModeAndroid: 2,
         });
         console.log('Audio setup complete (native)');
       } else {
