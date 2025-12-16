@@ -170,7 +170,6 @@ export default function PlayerScreen() {
         </View>
 
         <View style={styles.streamSelector}>
-          <Text style={styles.streamSelectorLabel}>Stream Quality</Text>
           <View style={styles.streamButtons}>
             <TouchableOpacity
               style={[
