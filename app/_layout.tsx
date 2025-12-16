@@ -22,17 +22,7 @@ export default function RootLayout() {
   const [appReady, setAppReady] = useState(false);
 
   useEffect(() => {
-    async function prepare() {
-      try {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        setAppReady(true);
-      } catch (e) {
-        console.warn('Error preparing app:', e);
-        setAppReady(true);
-      }
-    }
-
-    prepare();
+    setAppReady(true);
   }, []);
 
   useEffect(() => {

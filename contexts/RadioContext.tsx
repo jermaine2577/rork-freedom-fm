@@ -110,7 +110,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         { uri: streamUrl },
         { 
           shouldPlay: true, 
-          volume: 1.0,
+          volume: volume,
           isLooping: false,
           progressUpdateIntervalMillis: 500,
         },
@@ -119,7 +119,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       
       soundRef.current = newSound;
       setCurrentStream(streamToUse);
-      console.log('New sound created');
+      console.log('New sound created and should be playing');
+      
+      await newSound.playAsync();
+      console.log('Explicitly called playAsync');
       
       const status = await newSound.getStatusAsync();
       console.log('Sound status after creation:', {
@@ -144,7 +147,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       }
       setIsLoading(false);
     }
-  }, [onPlaybackStatusUpdate, currentStream]);
+  }, [onPlaybackStatusUpdate, currentStream, volume]);
 
   const pause = useCallback(async () => {
     try {
