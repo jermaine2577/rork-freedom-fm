@@ -134,7 +134,7 @@ export default function PlayerScreen() {
         <View style={styles.nowPlaying}>
           <Text style={styles.nowPlayingLabel}>NOW PLAYING</Text>
           <Text style={styles.songTitle}>Live Radio Stream</Text>
-          <Text style={styles.artist}>24/7 Non-Stop Music</Text>
+          <Text style={styles.artist}>World Class Radio At Its Very Best!</Text>
         </View>
 
         <View style={styles.controls}>
