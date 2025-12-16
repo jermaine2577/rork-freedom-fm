@@ -17,31 +17,34 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   const [error, setError] = useState<string | null>(null);
   const [currentStream, setCurrentStream] = useState<StreamVersion>('version1');
   const soundRef = useRef<Audio.Sound | null>(null);
+  const audioSetupRef = useRef(false);
+
+  const setupAudio = useCallback(async () => {
+    if (audioSetupRef.current) return;
+    audioSetupRef.current = true;
+    
+    try {
+      if (Platform.OS !== 'web') {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: true,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+          interruptionModeIOS: 1,
+          interruptionModeAndroid: 1,
+        });
+        console.log('Audio setup complete (native)');
+      } else {
+        console.log('Audio setup complete (web)');
+      }
+    } catch (error) {
+      console.error('Error setting up audio:', error);
+      audioSetupRef.current = false;
+    }
+  }, []);
 
   useEffect(() => {
-    const setupAudio = async () => {
-      try {
-        if (Platform.OS !== 'web') {
-          await Audio.setAudioModeAsync({
-            allowsRecordingIOS: false,
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: true,
-            shouldDuckAndroid: true,
-            playThroughEarpieceAndroid: false,
-            interruptionModeIOS: 1,
-            interruptionModeAndroid: 1,
-          });
-          console.log('Audio setup complete (native)');
-        } else {
-          console.log('Audio setup complete (web)');
-        }
-      } catch (error) {
-        console.error('Error setting up audio:', error);
-      }
-    };
-
-    setupAudio();
-
     return () => {
       if (soundRef.current) {
         soundRef.current.unloadAsync().catch((err) => console.error('Error unloading sound:', err));
@@ -84,6 +87,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
   const play = useCallback(async (streamVersion?: StreamVersion) => {
     try {
+      await setupAudio();
+      
       setIsLoading(true);
       setError(null);
       
@@ -147,7 +152,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       }
       setIsLoading(false);
     }
-  }, [onPlaybackStatusUpdate, currentStream, volume]);
+  }, [setupAudio, onPlaybackStatusUpdate, currentStream, volume]);
 
   const pause = useCallback(async () => {
     try {

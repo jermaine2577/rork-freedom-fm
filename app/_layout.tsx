@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { RadioProvider } from "@/contexts/RadioContext";
 import { ChatProvider } from "@/contexts/ChatContext";
@@ -19,21 +19,9 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
-  const [appReady, setAppReady] = useState(false);
-
   useEffect(() => {
-    setAppReady(true);
+    SplashScreen.hideAsync().catch(err => console.warn('Error hiding splash:', err));
   }, []);
-
-  useEffect(() => {
-    if (appReady) {
-      SplashScreen.hideAsync().catch(err => console.warn('Error hiding splash:', err));
-    }
-  }, [appReady]);
-
-  if (!appReady) {
-    return null;
-  }
 
   return (
     <QueryClientProvider client={queryClient}>
