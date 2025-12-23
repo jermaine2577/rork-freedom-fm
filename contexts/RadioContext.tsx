@@ -1,4 +1,4 @@
-import { Audio } from 'expo-av';
+import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
 import { Platform } from 'react-native';
@@ -31,8 +31,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           staysActiveInBackground: true,
           shouldDuckAndroid: true,
           playThroughEarpieceAndroid: false,
-          interruptionModeIOS: 1,
-          interruptionModeAndroid: 1,
+          interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+          interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
         });
         console.log('Audio setup complete (native)');
       } else {
