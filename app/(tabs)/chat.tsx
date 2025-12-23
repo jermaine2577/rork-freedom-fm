@@ -1,8 +1,10 @@
-import React from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, Platform, ActivityIndicator, Text } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 export default function ChatScreen() {
+  const [loading, setLoading] = useState(true);
+
   const injectedCSS = `
     header,
     footer,
@@ -37,6 +39,12 @@ export default function ChatScreen() {
   if (Platform.OS === 'web') {
     return (
       <View style={styles.container}>
+        {loading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#FF6B35" />
+            <Text style={styles.loadingText}>Loading the freedom wall...</Text>
+          </View>
+        )}
         <iframe
           src="https://freedomfm1065.com/mobile-chatroom/"
           style={{
@@ -45,6 +53,7 @@ export default function ChatScreen() {
             border: 'none',
           }}
           title="Freedom Wall Chat"
+          onLoad={() => setLoading(false)}
         />
         <style>{`
           iframe {
@@ -59,6 +68,12 @@ export default function ChatScreen() {
 
   return (
     <View style={styles.container}>
+      {loading && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF6B35" />
+          <Text style={styles.loadingText}>Loading the freedom wall...</Text>
+        </View>
+      )}
       <WebView
         source={{ uri: 'https://freedomfm1065.com/mobile-chatroom/' }}
         style={styles.webview}
@@ -66,6 +81,8 @@ export default function ChatScreen() {
         onMessage={() => {}}
         javaScriptEnabled={true}
         domStorageEnabled={true}
+        onLoadStart={() => setLoading(true)}
+        onLoadEnd={() => setLoading(false)}
       />
     </View>
   );
@@ -78,5 +95,22 @@ const styles = StyleSheet.create({
   },
   webview: {
     flex: 1,
+  },
+  loadingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  loadingText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    marginTop: 12,
+    fontWeight: '500',
   },
 });
