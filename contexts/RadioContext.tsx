@@ -29,10 +29,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           allowsRecordingIOS: false,
           playsInSilentModeIOS: true,
           staysActiveInBackground: true,
-          shouldDuckAndroid: false,
+          shouldDuckAndroid: true,
           playThroughEarpieceAndroid: false,
-          interruptionModeIOS: 2,
-          interruptionModeAndroid: 2,
+          interruptionModeIOS: 1,
+          interruptionModeAndroid: 1,
         });
         console.log('Audio setup complete (native)');
       } else {
@@ -125,6 +125,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       soundRef.current = newSound;
       setCurrentStream(streamToUse);
       console.log('New sound created and should be playing');
+      
+      if (Platform.OS !== 'web') {
+        try {
+          await Audio.setIsEnabledAsync(true);
+        } catch (e) {
+          console.warn('Error enabling audio:', e);
+        }
+      }
       
       await newSound.playAsync();
       console.log('Explicitly called playAsync');
