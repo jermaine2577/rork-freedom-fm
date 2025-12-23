@@ -96,15 +96,14 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
     const contentType = response.headers.get('content-type');
     console.log('Content-Type:', contentType);
     
-    if (!contentType?.includes('application/json')) {
-      console.error('Response is not JSON:', contentType);
-      const textResponse = await response.text();
-      console.error('Response text:', textResponse.substring(0, 200));
-      throw new Error('Server returned invalid format');
-    }
-    
     const responseText = await response.text();
     console.log('Response preview:', responseText.substring(0, 100));
+    
+    if (!contentType?.includes('application/json')) {
+      console.error('Response is not JSON:', contentType);
+      console.error('Response text:', responseText.substring(0, 200));
+      throw new Error('Server returned invalid format');
+    }
     
     let posts: WordPressPost[];
     try {
