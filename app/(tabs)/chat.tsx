@@ -4,6 +4,8 @@ import { WebView } from 'react-native-webview';
 
 export default function ChatScreen() {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   const injectedCSS = `
     header,
@@ -36,25 +38,48 @@ export default function ChatScreen() {
     true;
   `;
 
+  const handleRetry = () => {
+    setError(false);
+    setLoading(true);
+    setRetryCount(prev => prev + 1);
+  };
+
   if (Platform.OS === 'web') {
     return (
       <View style={styles.container}>
-        {loading && (
+        {loading && !error && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#FF6B35" />
             <Text style={styles.loadingText}>Loading the freedom wall...</Text>
           </View>
         )}
-        <iframe
-          src="https://freedomfm1065.com/mobile-chatroom/"
-          style={{
-            width: '100%',
-            height: '100%',
-            border: 'none',
-          }}
-          title="Freedom Wall Chat"
-          onLoad={() => setLoading(false)}
-        />
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>Failed to load chat</Text>
+            <Text style={styles.errorSubtext}>Please check your connection and try again</Text>
+            <Text onPress={handleRetry} style={styles.retryButton}>Retry</Text>
+          </View>
+        )}
+        {!error && (
+          <iframe
+            key={retryCount}
+            src="https://freedomfm1065.com/mobile-chatroom/"
+            style={{
+              width: '100%',
+              height: '100%',
+              border: 'none',
+            }}
+            title="Freedom Wall Chat"
+            onLoad={() => {
+              setLoading(false);
+              setError(false);
+            }}
+            onError={() => {
+              setLoading(false);
+              setError(true);
+            }}
+          />
+        )}
         <style>{`
           iframe {
             width: 100%;
@@ -68,22 +93,43 @@ export default function ChatScreen() {
 
   return (
     <View style={styles.container}>
-      {loading && (
+      {loading && !error && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#FF6B35" />
           <Text style={styles.loadingText}>Loading the freedom wall...</Text>
         </View>
       )}
-      <WebView
-        source={{ uri: 'https://freedomfm1065.com/mobile-chatroom/' }}
-        style={styles.webview}
-        injectedJavaScript={injectedJavaScript}
-        onMessage={() => {}}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        onLoadStart={() => setLoading(true)}
-        onLoadEnd={() => setLoading(false)}
-      />
+      {error && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Failed to load chat</Text>
+          <Text style={styles.errorSubtext}>Please check your connection and try again</Text>
+          <Text onPress={handleRetry} style={styles.retryButton}>Retry</Text>
+        </View>
+      )}
+      {!error && (
+        <WebView
+          key={retryCount}
+          source={{ uri: 'https://freedomfm1065.com/mobile-chatroom/' }}
+          style={styles.webview}
+          injectedJavaScript={injectedJavaScript}
+          onMessage={() => {}}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          onLoadStart={() => {
+            setLoading(true);
+            setError(false);
+          }}
+          onLoadEnd={() => setLoading(false)}
+          onError={() => {
+            setLoading(false);
+            setError(true);
+          }}
+          onHttpError={() => {
+            setLoading(false);
+            setError(true);
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -112,5 +158,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 12,
     fontWeight: '500',
+  },
+  errorContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  errorSubtext: {
+    color: '#999',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  retryButton: {
+    color: '#FF6B35',
+    fontSize: 16,
+    fontWeight: '600',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#FF6B35',
+    overflow: 'hidden',
   },
 });
