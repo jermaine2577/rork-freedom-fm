@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity, Linking, Alert } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { useTerms } from '@/contexts/TermsContext';
 import TermsAgreementScreen from '@/components/TermsAgreementScreen';
@@ -7,6 +8,7 @@ import { Mail } from 'lucide-react-native';
 
 export default function ChatScreen() {
   const { hasAcceptedTerms, isLoading: termsLoading } = useTerms();
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
@@ -82,7 +84,7 @@ export default function ChatScreen() {
   if (Platform.OS === 'web') {
     return (
       <View style={styles.container}>
-        <TouchableOpacity style={styles.contactButton} onPress={handleContactPress}>
+        <TouchableOpacity style={[styles.contactButton, { top: insets.top + 12 }]} onPress={handleContactPress}>
           <Mail size={20} color="#FFFFFF" />
           <Text style={styles.contactButtonText}>Report</Text>
         </TouchableOpacity>
@@ -132,7 +134,7 @@ export default function ChatScreen() {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.contactButton} onPress={handleContactPress}>
+      <TouchableOpacity style={[styles.contactButton, { top: insets.top + 12 }]} onPress={handleContactPress}>
         <Mail size={20} color="#FFFFFF" />
         <Text style={styles.contactButtonText}>Report</Text>
       </TouchableOpacity>
