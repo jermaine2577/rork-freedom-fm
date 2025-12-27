@@ -220,26 +220,7 @@ export default function ChatScreen() {
           source={{ uri: 'https://freedomfm1065.com/mobile-chatroom/' }}
           style={styles.webview}
           injectedJavaScript={injectedJavaScript}
-          onMessage={(event) => {
-            try {
-              const data = event?.nativeEvent?.data;
-              if (!data || typeof data !== 'string') return;
-              
-              const trimmedData = data.trim();
-              if (trimmedData.length === 0) return;
-              
-              const firstChar = trimmedData[0];
-              if (firstChar !== '{' && firstChar !== '[') return;
-              
-              try {
-                JSON.parse(trimmedData);
-              } catch {
-                return;
-              }
-            } catch {
-              return;
-            }
-          }}
+          onMessage={() => {}}
           javaScriptEnabled={true}
           domStorageEnabled={true}
           onLoadStart={() => {
