@@ -100,13 +100,14 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
       throw new Error('Server returned invalid content type');
     }
     
+    const responseText = await response.text();
+    
     let posts: WordPressPost[];
     try {
-      posts = await response.json();
+      posts = JSON.parse(responseText);
     } catch (parseError: any) {
       console.error('JSON Parse Error Details:');
       console.error('- Error:', parseError?.message || String(parseError));
-      const responseText = await response.text().catch(() => 'Unable to read response');
       console.error('- Response preview:', responseText.substring(0, 500));
       throw new Error('Unable to parse news data from server');
     }
