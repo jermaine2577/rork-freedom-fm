@@ -7,7 +7,6 @@ import {
   Animated,
   Dimensions,
   Image,
-  ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -87,23 +86,21 @@ export default function PlayerScreen() {
       locations={[0, 0.5, 1]}
       style={styles.container}
     >
-      <ScrollView 
-        contentContainerStyle={[
+      <View 
+        style={[
           styles.content, 
           { 
-            paddingTop: Math.max(insets.top + (isSmallScreen ? 10 : 20), isSmallScreen ? 30 : 40), 
-            paddingBottom: Math.max(insets.bottom + 20, 20),
-            minHeight: height - insets.top - insets.bottom,
+            paddingTop: insets.top + (isSmallScreen ? 8 : 12), 
+            paddingBottom: insets.bottom + (isSmallScreen ? 8 : 12),
           }
         ]}
-        showsVerticalScrollIndicator={false}
       >
         <Image
           source={{ uri: 'https://www.freedomskn.com/resources/uploads/2014/08/logo_ff.png' }}
           style={{ 
             width: isSmallScreen ? width * 0.5 : isMediumScreen ? width * 0.55 : width * 0.6,
-            height: isSmallScreen ? 50 : isMediumScreen ? 60 : 70,
-            marginBottom: isSmallScreen ? 10 : 20,
+            height: isSmallScreen ? 40 : isMediumScreen ? 50 : 60,
+            marginBottom: isSmallScreen ? 4 : 8,
           }}
           resizeMode="contain"
         />
@@ -112,8 +109,6 @@ export default function PlayerScreen() {
           justifyContent: 'center',
           height: visualizerSize,
           width: visualizerSize,
-          marginTop: isSmallScreen ? 10 : 20,
-          marginBottom: isSmallScreen ? 10 : 20,
         }}>
           <Animated.View
             style={[
@@ -188,11 +183,12 @@ export default function PlayerScreen() {
         </View>
 
         <View style={[styles.nowPlaying, {
-          marginVertical: isSmallScreen ? 12 : isMediumScreen ? 16 : 20,
+          marginTop: isSmallScreen ? 8 : 12,
+          marginBottom: isSmallScreen ? 8 : 12,
         }]}>
           <Text style={[styles.nowPlayingLabel, {
             fontSize: isSmallScreen ? 10 : 12,
-            marginBottom: isSmallScreen ? 6 : 8,
+            marginBottom: isSmallScreen ? 4 : 6,
           }]}>NOW PLAYING</Text>
           <Text style={[styles.songTitle, {
             fontSize: isSmallScreen ? 20 : isMediumScreen ? 22 : 24,
@@ -203,7 +199,7 @@ export default function PlayerScreen() {
         </View>
 
         <View style={[styles.controls, {
-          marginVertical: isSmallScreen ? 12 : isMediumScreen ? 16 : 20,
+          marginVertical: isSmallScreen ? 8 : 12,
         }]}>
           <TouchableOpacity
             style={[
@@ -239,7 +235,7 @@ export default function PlayerScreen() {
         <View style={[styles.liveIndicator, {
           paddingHorizontal: isSmallScreen ? 16 : 20,
           paddingVertical: isSmallScreen ? 8 : 10,
-          marginVertical: isSmallScreen ? 8 : 12,
+          marginBottom: isSmallScreen ? 6 : 8,
         }]}>
           <View style={styles.liveDot} />
           <Text style={[styles.liveText, {
@@ -248,10 +244,7 @@ export default function PlayerScreen() {
           <Volume2 size={16} color={colors.textSecondary} />
         </View>
 
-        <View style={[styles.streamSelector, {
-          marginTop: isSmallScreen ? 8 : 12,
-          marginBottom: isSmallScreen ? 8 : 0,
-        }]}>
+        <View style={styles.streamSelector}>
           <View style={{
             flexDirection: 'row',
             gap: isSmallScreen ? 10 : 12,
@@ -308,11 +301,11 @@ export default function PlayerScreen() {
         </View>
 
         {error && (
-          <View style={styles.errorContainer}>
+          <View style={[styles.errorContainer, { marginTop: isSmallScreen ? 6 : 8 }]}>
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
-      </ScrollView>
+      </View>
     </LinearGradient>
   );
 }
@@ -322,8 +315,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flexGrow: 1,
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'space-evenly',
     paddingHorizontal: 20,
   },
   outerCircle: {
@@ -412,12 +406,11 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 10,
     backgroundColor: colors.error + '20',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.error,
-    marginTop: 16,
   },
   errorText: {
     fontSize: 14,
