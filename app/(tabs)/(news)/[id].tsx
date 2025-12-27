@@ -84,13 +84,32 @@ const fetchArticle = async (id: string): Promise<NewsArticle> => {
     const contentType = response.headers.get('content-type');
     const responseText = await response.text();
     
+    if (!responseText || responseText.trim().length === 0) {
+      console.error('Empty response from server');
+      throw new Error('Server returned empty response');
+    }
+    
     if (!contentType || !contentType.includes('application/json')) {
       console.error('Response is not JSON:', contentType);
       console.error('Response text:', responseText.substring(0, 200));
       throw new Error('Server returned invalid response format');
     }
     
-    const post: WordPressPost = JSON.parse(responseText);
+    const firstChar = responseText.trim()[0];
+    if (firstChar !== '{' && firstChar !== '[') {
+      console.error('Response does not start with JSON:', firstChar);
+      console.error('Response text:', responseText.substring(0, 200));
+      throw new Error('Server returned non-JSON content');
+    }
+    
+    let post: WordPressPost;
+    try {
+      post = JSON.parse(responseText);
+    } catch (parseError: any) {
+      console.error('JSON Parse Error:', parseError?.message || parseError);
+      console.error('Response text:', responseText.substring(0, 500));
+      throw new Error('Invalid JSON response from server');
+    }
     console.log('Successfully fetched article:', post.id);
 
     return {

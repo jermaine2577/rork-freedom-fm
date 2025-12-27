@@ -115,11 +115,14 @@ export default function ChatScreen() {
           onMessage={(event) => {
             try {
               const data = event.nativeEvent.data;
-              if (data && typeof data === 'string') {
-                try {
-                  JSON.parse(data);
-                } catch {
-                  
+              if (data && typeof data === 'string' && data.trim().length > 0) {
+                const firstChar = data.trim()[0];
+                if (firstChar === '{' || firstChar === '[') {
+                  try {
+                    JSON.parse(data);
+                  } catch {
+                    console.log('WebView message is not valid JSON, ignoring');
+                  }
                 }
               }
             } catch (error) {

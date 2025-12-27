@@ -99,17 +99,29 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
     const responseText = await response.text();
     console.log('Response preview:', responseText.substring(0, 100));
     
+    if (!responseText || responseText.trim().length === 0) {
+      console.error('Empty response from server');
+      throw new Error('Server returned empty response');
+    }
+    
     if (!contentType?.includes('application/json')) {
       console.error('Response is not JSON:', contentType);
       console.error('Response text:', responseText.substring(0, 200));
       throw new Error('Server returned invalid format');
     }
     
+    const firstChar = responseText.trim()[0];
+    if (firstChar !== '[' && firstChar !== '{') {
+      console.error('Response does not start with JSON:', firstChar);
+      console.error('Response text:', responseText.substring(0, 200));
+      throw new Error('Server returned non-JSON content');
+    }
+    
     let posts: WordPressPost[];
     try {
       posts = JSON.parse(responseText);
-    } catch (parseError) {
-      console.error('JSON Parse Error:', parseError);
+    } catch (parseError: any) {
+      console.error('JSON Parse Error:', parseError?.message || parseError);
       console.error('Response text:', responseText.substring(0, 500));
       throw new Error('Invalid JSON response from server');
     }
