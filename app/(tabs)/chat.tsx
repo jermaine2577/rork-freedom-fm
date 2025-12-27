@@ -222,20 +222,22 @@ export default function ChatScreen() {
           injectedJavaScript={injectedJavaScript}
           onMessage={(event) => {
             try {
-              const data = event.nativeEvent.data;
-              if (data && typeof data === 'string' && data.trim().length > 0) {
-                const trimmedData = data.trim();
-                const firstChar = trimmedData[0];
-                if (firstChar === '{' || firstChar === '[') {
-                  try {
-                    JSON.parse(trimmedData);
-                  } catch {
-                    console.log('WebView sent non-JSON message, ignoring');
-                  }
-                }
+              const data = event?.nativeEvent?.data;
+              if (!data || typeof data !== 'string') return;
+              
+              const trimmedData = data.trim();
+              if (trimmedData.length === 0) return;
+              
+              const firstChar = trimmedData[0];
+              if (firstChar !== '{' && firstChar !== '[') return;
+              
+              try {
+                JSON.parse(trimmedData);
+              } catch {
+                return;
               }
-            } catch (error) {
-              console.log('WebView message handler error:', error);
+            } catch {
+              return;
             }
           }}
           javaScriptEnabled={true}
