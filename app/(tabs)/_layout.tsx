@@ -1,9 +1,13 @@
 import { Tabs } from "expo-router";
 import { Radio, Newspaper, MessageCircle, Music, Bell } from "lucide-react-native";
 import React from "react";
+import { View, StyleSheet } from "react-native";
 import colors from "@/constants/colors";
+import { useAnnouncementsBadge } from "@/contexts/AnnouncementsBadgeContext";
 
 export default function TabLayout() {
+  const { showBadge } = useAnnouncementsBadge();
+
   return (
     <Tabs
       screenOptions={{
@@ -55,9 +59,26 @@ export default function TabLayout() {
         name="announcements"
         options={{
           title: "Alerts",
-          tabBarIcon: ({ color, size }) => <Bell color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => (
+            <View>
+              <Bell color={color} size={size} />
+              {showBadge && <View style={styles.badge} />}
+            </View>
+          ),
         }}
       />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  badge: {
+    position: 'absolute',
+    top: -2,
+    right: -4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#FF0000',
+  },
+});

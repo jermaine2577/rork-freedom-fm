@@ -4,6 +4,7 @@ import React from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { RadioProvider } from "@/contexts/RadioContext";
 import { ChatProvider } from "@/contexts/ChatContext";
+import { AnnouncementsBadgeProvider } from "@/contexts/AnnouncementsBadgeContext";
 
 const queryClient = new QueryClient();
 
@@ -21,7 +22,9 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <RadioProvider>
           <ChatProvider>
-            <RootLayoutNav />
+            <AnnouncementsBadgeProvider>
+              <RootLayoutNav />
+            </AnnouncementsBadgeProvider>
           </ChatProvider>
         </RadioProvider>
       </GestureHandlerRootView>

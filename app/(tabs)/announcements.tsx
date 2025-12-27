@@ -1,12 +1,18 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Bell } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '@/constants/colors';
+import { useAnnouncementsBadge } from '@/contexts/AnnouncementsBadgeContext';
 
 export default function AnnouncementsScreen() {
   const insets = useSafeAreaInsets();
+  const { clearBadge } = useAnnouncementsBadge();
+
+  useEffect(() => {
+    clearBadge();
+  }, [clearBadge]);
 
   return (
     <LinearGradient
