@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -15,16 +15,28 @@ import { Play, Pause, Volume2, Radio } from 'lucide-react-native';
 import { useRadio } from '@/contexts/RadioContext';
 import colors from '@/constants/colors';
 
-const { width, height } = Dimensions.get('window');
-const isSmallScreen = height < 700;
-const isMediumScreen = height >= 700 && height < 800;
-const visualizerSize = isSmallScreen ? Math.min(width * 0.55, 200) : isMediumScreen ? Math.min(width * 0.6, 240) : Math.min(width * 0.65, 280);
-
 export default function PlayerScreen() {
   const { isPlaying, isLoading, error, play, pause, currentStream, switchStream } = useRadio();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
+  
+  const [dimensions, setDimensions] = useState(() => {
+    const { width, height } = Dimensions.get('window');
+    return { width, height };
+  });
+
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setDimensions({ width: window.width, height: window.height });
+    });
+    return () => subscription?.remove();
+  }, []);
+
+  const { width, height } = dimensions;
+  const isSmallScreen = height < 700;
+  const isMediumScreen = height >= 700 && height < 800;
+  const visualizerSize = isSmallScreen ? Math.min(width * 0.55, 200) : isMediumScreen ? Math.min(width * 0.6, 240) : Math.min(width * 0.65, 280);
 
   useEffect(() => {
     if (isPlaying) {
@@ -76,25 +88,55 @@ export default function PlayerScreen() {
       style={styles.container}
     >
       <ScrollView 
-        contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top + 20, 40), paddingBottom: insets.bottom + 20 }]}
+        contentContainerStyle={[
+          styles.content, 
+          { 
+            paddingTop: Math.max(insets.top + (isSmallScreen ? 10 : 20), isSmallScreen ? 30 : 40), 
+            paddingBottom: Math.max(insets.bottom + 20, 20),
+            minHeight: height - insets.top - insets.bottom,
+          }
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <Image
           source={{ uri: 'https://www.freedomskn.com/resources/uploads/2014/08/logo_ff.png' }}
-          style={styles.logo}
+          style={{ 
+            width: isSmallScreen ? width * 0.5 : isMediumScreen ? width * 0.55 : width * 0.6,
+            height: isSmallScreen ? 50 : isMediumScreen ? 60 : 70,
+            marginBottom: isSmallScreen ? 10 : 20,
+          }}
           resizeMode="contain"
         />
-        <View style={styles.visualizer}>
+        <View style={{
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: visualizerSize,
+          width: visualizerSize,
+          marginTop: isSmallScreen ? 10 : 20,
+          marginBottom: isSmallScreen ? 10 : 20,
+        }}>
           <Animated.View
             style={[
               styles.outerCircle,
               {
+                width: visualizerSize * 0.95,
+                height: visualizerSize * 0.95,
+                borderRadius: visualizerSize * 0.475,
                 transform: [{ scale: pulseAnim }, { rotate }],
               },
             ]}
           >
-            <View style={styles.middleCircle}>
-              <View style={styles.innerCircle}>
+            <View style={[styles.middleCircle, {
+              width: visualizerSize * 0.73,
+              height: visualizerSize * 0.73,
+              borderRadius: visualizerSize * 0.365,
+            }]}>
+              <View style={[styles.innerCircle, {
+                width: visualizerSize * 0.51,
+                height: visualizerSize * 0.51,
+                borderRadius: visualizerSize * 0.255,
+                borderWidth: isSmallScreen ? 2 : 3,
+              }]}>
                 <Radio size={isSmallScreen ? 45 : isMediumScreen ? 52 : 60} color={colors.text} strokeWidth={1.5} />
               </View>
             </View>
@@ -106,6 +148,10 @@ export default function PlayerScreen() {
                 style={[
                   styles.waveRing,
                   {
+                    width: visualizerSize * 0.95,
+                    height: visualizerSize * 0.95,
+                    borderRadius: visualizerSize * 0.475,
+                    borderWidth: isSmallScreen ? 2 : 3,
                     transform: [{ scale: pulseAnim }],
                     opacity: pulseAnim.interpolate({
                       inputRange: [1, 1.15],
@@ -117,8 +163,11 @@ export default function PlayerScreen() {
               <Animated.View
                 style={[
                   styles.waveRing,
-                  styles.waveRing2,
                   {
+                    width: visualizerSize * 1.1,
+                    height: visualizerSize * 1.1,
+                    borderRadius: visualizerSize * 0.55,
+                    borderWidth: isSmallScreen ? 2 : 3,
                     transform: [
                       {
                         scale: pulseAnim.interpolate({
@@ -138,16 +187,33 @@ export default function PlayerScreen() {
           )}
         </View>
 
-        <View style={styles.nowPlaying}>
-          <Text style={styles.nowPlayingLabel}>NOW PLAYING</Text>
-          <Text style={styles.songTitle}>Live Radio Stream</Text>
-          <Text style={styles.artist}>World Class Radio At Its Very Best!</Text>
+        <View style={[styles.nowPlaying, {
+          marginVertical: isSmallScreen ? 12 : isMediumScreen ? 16 : 20,
+        }]}>
+          <Text style={[styles.nowPlayingLabel, {
+            fontSize: isSmallScreen ? 10 : 12,
+            marginBottom: isSmallScreen ? 6 : 8,
+          }]}>NOW PLAYING</Text>
+          <Text style={[styles.songTitle, {
+            fontSize: isSmallScreen ? 20 : isMediumScreen ? 22 : 24,
+          }]}>Live Radio Stream</Text>
+          <Text style={[styles.artist, {
+            fontSize: isSmallScreen ? 14 : 16,
+          }]}>World Class Radio At Its Very Best!</Text>
         </View>
 
-        <View style={styles.controls}>
+        <View style={[styles.controls, {
+          marginVertical: isSmallScreen ? 12 : isMediumScreen ? 16 : 20,
+        }]}>
           <TouchableOpacity
             style={[
               styles.playButton,
+              {
+                width: isSmallScreen ? 80 : isMediumScreen ? 90 : 100,
+                height: isSmallScreen ? 80 : isMediumScreen ? 90 : 100,
+                borderRadius: isSmallScreen ? 40 : isMediumScreen ? 45 : 50,
+                borderWidth: isSmallScreen ? 3 : 4,
+              },
               isLoading && styles.playButtonLoading,
             ]}
             onPress={handlePlayPause}
@@ -170,17 +236,33 @@ export default function PlayerScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.liveIndicator}>
+        <View style={[styles.liveIndicator, {
+          paddingHorizontal: isSmallScreen ? 16 : 20,
+          paddingVertical: isSmallScreen ? 8 : 10,
+          marginVertical: isSmallScreen ? 8 : 12,
+        }]}>
           <View style={styles.liveDot} />
-          <Text style={styles.liveText}>LIVE</Text>
+          <Text style={[styles.liveText, {
+            fontSize: isSmallScreen ? 12 : 14,
+          }]}>LIVE</Text>
           <Volume2 size={16} color={colors.textSecondary} />
         </View>
 
-        <View style={styles.streamSelector}>
-          <View style={styles.streamButtons}>
+        <View style={[styles.streamSelector, {
+          marginTop: isSmallScreen ? 8 : 12,
+          marginBottom: isSmallScreen ? 8 : 0,
+        }]}>
+          <View style={{
+            flexDirection: 'row',
+            gap: isSmallScreen ? 10 : 12,
+          }}>
             <TouchableOpacity
               style={[
                 styles.streamButton,
+                {
+                  paddingHorizontal: isSmallScreen ? 20 : 24,
+                  paddingVertical: isSmallScreen ? 10 : 12,
+                },
                 currentStream === 'version1' && styles.streamButtonActive,
               ]}
               onPress={() => switchStream('version1')}
@@ -189,6 +271,9 @@ export default function PlayerScreen() {
               <Text
                 style={[
                   styles.streamButtonText,
+                  {
+                    fontSize: isSmallScreen ? 12 : 14,
+                  },
                   currentStream === 'version1' && styles.streamButtonTextActive,
                 ]}
               >
@@ -198,6 +283,10 @@ export default function PlayerScreen() {
             <TouchableOpacity
               style={[
                 styles.streamButton,
+                {
+                  paddingHorizontal: isSmallScreen ? 20 : 24,
+                  paddingVertical: isSmallScreen ? 10 : 12,
+                },
                 currentStream === 'version2' && styles.streamButtonActive,
               ]}
               onPress={() => switchStream('version2')}
@@ -206,6 +295,9 @@ export default function PlayerScreen() {
               <Text
                 style={[
                   styles.streamButtonText,
+                  {
+                    fontSize: isSmallScreen ? 12 : 14,
+                  },
                   currentStream === 'version2' && styles.streamButtonTextActive,
                 ]}
               >
@@ -234,18 +326,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
   },
-  visualizer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: visualizerSize,
-    width: visualizerSize,
-    marginTop: isSmallScreen ? 10 : 20,
-    marginBottom: isSmallScreen ? 10 : 20,
-  },
   outerCircle: {
-    width: visualizerSize * 0.95,
-    height: visualizerSize * 0.95,
-    borderRadius: visualizerSize * 0.475,
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -253,9 +334,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   middleCircle: {
-    width: visualizerSize * 0.73,
-    height: visualizerSize * 0.73,
-    borderRadius: visualizerSize * 0.365,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -263,66 +341,43 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.25)',
   },
   innerCircle: {
-    width: visualizerSize * 0.51,
-    height: visualizerSize * 0.51,
-    borderRadius: visualizerSize * 0.255,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: isSmallScreen ? 2 : 3,
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   waveRing: {
     position: 'absolute',
-    width: visualizerSize * 0.95,
-    height: visualizerSize * 0.95,
-    borderRadius: visualizerSize * 0.475,
-    borderWidth: isSmallScreen ? 2 : 3,
     borderColor: 'rgba(255, 255, 255, 0.5)',
-  },
-  waveRing2: {
-    width: visualizerSize * 1.1,
-    height: visualizerSize * 1.1,
-    borderRadius: visualizerSize * 0.55,
   },
   nowPlaying: {
     alignItems: 'center',
     paddingHorizontal: 20,
-    marginVertical: isSmallScreen ? 12 : isMediumScreen ? 16 : 20,
   },
   nowPlayingLabel: {
-    fontSize: isSmallScreen ? 10 : 12,
     color: colors.textSecondary,
     letterSpacing: 2,
-    marginBottom: isSmallScreen ? 6 : 8,
   },
   songTitle: {
-    fontSize: isSmallScreen ? 20 : isMediumScreen ? 22 : 24,
     fontWeight: '700' as const,
     color: colors.text,
     marginBottom: 4,
     textAlign: 'center',
   },
   artist: {
-    fontSize: isSmallScreen ? 14 : 16,
     color: colors.textSecondary,
     textAlign: 'center',
   },
   controls: {
     alignItems: 'center',
-    marginVertical: isSmallScreen ? 12 : isMediumScreen ? 16 : 20,
   },
   playButton: {
-    width: isSmallScreen ? 80 : isMediumScreen ? 90 : 100,
-    height: isSmallScreen ? 80 : isMediumScreen ? 90 : 100,
-    borderRadius: isSmallScreen ? 40 : isMediumScreen ? 45 : 50,
     overflow: 'hidden',
     elevation: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
     shadowRadius: 12,
-    borderWidth: isSmallScreen ? 3 : 4,
     borderColor: colors.text,
   },
   playButtonLoading: {
@@ -339,13 +394,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: isSmallScreen ? 16 : 20,
-    paddingVertical: isSmallScreen ? 8 : 10,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
     borderRadius: 20,
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
-    marginVertical: isSmallScreen ? 8 : 12,
   },
   liveDot: {
     width: 8,
@@ -354,7 +406,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.red,
   },
   liveText: {
-    fontSize: isSmallScreen ? 12 : 14,
     fontWeight: '700' as const,
     color: colors.text,
     letterSpacing: 1,
@@ -373,30 +424,11 @@ const styles = StyleSheet.create({
     color: colors.error,
     textAlign: 'center',
   },
-  logo: {
-    width: isSmallScreen ? width * 0.5 : isMediumScreen ? width * 0.55 : width * 0.6,
-    height: isSmallScreen ? 50 : isMediumScreen ? 60 : 70,
-    marginBottom: isSmallScreen ? 10 : 20,
-  },
   streamSelector: {
     alignItems: 'center',
     paddingHorizontal: 20,
-    marginTop: isSmallScreen ? 8 : 12,
-    marginBottom: isSmallScreen ? 8 : 0,
-  },
-  streamSelectorLabel: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    letterSpacing: 1,
-    marginBottom: 12,
-  },
-  streamButtons: {
-    flexDirection: 'row',
-    gap: isSmallScreen ? 10 : 12,
   },
   streamButton: {
-    paddingHorizontal: isSmallScreen ? 20 : 24,
-    paddingVertical: isSmallScreen ? 10 : 12,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
     borderRadius: 20,
     borderWidth: 2,
@@ -407,7 +439,6 @@ const styles = StyleSheet.create({
     borderColor: colors.text,
   },
   streamButtonText: {
-    fontSize: isSmallScreen ? 12 : 14,
     fontWeight: '600' as const,
     color: colors.textSecondary,
   },
