@@ -5,6 +5,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { RadioProvider } from "@/contexts/RadioContext";
 import { ChatProvider } from "@/contexts/ChatContext";
 import { AnnouncementsBadgeProvider } from "@/contexts/AnnouncementsBadgeContext";
+import { TermsProvider } from "@/contexts/TermsContext";
 
 const queryClient = new QueryClient();
 
@@ -20,13 +21,15 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <RadioProvider>
-          <ChatProvider>
-            <AnnouncementsBadgeProvider>
-              <RootLayoutNav />
-            </AnnouncementsBadgeProvider>
-          </ChatProvider>
-        </RadioProvider>
+        <TermsProvider>
+          <RadioProvider>
+            <ChatProvider>
+              <AnnouncementsBadgeProvider>
+                <RootLayoutNav />
+              </AnnouncementsBadgeProvider>
+            </ChatProvider>
+          </RadioProvider>
+        </TermsProvider>
       </GestureHandlerRootView>
     </QueryClientProvider>
   );

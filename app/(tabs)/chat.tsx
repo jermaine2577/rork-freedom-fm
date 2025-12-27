@@ -1,11 +1,46 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Platform, ActivityIndicator, Text } from 'react-native';
+import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity, Linking, Alert } from 'react-native';
 import { WebView } from 'react-native-webview';
+import { useTerms } from '@/contexts/TermsContext';
+import TermsAgreementScreen from '@/components/TermsAgreementScreen';
+import { Mail } from 'lucide-react-native';
 
 export default function ChatScreen() {
+  const { hasAcceptedTerms, isLoading: termsLoading } = useTerms();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+
+  const handleContactPress = () => {
+    Alert.alert(
+      'Report Content',
+      'To report inappropriate content or behavior, please contact us at:\n\nfreedomfm1065@gmail.com\n\nWe respond to all reports within 24 hours.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send Email',
+          onPress: () => {
+            Linking.openURL('mailto:freedomfm1065@gmail.com?subject=Chat Report - Freedom FM');
+          },
+        },
+      ]
+    );
+  };
+
+  if (termsLoading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF6B35" />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!hasAcceptedTerms) {
+    return <TermsAgreementScreen />;
+  }
 
   const injectedCSS = `
     header,
@@ -47,6 +82,10 @@ export default function ChatScreen() {
   if (Platform.OS === 'web') {
     return (
       <View style={styles.container}>
+        <TouchableOpacity style={styles.contactButton} onPress={handleContactPress}>
+          <Mail size={20} color="#FFFFFF" />
+          <Text style={styles.contactButtonText}>Report</Text>
+        </TouchableOpacity>
         {loading && !error && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#FF6B35" />
@@ -93,6 +132,10 @@ export default function ChatScreen() {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity style={styles.contactButton} onPress={handleContactPress}>
+        <Mail size={20} color="#FFFFFF" />
+        <Text style={styles.contactButtonText}>Report</Text>
+      </TouchableOpacity>
       {loading && !error && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#FF6B35" />
@@ -205,5 +248,28 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#FF6B35',
     overflow: 'hidden',
+  },
+  contactButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: '#FF6B35',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  contactButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
