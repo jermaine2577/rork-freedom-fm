@@ -114,11 +114,12 @@ export default function ChatScreen() {
           injectedJavaScript={injectedJavaScript}
           onMessage={(event) => {
             try {
-              if (event.nativeEvent.data) {
-                JSON.parse(event.nativeEvent.data);
+              const data = event.nativeEvent.data;
+              if (data && typeof data === 'string' && (data.startsWith('{') || data.startsWith('['))) {
+                JSON.parse(data);
               }
             } catch {
-              // Ignore malformed messages from the external website
+              console.log('Ignoring non-JSON message from WebView');
             }
           }}
           javaScriptEnabled={true}
