@@ -54,7 +54,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="announcements"
         options={{
-          title: "Announcements",
+          title: "Alerts",
           tabBarIcon: ({ color, size }) => <Bell color={color} size={size} />,
         }}
       />
