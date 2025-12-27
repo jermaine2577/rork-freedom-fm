@@ -35,7 +35,7 @@ export default function PlayerScreen() {
   const { width, height } = dimensions;
   const isSmallScreen = height < 700;
   const isMediumScreen = height >= 700 && height < 800;
-  const visualizerSize = isSmallScreen ? Math.min(width * 0.55, 200) : isMediumScreen ? Math.min(width * 0.6, 240) : Math.min(width * 0.65, 280);
+  const visualizerSize = isSmallScreen ? Math.min(width * 0.45, 180) : isMediumScreen ? Math.min(width * 0.5, 200) : Math.min(width * 0.55, 220);
 
   useEffect(() => {
     if (isPlaying) {
@@ -98,9 +98,9 @@ export default function PlayerScreen() {
         <Image
           source={{ uri: 'https://www.freedomskn.com/resources/uploads/2014/08/logo_ff.png' }}
           style={{ 
-            width: isSmallScreen ? width * 0.5 : isMediumScreen ? width * 0.55 : width * 0.6,
-            height: isSmallScreen ? 40 : isMediumScreen ? 50 : 60,
-            marginBottom: isSmallScreen ? 4 : 8,
+            width: isSmallScreen ? width * 0.65 : isMediumScreen ? width * 0.7 : width * 0.75,
+            height: isSmallScreen ? 55 : isMediumScreen ? 65 : 75,
+            marginBottom: isSmallScreen ? 6 : 10,
           }}
           resizeMode="contain"
         />
