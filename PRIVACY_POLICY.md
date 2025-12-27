@@ -137,7 +137,7 @@ We do not track users across third-party websites and therefore do not respond t
 
 If you have questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact us at:
 
-**Email:** privacy@freedomfm1065.com  
+**Email:** freedomradio1065@yahoo.com  
 **Address:** Freedom FM 106.5  
 **App:** Freedom FM
 
