@@ -64,7 +64,7 @@ export default function TermsAgreementScreen() {
         <Text style={styles.text}>
           Report inappropriate activity or violations:
         </Text>
-        <Text style={styles.contactText}>Email: freedomfm1065@gmail.com</Text>
+        <Text style={styles.contactText}>Email: freedomradio1065@yahoo.com</Text>
         <Text style={styles.contactText}>Response Time: Within 24 hours</Text>
 
         <Text style={styles.sectionTitle}>Your Responsibility</Text>

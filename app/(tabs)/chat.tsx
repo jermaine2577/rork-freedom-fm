@@ -14,13 +14,13 @@ export default function ChatScreen() {
   const handleContactPress = () => {
     Alert.alert(
       'Report Content',
-      'To report inappropriate content or behavior, please contact us at:\n\nfreedomfm1065@gmail.com\n\nWe respond to all reports within 24 hours.',
+      'To report inappropriate content or behavior, please contact us at:\n\nfreedomradio1065@yahoo.com\n\nWe respond to all reports within 24 hours.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Send Email',
           onPress: () => {
-            Linking.openURL('mailto:freedomfm1065@gmail.com?subject=Chat Report - Freedom FM');
+            Linking.openURL('mailto:freedomradio1065@yahoo.com?subject=Chat Report - Freedom FM');
           },
         },
       ]
