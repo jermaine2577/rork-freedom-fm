@@ -7,6 +7,7 @@ import {
   Animated,
   Dimensions,
   Image,
+  ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,7 +15,10 @@ import { Play, Pause, Volume2, Radio } from 'lucide-react-native';
 import { useRadio } from '@/contexts/RadioContext';
 import colors from '@/constants/colors';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
+const isSmallScreen = height < 700;
+const isMediumScreen = height >= 700 && height < 800;
+const visualizerSize = isSmallScreen ? Math.min(width * 0.55, 200) : isMediumScreen ? Math.min(width * 0.6, 240) : Math.min(width * 0.65, 280);
 
 export default function PlayerScreen() {
   const { isPlaying, isLoading, error, play, pause, currentStream, switchStream } = useRadio();
@@ -71,7 +75,10 @@ export default function PlayerScreen() {
       locations={[0, 0.5, 1]}
       style={styles.container}
     >
-      <View style={[styles.content, { paddingTop: Math.max(insets.top + 20, 40) }]}>
+      <ScrollView 
+        contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top + 20, 40), paddingBottom: insets.bottom + 20 }]}
+        showsVerticalScrollIndicator={false}
+      >
         <Image
           source={{ uri: 'https://www.freedomskn.com/resources/uploads/2014/08/logo_ff.png' }}
           style={styles.logo}
@@ -88,7 +95,7 @@ export default function PlayerScreen() {
           >
             <View style={styles.middleCircle}>
               <View style={styles.innerCircle}>
-                <Radio size={60} color={colors.text} strokeWidth={1.5} />
+                <Radio size={isSmallScreen ? 45 : isMediumScreen ? 52 : 60} color={colors.text} strokeWidth={1.5} />
               </View>
             </View>
           </Animated.View>
@@ -153,10 +160,10 @@ export default function PlayerScreen() {
               style={styles.playButtonGradient}
             >
               {isPlaying ? (
-                <Pause size={50} color={colors.text} fill={colors.text} />
+                <Pause size={isSmallScreen ? 40 : isMediumScreen ? 45 : 50} color={colors.text} fill={colors.text} />
               ) : (
-                <View style={{ marginLeft: 6 }}>
-                  <Play size={50} color={colors.text} fill={colors.text} />
+                <View style={{ marginLeft: isSmallScreen ? 5 : 6 }}>
+                  <Play size={isSmallScreen ? 40 : isMediumScreen ? 45 : 50} color={colors.text} fill={colors.text} />
                 </View>
               )}
             </LinearGradient>
@@ -213,7 +220,7 @@ export default function PlayerScreen() {
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
-      </View>
+      </ScrollView>
     </LinearGradient>
   );
 }
@@ -223,21 +230,22 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
-    justifyContent: 'space-evenly',
-    paddingVertical: 20,
+    paddingHorizontal: 20,
   },
   visualizer: {
     alignItems: 'center',
     justifyContent: 'center',
-    height: width * 0.7,
-    width: width * 0.7,
+    height: visualizerSize,
+    width: visualizerSize,
+    marginTop: isSmallScreen ? 10 : 20,
+    marginBottom: isSmallScreen ? 10 : 20,
   },
   outerCircle: {
-    width: width * 0.65,
-    height: width * 0.65,
-    borderRadius: width * 0.325,
+    width: visualizerSize * 0.95,
+    height: visualizerSize * 0.95,
+    borderRadius: visualizerSize * 0.475,
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -245,9 +253,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   middleCircle: {
-    width: width * 0.5,
-    height: width * 0.5,
-    borderRadius: width * 0.25,
+    width: visualizerSize * 0.73,
+    height: visualizerSize * 0.73,
+    borderRadius: visualizerSize * 0.365,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -255,62 +263,66 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.25)',
   },
   innerCircle: {
-    width: width * 0.35,
-    height: width * 0.35,
-    borderRadius: width * 0.175,
+    width: visualizerSize * 0.51,
+    height: visualizerSize * 0.51,
+    borderRadius: visualizerSize * 0.255,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
+    borderWidth: isSmallScreen ? 2 : 3,
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   waveRing: {
     position: 'absolute',
-    width: width * 0.65,
-    height: width * 0.65,
-    borderRadius: width * 0.325,
-    borderWidth: 3,
+    width: visualizerSize * 0.95,
+    height: visualizerSize * 0.95,
+    borderRadius: visualizerSize * 0.475,
+    borderWidth: isSmallScreen ? 2 : 3,
     borderColor: 'rgba(255, 255, 255, 0.5)',
   },
   waveRing2: {
-    width: width * 0.75,
-    height: width * 0.75,
-    borderRadius: width * 0.375,
+    width: visualizerSize * 1.1,
+    height: visualizerSize * 1.1,
+    borderRadius: visualizerSize * 0.55,
   },
   nowPlaying: {
     alignItems: 'center',
     paddingHorizontal: 20,
+    marginVertical: isSmallScreen ? 12 : isMediumScreen ? 16 : 20,
   },
   nowPlayingLabel: {
-    fontSize: 12,
+    fontSize: isSmallScreen ? 10 : 12,
     color: colors.textSecondary,
     letterSpacing: 2,
-    marginBottom: 8,
+    marginBottom: isSmallScreen ? 6 : 8,
   },
   songTitle: {
-    fontSize: 24,
+    fontSize: isSmallScreen ? 20 : isMediumScreen ? 22 : 24,
     fontWeight: '700' as const,
     color: colors.text,
     marginBottom: 4,
+    textAlign: 'center',
   },
   artist: {
-    fontSize: 16,
+    fontSize: isSmallScreen ? 14 : 16,
     color: colors.textSecondary,
+    textAlign: 'center',
   },
   controls: {
     alignItems: 'center',
+    marginVertical: isSmallScreen ? 12 : isMediumScreen ? 16 : 20,
   },
   playButton: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: isSmallScreen ? 80 : isMediumScreen ? 90 : 100,
+    height: isSmallScreen ? 80 : isMediumScreen ? 90 : 100,
+    borderRadius: isSmallScreen ? 40 : isMediumScreen ? 45 : 50,
     overflow: 'hidden',
     elevation: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
     shadowRadius: 12,
-    borderWidth: 4,
+    borderWidth: isSmallScreen ? 3 : 4,
     borderColor: colors.text,
   },
   playButtonLoading: {
@@ -327,12 +339,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: isSmallScreen ? 16 : 20,
+    paddingVertical: isSmallScreen ? 8 : 10,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
     borderRadius: 20,
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
+    marginVertical: isSmallScreen ? 8 : 12,
   },
   liveDot: {
     width: 8,
@@ -341,7 +354,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.red,
   },
   liveText: {
-    fontSize: 14,
+    fontSize: isSmallScreen ? 12 : 14,
     fontWeight: '700' as const,
     color: colors.text,
     letterSpacing: 1,
@@ -361,14 +374,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   logo: {
-    width: 240,
-    height: 80,
-    marginBottom: 0,
+    width: isSmallScreen ? width * 0.5 : isMediumScreen ? width * 0.55 : width * 0.6,
+    height: isSmallScreen ? 50 : isMediumScreen ? 60 : 70,
+    marginBottom: isSmallScreen ? 10 : 20,
   },
   streamSelector: {
     alignItems: 'center',
     paddingHorizontal: 20,
-    marginTop: 8,
+    marginTop: isSmallScreen ? 8 : 12,
+    marginBottom: isSmallScreen ? 8 : 0,
   },
   streamSelectorLabel: {
     fontSize: 12,
@@ -378,11 +392,11 @@ const styles = StyleSheet.create({
   },
   streamButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: isSmallScreen ? 10 : 12,
   },
   streamButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    paddingHorizontal: isSmallScreen ? 20 : 24,
+    paddingVertical: isSmallScreen ? 10 : 12,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
     borderRadius: 20,
     borderWidth: 2,
@@ -393,7 +407,7 @@ const styles = StyleSheet.create({
     borderColor: colors.text,
   },
   streamButtonText: {
-    fontSize: 14,
+    fontSize: isSmallScreen ? 12 : 14,
     fontWeight: '600' as const,
     color: colors.textSecondary,
   },
