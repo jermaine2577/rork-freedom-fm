@@ -6,8 +6,8 @@ import {
   FlatList,
   Image,
   TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
+  Animated,
 } from 'react-native';
 
 import { Calendar, Tag, AlertCircle } from 'lucide-react-native';
@@ -68,9 +68,9 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
     
     const controller = new AbortController();
     timeoutId = setTimeout(() => {
-      console.log('Request timed out after 15 seconds');
+      console.log('Request timed out after 8 seconds');
       controller.abort();
-    }, 15000);
+    }, 8000);
     
     const response = await fetch(WORDPRESS_URL, {
       method: 'GET',
@@ -153,13 +153,49 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
   }
 };
 
+const SkeletonCard = () => {
+  const fadeAnim = React.useRef(new Animated.Value(0.3)).current;
+
+  React.useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(fadeAnim, {
+          toValue: 0.7,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 0.3,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [fadeAnim]);
+
+  return (
+    <View style={styles.card}>
+      <Animated.View style={[styles.imageContainer, { opacity: fadeAnim }]}>
+        <View style={styles.skeletonImage} />
+      </Animated.View>
+      <View style={styles.cardContent}>
+        <Animated.View style={[styles.skeletonBadge, { opacity: fadeAnim }]} />
+        <Animated.View style={[styles.skeletonTitle, { opacity: fadeAnim }]} />
+        <Animated.View style={[styles.skeletonExcerpt, { opacity: fadeAnim, marginTop: 8 }]} />
+        <Animated.View style={[styles.skeletonExcerpt, { opacity: fadeAnim, marginTop: 4, width: '60%' }]} />
+        <Animated.View style={[styles.skeletonDate, { opacity: fadeAnim, marginTop: 12 }]} />
+      </View>
+    </View>
+  );
+};
+
 export default function NewsScreen() {
   const router = useRouter();
   const { data: articles, isLoading, error, refetch } = useQuery({
     queryKey: ['wordpressNews'],
     queryFn: fetchWordPressPosts,
-    retry: 2,
-    retryDelay: 1000,
+    retry: 1,
+    retryDelay: 800,
     staleTime: 3 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
   });
@@ -183,6 +219,7 @@ export default function NewsScreen() {
           source={{ uri: item.imageUrl }} 
           style={styles.image}
           resizeMode="cover"
+          defaultSource={require('@/assets/images/icon.png')}
         />
       </View>
       <View style={styles.cardContent}>
@@ -210,9 +247,14 @@ export default function NewsScreen() {
 
   if (isLoading && !articles) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={colors.text} />
-        <Text style={styles.loadingText}>Loading news...</Text>
+      <View style={styles.container}>
+        <FlatList
+          data={[1, 2, 3, 4, 5]}
+          renderItem={() => <SkeletonCard />}
+          keyExtractor={(item) => `skeleton-${item}`}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
       </View>
     );
   }
@@ -364,5 +406,36 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: colors.text,
+  },
+  skeletonImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#2a2a2a',
+  },
+  skeletonBadge: {
+    width: 80,
+    height: 24,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  skeletonTitle: {
+    width: '90%',
+    height: 24,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 4,
+    marginBottom: 8,
+  },
+  skeletonExcerpt: {
+    width: '100%',
+    height: 16,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 4,
+  },
+  skeletonDate: {
+    width: 120,
+    height: 14,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 4,
   },
 });
