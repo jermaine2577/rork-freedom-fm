@@ -116,17 +116,18 @@ export default function ChatScreen() {
             try {
               const data = event.nativeEvent.data;
               if (data && typeof data === 'string' && data.trim().length > 0) {
-                const firstChar = data.trim()[0];
+                const trimmedData = data.trim();
+                const firstChar = trimmedData[0];
                 if (firstChar === '{' || firstChar === '[') {
                   try {
-                    JSON.parse(data);
+                    JSON.parse(trimmedData);
                   } catch {
-                    console.log('WebView message is not valid JSON, ignoring');
+                    console.log('WebView sent non-JSON message, ignoring');
                   }
                 }
               }
             } catch (error) {
-              console.log('WebView message error:', error);
+              console.log('WebView message handler error:', error);
             }
           }}
           javaScriptEnabled={true}

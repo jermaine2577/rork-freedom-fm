@@ -93,9 +93,6 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
       throw new Error(`Server error: ${response.status}`);
     }
     
-    const contentType = response.headers.get('content-type');
-    console.log('Content-Type:', contentType);
-    
     const responseText = await response.text();
     console.log('Response preview:', responseText.substring(0, 100));
     
@@ -104,26 +101,26 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
       throw new Error('Server returned empty response');
     }
     
-    if (!contentType?.includes('application/json')) {
-      console.error('Response is not JSON:', contentType);
-      console.error('Response text:', responseText.substring(0, 200));
-      throw new Error('Server returned invalid format');
-    }
+    const trimmedResponse = responseText.trim();
+    const firstChar = trimmedResponse[0];
     
-    const firstChar = responseText.trim()[0];
     if (firstChar !== '[' && firstChar !== '{') {
-      console.error('Response does not start with JSON:', firstChar);
-      console.error('Response text:', responseText.substring(0, 200));
-      throw new Error('Server returned non-JSON content');
+      console.error('Invalid response - does not start with JSON');
+      console.error('First character:', firstChar);
+      console.error('Response preview:', responseText.substring(0, 200));
+      throw new Error('Server returned invalid data');
     }
     
     let posts: WordPressPost[];
     try {
-      posts = JSON.parse(responseText);
+      posts = JSON.parse(trimmedResponse);
     } catch (parseError: any) {
-      console.error('JSON Parse Error:', parseError?.message || parseError);
-      console.error('Response text:', responseText.substring(0, 500));
-      throw new Error('Invalid JSON response from server');
+      console.error('JSON Parse Error Details:');
+      console.error('- Error:', parseError?.message || String(parseError));
+      console.error('- Response length:', trimmedResponse.length);
+      console.error('- First 300 chars:', trimmedResponse.substring(0, 300));
+      console.error('- Last 100 chars:', trimmedResponse.substring(Math.max(0, trimmedResponse.length - 100)));
+      throw new Error('Unable to parse news data from server');
     }
     console.log('Successfully fetched', posts.length, 'posts');
     
