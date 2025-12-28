@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity, Linking, Modal } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity, Linking, Modal, AppState } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,8 +15,37 @@ export default function ChatScreen() {
   const [error, setError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [key, setKey] = useState(0);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const webViewRef = useRef<any>(null);
+  const mountedRef = useRef(true);
+
+  const handleRetry = useCallback(() => {
+    console.log('[Chat] Retry button pressed');
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+    setError(false);
+    setLoading(true);
+    setRetryCount(prev => prev + 1);
+    setKey(prev => prev + 1);
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    console.log('[Chat] Refresh button pressed');
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+    setError(false);
+    setLoading(true);
+    if (webViewRef.current) {
+      webViewRef.current.reload();
+    } else {
+      setKey(prev => prev + 1);
+    }
+  }, []);
 
   const handleContactPress = () => {
     setShowReportModal(true);
@@ -28,39 +57,50 @@ export default function ChatScreen() {
   };
 
   useEffect(() => {
-    if (loading) {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active' && error) {
+        console.log('[Chat] App became active, resetting error state');
+        handleRetry();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [error, handleRetry]);
+
+  useEffect(() => {
+    if (loading && !error) {
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
       }
       loadingTimeoutRef.current = setTimeout(() => {
-        console.log('[Chat] Loading timeout - forcing error state');
-        setLoading(false);
-        setError(true);
-      }, 15000);
+        if (mountedRef.current && loading) {
+          console.log('[Chat] Loading timeout - forcing error state');
+          setLoading(false);
+          setError(true);
+        }
+      }, 20000);
     }
 
     return () => {
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
       }
     };
-  }, [loading, retryCount]);
-
-  const handleRetry = () => {
-    console.log('[Chat] Retry button pressed');
-    setError(false);
-    setLoading(true);
-    setRetryCount(prev => prev + 1);
-  };
-
-  const handleRefresh = () => {
-    console.log('[Chat] Refresh button pressed');
-    setError(false);
-    setLoading(true);
-    if (webViewRef.current) {
-      webViewRef.current.reload();
-    }
-  };
+  }, [loading, error, retryCount]);
 
   if (termsLoading) {
     return (
@@ -255,7 +295,7 @@ export default function ChatScreen() {
       {!error && (
         <WebView
           ref={webViewRef}
-          key={retryCount}
+          key={`${retryCount}-${key}`}
           source={{ uri: 'https://freedomfm1065.com/mobile-chatroom/' }}
           style={styles.webview}
           injectedJavaScript={injectedJavaScript}
@@ -263,35 +303,58 @@ export default function ChatScreen() {
           javaScriptEnabled={true}
           domStorageEnabled={true}
           startInLoadingState={false}
+          cacheEnabled={false}
+          incognito={false}
+          mixedContentMode="always"
           onLoadStart={() => {
+            if (!mountedRef.current) return;
             console.log('[Chat] WebView load started');
             setLoading(true);
             setError(false);
           }}
           onLoadEnd={() => {
-            console.log('[Chat] WebView load ended');
+            if (!mountedRef.current) return;
+            console.log('[Chat] WebView load ended successfully');
             if (loadingTimeoutRef.current) {
               clearTimeout(loadingTimeoutRef.current);
+              loadingTimeoutRef.current = null;
             }
             setLoading(false);
+            setError(false);
           }}
           onError={(syntheticEvent) => {
+            if (!mountedRef.current) return;
             const { nativeEvent } = syntheticEvent;
-            console.log('[Chat] WebView error:', nativeEvent);
+            console.error('[Chat] WebView error:', nativeEvent);
             if (loadingTimeoutRef.current) {
               clearTimeout(loadingTimeoutRef.current);
+              loadingTimeoutRef.current = null;
             }
             setLoading(false);
             setError(true);
           }}
           onHttpError={(syntheticEvent) => {
+            if (!mountedRef.current) return;
             const { nativeEvent } = syntheticEvent;
-            console.log('[Chat] WebView HTTP error:', nativeEvent);
+            console.error('[Chat] WebView HTTP error:', nativeEvent.statusCode);
             if (loadingTimeoutRef.current) {
               clearTimeout(loadingTimeoutRef.current);
+              loadingTimeoutRef.current = null;
             }
             setLoading(false);
             setError(true);
+          }}
+          onRenderProcessGone={(syntheticEvent) => {
+            if (!mountedRef.current) return;
+            const { nativeEvent } = syntheticEvent;
+            console.error('[Chat] WebView process gone:', nativeEvent);
+            if (loadingTimeoutRef.current) {
+              clearTimeout(loadingTimeoutRef.current);
+              loadingTimeoutRef.current = null;
+            }
+            setLoading(false);
+            setError(true);
+            setKey(prev => prev + 1);
           }}
         />
       )}
