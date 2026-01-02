@@ -48,7 +48,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     if (Platform.OS === 'web') return;
     
     try {
-      await Audio.setIsEnabledAsync(true);
       if (soundRef.current) {
         const status = await soundRef.current.getStatusAsync();
         if (status.isLoaded) {
@@ -129,7 +128,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       console.log('Creating new audio stream...');
       
       const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: streamUrl },
+        { 
+          uri: streamUrl,
+          headers: {
+            'User-Agent': 'FreedomFM/1.0',
+          },
+        },
         { 
           shouldPlay: true, 
           volume: volume,
@@ -142,6 +146,17 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       soundRef.current = newSound;
       setCurrentStream(streamToUse);
       console.log('New sound created and should be playing');
+      
+      if (Platform.OS !== 'web') {
+        try {
+          await newSound.setStatusAsync({
+            androidImplementation: 'MediaPlayer',
+          } as any);
+          console.log('Android implementation set to MediaPlayer');
+        } catch (e) {
+          console.warn('Could not set Android implementation:', e);
+        }
+      }
       
       if (Platform.OS !== 'web') {
         try {
