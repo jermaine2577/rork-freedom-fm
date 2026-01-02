@@ -44,6 +44,23 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     }
   }, []);
 
+  const updateNowPlaying = useCallback(async (isPlaying: boolean) => {
+    if (Platform.OS === 'web') return;
+    
+    try {
+      await Audio.setIsEnabledAsync(true);
+      if (soundRef.current) {
+        const status = await soundRef.current.getStatusAsync();
+        if (status.isLoaded) {
+          await soundRef.current.setProgressUpdateIntervalAsync(1000);
+        }
+      }
+      console.log('Now Playing info updated');
+    } catch (error) {
+      console.error('Error updating Now Playing info:', error);
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
       if (soundRef.current) {
@@ -137,6 +154,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       await newSound.playAsync();
       console.log('Explicitly called playAsync');
       
+      await updateNowPlaying(true);
+      
       const status = await newSound.getStatusAsync();
       console.log('Sound status after creation:', {
         isLoaded: status.isLoaded,
@@ -160,7 +179,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       }
       setIsLoading(false);
     }
-  }, [setupAudio, onPlaybackStatusUpdate, currentStream, volume]);
+  }, [setupAudio, onPlaybackStatusUpdate, currentStream, volume, updateNowPlaying]);
 
   const pause = useCallback(async () => {
     try {
