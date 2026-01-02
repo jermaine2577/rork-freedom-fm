@@ -7,12 +7,10 @@ import {
   Animated,
   Dimensions,
   Image,
-  Linking,
-  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play, Pause, Volume2, Radio, Mail } from 'lucide-react-native';
+import { Play, Pause, Volume2, Radio } from 'lucide-react-native';
 import { useRadio } from '@/contexts/RadioContext';
 import colors from '@/constants/colors';
 
@@ -26,7 +24,6 @@ export default function PlayerScreen() {
     const { width, height } = Dimensions.get('window');
     return { width, height };
   });
-  const [showContactModal, setShowContactModal] = useState(false);
 
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
@@ -83,88 +80,12 @@ export default function PlayerScreen() {
     }
   };
 
-  const handleContactPress = () => {
-    setShowContactModal(true);
-  };
-
-  const handleSendEmail = () => {
-    setShowContactModal(false);
-    Linking.openURL('mailto:freedomradio1065@yahoo.com?subject=Contact Freedom FM');
-  };
-
   return (
     <LinearGradient
       colors={[colors.gradientStart, colors.gradientMiddle, colors.gradientEnd]}
       locations={[0, 0.5, 1]}
       style={styles.container}
     >
-      <Modal
-        visible={showContactModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowContactModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <LinearGradient
-              colors={[colors.gradientStart, colors.gradientMiddle, colors.gradientEnd]}
-              locations={[0, 0.5, 1]}
-              style={styles.modalGradient}
-            >
-              <View style={styles.modalIconContainer}>
-                <View style={styles.modalIconCircle}>
-                  <Mail size={48} color={colors.text} strokeWidth={2} />
-                </View>
-              </View>
-
-              <Text style={styles.modalTitle}>Contact Us</Text>
-              
-              <Text style={styles.modalMessage}>
-                Have questions, feedback, or need to report something?
-              </Text>
-              
-              <View style={styles.emailContainer}>
-                <Mail size={18} color={colors.text} />
-                <Text style={styles.emailText}>freedomradio1065@yahoo.com</Text>
-              </View>
-
-              <Text style={styles.modalFooter}>
-                We respond to all inquiries within 24 hours
-              </Text>
-
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={() => setShowContactModal(false)}
-                >
-                  <Text style={styles.cancelButtonText}>Close</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={styles.sendButton}
-                  onPress={handleSendEmail}
-                >
-                  <LinearGradient
-                    colors={['rgba(0, 0, 0, 0.7)', 'rgba(0, 0, 0, 0.5)']}
-                    style={styles.sendButtonGradient}
-                  >
-                    <Mail size={20} color={colors.text} />
-                    <Text style={styles.sendButtonText}>Send Email</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              </View>
-            </LinearGradient>
-          </View>
-        </View>
-      </Modal>
-
-      <TouchableOpacity
-        style={[styles.contactButton, { top: insets.top + 10 }]}
-        onPress={handleContactPress}
-      >
-        <Mail size={18} color={colors.text} />
-      </TouchableOpacity>
-
       <View 
         style={[
           styles.content, 
@@ -515,137 +436,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   streamButtonTextActive: {
-    color: colors.text,
-  },
-  contactButton: {
-    position: 'absolute',
-    right: 16,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContainer: {
-    width: '100%',
-    maxWidth: 400,
-    borderRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
-    elevation: 10,
-  },
-  modalGradient: {
-    padding: 28,
-    alignItems: 'center',
-  },
-  modalIconContainer: {
-    marginBottom: 20,
-  },
-  modalIconCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  modalTitle: {
-    fontSize: 26,
-    fontWeight: '700' as const,
-    color: colors.text,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  modalMessage: {
-    fontSize: 16,
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 22,
-    opacity: 0.9,
-  },
-  emailContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 16,
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  emailText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: colors.text,
-  },
-  modalFooter: {
-    fontSize: 14,
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: 28,
-    opacity: 0.8,
-    fontStyle: 'italic' as const,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: 16,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: colors.text,
-  },
-  sendButton: {
-    flex: 1,
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: colors.text,
-  },
-  sendButtonGradient: {
-    paddingVertical: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  sendButtonText: {
-    fontSize: 16,
-    fontWeight: '700' as const,
     color: colors.text,
   },
 });
