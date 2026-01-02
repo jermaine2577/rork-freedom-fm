@@ -68,9 +68,9 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
     
     const controller = new AbortController();
     timeoutId = setTimeout(() => {
-      console.log('Request timed out after 8 seconds');
+      console.log('Request timed out after 15 seconds');
       controller.abort();
-    }, 8000);
+    }, 15000);
     
     const response = await fetch(WORDPRESS_URL, {
       method: 'GET',
@@ -136,12 +136,16 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
       clearTimeout(timeoutId);
     }
     
-    console.error('Error fetching WordPress posts:', error);
-    console.error('Error name:', error.name);
-    console.error('Error message:', error.message);
+    if (error.name === 'AbortError') {
+      console.log('Request was aborted (timeout or cancelled)');
+    } else {
+      console.error('Error fetching WordPress posts:', error);
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+    }
     
     if (FALLBACK_TO_MOCK_ON_ERROR) {
-      console.log('Falling back to mock data due to error');
+      console.log('Falling back to mock data');
       await new Promise(resolve => setTimeout(resolve, 300));
       const { newsArticles } = await import('@/mocks/news');
       return newsArticles;
