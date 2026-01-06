@@ -166,10 +166,17 @@ export default function ChatScreen() {
   if (Platform.OS === 'web') {
     return (
       <View style={styles.container}>
-        <TouchableOpacity style={[styles.contactButton, { top: insets.top + 50 }]} onPress={handleContactPress}>
-          <Mail size={20} color="#FFFFFF" />
-          <Text style={styles.contactButtonText}>Report</Text>
-        </TouchableOpacity>
+        <View style={[styles.topButtons, { top: insets.top + 50 }]}>
+          <TouchableOpacity style={styles.contactButton} onPress={handleContactPress}>
+            <Mail size={20} color="#FFFFFF" />
+            <Text style={styles.contactButtonText}>Report</Text>
+          </TouchableOpacity>
+          {!loading && !error && (
+            <TouchableOpacity style={styles.refreshButton} onPress={handleRefresh}>
+              <Text style={styles.refreshButtonText}>↻</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         {loading && !error && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#FF6B35" />
