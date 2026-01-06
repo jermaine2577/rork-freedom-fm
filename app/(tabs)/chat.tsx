@@ -17,6 +17,7 @@ export default function ChatScreen() {
   const [showReportModal, setShowReportModal] = useState(false);
   const [key, setKey] = useState(0);
   const [timestamp, setTimestamp] = useState(Date.now());
+  const [webViewOpacity, setWebViewOpacity] = useState(0);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const webViewRef = useRef<any>(null);
   const mountedRef = useRef(true);
@@ -29,6 +30,7 @@ export default function ChatScreen() {
     }
     setError(false);
     setLoading(true);
+    setWebViewOpacity(0);
     setRetryCount(prev => prev + 1);
     setKey(prev => prev + 1);
     setTimestamp(Date.now());
@@ -42,6 +44,7 @@ export default function ChatScreen() {
     }
     setError(false);
     setLoading(true);
+    setWebViewOpacity(0);
     setTimestamp(Date.now());
     if (webViewRef.current) {
       webViewRef.current.reload();
@@ -333,7 +336,7 @@ export default function ChatScreen() {
               'Expires': '0'
             }
           }}
-          style={styles.webview}
+          style={[styles.webview, { opacity: webViewOpacity }]}
           injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
           injectedJavaScript={injectedJavaScript}
           onMessage={(event) => {
@@ -343,7 +346,8 @@ export default function ChatScreen() {
                 clearTimeout(loadingTimeoutRef.current);
                 loadingTimeoutRef.current = null;
               }
-              setLoading(false);
+              setWebViewOpacity(1);
+              setTimeout(() => setLoading(false), 300);
               setError(false);
             }
           }}
@@ -358,6 +362,7 @@ export default function ChatScreen() {
             if (!mountedRef.current) return;
             console.log('[Chat] WebView load started');
             setLoading(true);
+            setWebViewOpacity(0);
             setError(false);
           }}
           onLoadEnd={() => {
@@ -411,6 +416,7 @@ const styles = StyleSheet.create({
   },
   webview: {
     flex: 1,
+    opacity: 1,
   },
   loadingContainer: {
     position: 'absolute',
