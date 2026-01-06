@@ -1,14 +1,42 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Platform, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, View, Platform, ActivityIndicator, Text, TouchableOpacity, Animated } from 'react-native';
 import WebView from 'react-native-webview';
 import colors from '@/constants/colors';
-import { RefreshCw } from 'lucide-react-native';
+import { RefreshCw, Heart } from 'lucide-react-native';
 
 export default function AnniversaryScreen() {
   const url = 'https://freedomfm1065.com/mobile-forms/?type=anniversary_list';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [key, setKey] = useState(0);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (loading) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [loading, fadeAnim, pulseAnim]);
 
   const handleRetry = () => {
     setError(false);
@@ -36,25 +64,42 @@ export default function AnniversaryScreen() {
 
   return (
     <View style={styles.container}>
-      <WebView
-        key={key}
-        source={{ uri: url }}
-        style={styles.webview}
-        onLoadStart={() => setLoading(true)}
-        onLoadEnd={() => setLoading(false)}
-        onError={() => {
-          setLoading(false);
-          setError(true);
-        }}
-        startInLoadingState={false}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        cacheEnabled={true}
-      />
+      <Animated.View style={[styles.webviewContainer, { opacity: fadeAnim }]}>
+        <WebView
+          key={key}
+          source={{ uri: url }}
+          style={styles.webview}
+          onLoadStart={() => setLoading(true)}
+          onLoadEnd={() => setLoading(false)}
+          onError={() => {
+            setLoading(false);
+            setError(true);
+          }}
+          startInLoadingState={false}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          cacheEnabled={true}
+        />
+      </Animated.View>
       {loading && (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.yellow} />
-          <Text style={styles.loadingText}>Loading form...</Text>
+          <Animated.View style={[styles.iconPulse, { transform: [{ scale: pulseAnim }] }]}>
+            <View style={styles.iconCircle}>
+              <Heart size={40} color={colors.yellow} strokeWidth={2.5} />
+            </View>
+          </Animated.View>
+          <View style={styles.skeletonContainer}>
+            <View style={styles.skeletonBar} />
+            <View style={styles.skeletonBarShort} />
+            <View style={styles.skeletonBar} />
+            <View style={styles.skeletonBarMedium} />
+          </View>
+          <Text style={styles.loadingText}>Preparing your request form</Text>
+          <View style={styles.dotsContainer}>
+            <View style={[styles.dot, styles.dot1]} />
+            <View style={[styles.dot, styles.dot2]} />
+            <View style={[styles.dot, styles.dot3]} />
+          </View>
         </View>
       )}
       {error && (
@@ -75,6 +120,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
+  webviewContainer: {
+    flex: 1,
+  },
   webview: {
     flex: 1,
     backgroundColor: '#000',
@@ -88,12 +136,69 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
+    paddingHorizontal: 40,
+  },
+  iconPulse: {
+    marginBottom: 32,
+  },
+  iconCircle: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: 'rgba(255, 107, 53, 0.1)',
+    borderWidth: 3,
+    borderColor: colors.yellow,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  skeletonContainer: {
+    width: '100%',
+    maxWidth: 320,
+    gap: 16,
+    marginBottom: 32,
+  },
+  skeletonBar: {
+    height: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+    width: '100%',
+  },
+  skeletonBarShort: {
+    height: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+    width: '60%',
+  },
+  skeletonBarMedium: {
+    height: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+    width: '80%',
   },
   loadingText: {
     color: colors.text,
-    fontSize: 16,
-    marginTop: 8,
+    fontSize: 17,
+    fontWeight: '600' as const,
+    marginBottom: 16,
+  },
+  dotsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.yellow,
+  },
+  dot1: {
+    opacity: 0.4,
+  },
+  dot2: {
+    opacity: 0.7,
+  },
+  dot3: {
+    opacity: 1,
   },
   errorContainer: {
     position: 'absolute',
