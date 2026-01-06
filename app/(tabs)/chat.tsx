@@ -16,6 +16,7 @@ export default function ChatScreen() {
   const [retryCount, setRetryCount] = useState(0);
   const [showReportModal, setShowReportModal] = useState(false);
   const [key, setKey] = useState(0);
+  const [timestamp, setTimestamp] = useState(Date.now());
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const webViewRef = useRef<any>(null);
   const mountedRef = useRef(true);
@@ -30,6 +31,7 @@ export default function ChatScreen() {
     setLoading(true);
     setRetryCount(prev => prev + 1);
     setKey(prev => prev + 1);
+    setTimestamp(Date.now());
   }, []);
 
   const handleRefresh = useCallback(() => {
@@ -40,6 +42,7 @@ export default function ChatScreen() {
     }
     setError(false);
     setLoading(true);
+    setTimestamp(Date.now());
     if (webViewRef.current) {
       webViewRef.current.reload();
     } else {
@@ -196,8 +199,8 @@ export default function ChatScreen() {
         )}
         {!error && (
           <iframe
-            key={retryCount}
-            src="https://freedomfm1065.com/mobile-chatroom/"
+            key={`${retryCount}-${timestamp}`}
+            src={`https://freedomfm1065.com/mobile-chatroom/?t=${timestamp}&nocache=${Math.random()}`}
             style={{
               width: '100%',
               height: '100%',
@@ -321,8 +324,15 @@ export default function ChatScreen() {
       {!error && (
         <WebView
           ref={webViewRef}
-          key={`${retryCount}-${key}`}
-          source={{ uri: 'https://freedomfm1065.com/mobile-chatroom/' }}
+          key={`${retryCount}-${key}-${timestamp}`}
+          source={{ 
+            uri: `https://freedomfm1065.com/mobile-chatroom/?t=${timestamp}&nocache=${Math.random()}`,
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0'
+            }
+          }}
           style={styles.webview}
           injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
           injectedJavaScript={injectedJavaScript}
@@ -341,7 +351,7 @@ export default function ChatScreen() {
           domStorageEnabled={true}
           startInLoadingState={false}
           cacheEnabled={false}
-          incognito={false}
+          incognito={true}
           mixedContentMode="always"
           originWhitelist={['*']}
           onLoadStart={() => {
