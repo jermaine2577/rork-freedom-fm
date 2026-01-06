@@ -91,7 +91,7 @@ export default function PlayerScreen() {
           styles.content, 
           { 
             paddingTop: insets.top + (isSmallScreen ? 8 : 12), 
-            paddingBottom: insets.bottom + (isSmallScreen ? 8 : 12),
+            paddingBottom: insets.bottom + (isSmallScreen ? 80 : 90),
           }
         ]}
       >
