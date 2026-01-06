@@ -139,6 +139,21 @@ export default function ChatScreen() {
     }
   `;
 
+  const injectedJavaScriptBeforeContentLoaded = `
+    (function() {
+      const style = document.createElement('style');
+      style.textContent = \`${injectedCSS}\`;
+      if (document.head) {
+        document.head.appendChild(style);
+      } else {
+        document.addEventListener('DOMContentLoaded', function() {
+          document.head.appendChild(style);
+        });
+      }
+    })();
+    true;
+  `;
+
   const injectedJavaScript = `
     (function() {
       const style = document.createElement('style');
@@ -298,6 +313,7 @@ export default function ChatScreen() {
           key={`${retryCount}-${key}`}
           source={{ uri: 'https://freedomfm1065.com/mobile-chatroom/' }}
           style={styles.webview}
+          injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
           injectedJavaScript={injectedJavaScript}
           onMessage={() => {}}
           javaScriptEnabled={true}
@@ -306,6 +322,7 @@ export default function ChatScreen() {
           cacheEnabled={false}
           incognito={false}
           mixedContentMode="always"
+          originWhitelist={['*']}
           onLoadStart={() => {
             if (!mountedRef.current) return;
             console.log('[Chat] WebView load started');
