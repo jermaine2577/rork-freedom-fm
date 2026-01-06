@@ -9,20 +9,31 @@ export const [TermsProvider, useTerms] = createContextHook(() => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+    const loadTermsStatus = async () => {
+      try {
+        const accepted = await AsyncStorage.getItem(TERMS_ACCEPTED_KEY);
+        if (mounted) {
+          setHasAcceptedTerms(accepted === 'true');
+        }
+      } catch (error) {
+        console.error('Failed to load terms status:', error);
+        if (mounted) {
+          setHasAcceptedTerms(false);
+        }
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+    
     loadTermsStatus();
+    
+    return () => {
+      mounted = false;
+    };
   }, []);
-
-  const loadTermsStatus = async () => {
-    try {
-      const accepted = await AsyncStorage.getItem(TERMS_ACCEPTED_KEY);
-      setHasAcceptedTerms(accepted === 'true');
-    } catch (error) {
-      console.error('Failed to load terms status:', error);
-      setHasAcceptedTerms(false);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const acceptTerms = async () => {
     try {

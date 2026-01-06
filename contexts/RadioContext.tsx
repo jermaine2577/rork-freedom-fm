@@ -21,9 +21,9 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
   const setupAudio = useCallback(async () => {
     if (audioSetupRef.current) return;
-    audioSetupRef.current = true;
     
     try {
+      audioSetupRef.current = true;
       if (Platform.OS !== 'web') {
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: false,
@@ -34,9 +34,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           interruptionModeIOS: InterruptionModeIOS.DoNotMix,
           interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
         });
-        console.log('Audio setup complete (native)');
-      } else {
-        console.log('Audio setup complete (web)');
       }
     } catch (error) {
       console.error('Error setting up audio:', error);
