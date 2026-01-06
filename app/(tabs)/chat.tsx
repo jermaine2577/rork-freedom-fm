@@ -159,6 +159,10 @@ export default function ChatScreen() {
       const style = document.createElement('style');
       style.textContent = \`${injectedCSS}\`;
       document.head.appendChild(style);
+      
+      setTimeout(() => {
+        window.ReactNativeWebView.postMessage('CONTENT_READY');
+      }, 1000);
     })();
     true;
   `;
@@ -322,7 +326,17 @@ export default function ChatScreen() {
           style={styles.webview}
           injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
           injectedJavaScript={injectedJavaScript}
-          onMessage={() => {}}
+          onMessage={(event) => {
+            if (event.nativeEvent.data === 'CONTENT_READY') {
+              console.log('[Chat] Content ready signal received');
+              if (loadingTimeoutRef.current) {
+                clearTimeout(loadingTimeoutRef.current);
+                loadingTimeoutRef.current = null;
+              }
+              setLoading(false);
+              setError(false);
+            }
+          }}
           javaScriptEnabled={true}
           domStorageEnabled={true}
           startInLoadingState={false}
@@ -338,13 +352,7 @@ export default function ChatScreen() {
           }}
           onLoadEnd={() => {
             if (!mountedRef.current) return;
-            console.log('[Chat] WebView load ended successfully');
-            if (loadingTimeoutRef.current) {
-              clearTimeout(loadingTimeoutRef.current);
-              loadingTimeoutRef.current = null;
-            }
-            setLoading(false);
-            setError(false);
+            console.log('[Chat] WebView load ended');
           }}
           onError={(syntheticEvent) => {
             if (!mountedRef.current) return;
