@@ -5,12 +5,12 @@ import {
   StyleSheet,
   ScrollView,
   Image,
-  ActivityIndicator,
   Dimensions,
   TouchableOpacity,
   Share,
   Platform,
   Alert,
+  Animated,
 } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
@@ -20,6 +20,49 @@ import colors from '@/constants/colors';
 import { NewsArticle } from '@/types';
 
 const { width } = Dimensions.get('window');
+
+const SkeletonArticle = () => {
+  const fadeAnim = React.useRef(new Animated.Value(0.3)).current;
+
+  React.useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(fadeAnim, {
+          toValue: 0.7,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 0.3,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [fadeAnim]);
+
+  return (
+    <>
+      <Animated.View style={[styles.heroImage, styles.skeletonHeroImage, { opacity: fadeAnim }]} />
+      
+      <View style={styles.content}>
+        <Animated.View style={[styles.skeletonBadge, { opacity: fadeAnim }]} />
+        <Animated.View style={[styles.skeletonTitle, { opacity: fadeAnim }]} />
+        <Animated.View style={[styles.skeletonTitle, { opacity: fadeAnim, width: '60%', marginTop: 8 }]} />
+        <Animated.View style={[styles.skeletonDate, { opacity: fadeAnim, marginTop: 16 }]} />
+        
+        <View style={styles.divider} />
+        
+        <Animated.View style={[styles.skeletonBody, { opacity: fadeAnim }]} />
+        <Animated.View style={[styles.skeletonBody, { opacity: fadeAnim, marginTop: 8 }]} />
+        <Animated.View style={[styles.skeletonBody, { opacity: fadeAnim, marginTop: 8, width: '90%' }]} />
+        <Animated.View style={[styles.skeletonBody, { opacity: fadeAnim, marginTop: 16 }]} />
+        <Animated.View style={[styles.skeletonBody, { opacity: fadeAnim, marginTop: 8 }]} />
+        <Animated.View style={[styles.skeletonBody, { opacity: fadeAnim, marginTop: 8, width: '70%' }]} />
+      </View>
+    </>
+  );
+};
 
 interface WordPressPost {
   id: number;
@@ -204,9 +247,10 @@ export default function ArticleDetailScreen() {
 
   if (isLoading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={colors.text} />
-        <Text style={styles.loadingText}>Loading article...</Text>
+      <View style={styles.container}>
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          <SkeletonArticle />
+        </ScrollView>
       </View>
     );
   }
@@ -384,5 +428,34 @@ const styles = StyleSheet.create({
   shareButton: {
     padding: 8,
     marginRight: 8,
+  },
+  skeletonHeroImage: {
+    backgroundColor: '#2a2a2a',
+  },
+  skeletonBadge: {
+    width: 90,
+    height: 28,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 16,
+    marginBottom: 16,
+  },
+  skeletonTitle: {
+    width: '100%',
+    height: 32,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 6,
+  },
+  skeletonDate: {
+    width: 140,
+    height: 18,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 4,
+    marginBottom: 20,
+  },
+  skeletonBody: {
+    width: '100%',
+    height: 16,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 4,
   },
 });
