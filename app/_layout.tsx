@@ -1,15 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import React from "react";
-import { ActivityIndicator, StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { RadioProvider } from "@/contexts/RadioContext";
 import { ChatProvider } from "@/contexts/ChatContext";
-import { TermsProvider, useTerms } from "@/contexts/TermsContext";
-import { LinearGradient } from "expo-linear-gradient";
-import colors from "@/constants/colors";
+import { TermsProvider } from "@/contexts/TermsContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import TermsAgreementScreen from "@/components/TermsAgreementScreen";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,52 +24,20 @@ function RootLayoutNav() {
   );
 }
 
-function AppContent() {
-  const { hasAcceptedTerms, isLoading } = useTerms();
-
-  if (isLoading) {
-    return (
-      <LinearGradient
-        colors={[colors.gradientStart, colors.gradientMiddle, colors.gradientEnd]}
-        locations={[0, 0.5, 1]}
-        style={styles.loadingContainer}
-      >
-        <ActivityIndicator size="large" color={colors.text} />
-      </LinearGradient>
-    );
-  }
-
-  if (!hasAcceptedTerms) {
-    return <TermsAgreementScreen />;
-  }
-
-  return (
-    <RadioProvider>
-      <ChatProvider>
-        <RootLayoutNav />
-      </ChatProvider>
-    </RadioProvider>
-  );
-}
-
 export default function RootLayout() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <TermsProvider>
-            <AppContent />
+            <RadioProvider>
+              <ChatProvider>
+                <RootLayoutNav />
+              </ChatProvider>
+            </RadioProvider>
           </TermsProvider>
         </GestureHandlerRootView>
       </QueryClientProvider>
     </ErrorBoundary>
   );
 }
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
