@@ -33,21 +33,18 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
-  const [showReportModal, setShowReportModal] = useState(false);
   const [key, setKey] = useState(0);
+  const [showReportModal, setShowReportModal] = useState(false);
   const webViewRef = useRef<any>(null);
-  const mountedRef = useRef(true);
-  const hasLoadedRef = useRef(false);
+  const loadStartedRef = useRef(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const handleRetry = useCallback(() => {
     console.log('[Chat] Retry button pressed');
     setError(false);
     setLoading(true);
-    hasLoadedRef.current = false;
+    loadStartedRef.current = false;
     fadeAnim.setValue(0);
-    setRetryCount(prev => prev + 1);
     setKey(prev => prev + 1);
   }, [fadeAnim]);
 
@@ -55,7 +52,7 @@ export default function ChatScreen() {
     console.log('[Chat] Refresh button pressed');
     setError(false);
     setLoading(true);
-    hasLoadedRef.current = false;
+    loadStartedRef.current = false;
     fadeAnim.setValue(0);
     if (webViewRef.current) {
       webViewRef.current.reload();
@@ -73,12 +70,7 @@ export default function ChatScreen() {
     Linking.openURL('mailto:freedomradio1065@yahoo.com?subject=Chat Report - Freedom FM');
   };
 
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
@@ -167,12 +159,6 @@ export default function ChatScreen() {
           onRefreshPress={handleRefresh}
           showRefresh={!loading && !error}
         />
-        {loading && !error && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#FF6B35" />
-            <Text style={styles.loadingText}>Loading the freedom wall...</Text>
-          </View>
-        )}
         {error && (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>Failed to load chat</Text>
@@ -182,8 +168,8 @@ export default function ChatScreen() {
         )}
         {!error && (
           <iframe
-            key={retryCount}
-            src={`https://freedomfm1065.com/mobile-chatroom/?t=${Date.now()}`}
+            key={key}
+            src="https://freedomfm1065.com/mobile-chatroom/"
             style={{
               width: '100%',
               height: '100%',
@@ -286,12 +272,6 @@ export default function ChatScreen() {
         onRefreshPress={handleRefresh}
         showRefresh={!loading && !error}
       />
-      {loading && !error && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF6B35" />
-          <Text style={styles.loadingText}>Loading the freedom wall...</Text>
-        </View>
-      )}
       {error && (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Failed to load chat</Text>
@@ -303,77 +283,56 @@ export default function ChatScreen() {
         <Animated.View style={[styles.webview, { opacity: fadeAnim }]}>
           <WebView
             ref={webViewRef}
-            key={`${retryCount}-${key}`}
-            source={{ 
-              uri: `https://freedomfm1065.com/mobile-chatroom/?t=${Date.now()}`,
-              headers: {
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0'
-              }
-            }}
+            key={key}
+            source={{ uri: 'https://freedomfm1065.com/mobile-chatroom/' }}
             style={styles.webviewInner}
           injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
           injectedJavaScript={injectedJavaScript}
           javaScriptEnabled={true}
           domStorageEnabled={true}
-          startInLoadingState={false}
-          cacheEnabled={false}
-          incognito={true}
+          startInLoadingState={true}
+          cacheEnabled={true}
           mixedContentMode="always"
           originWhitelist={['*']}
+          renderLoading={() => (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#FF6B35" />
+              <Text style={styles.loadingText}>Loading the freedom wall...</Text>
+            </View>
+          )}
           onLoadStart={() => {
-            if (!mountedRef.current || hasLoadedRef.current) return;
+            if (loadStartedRef.current) return;
+            loadStartedRef.current = true;
             console.log('[Chat] WebView load started');
-            setLoading(true);
-            setError(false);
           }}
           onLoadEnd={() => {
-            if (!mountedRef.current) return;
             console.log('[Chat] WebView load ended');
-            hasLoadedRef.current = true;
             setLoading(false);
             setError(false);
             Animated.timing(fadeAnim, {
               toValue: 1,
-              duration: 400,
+              duration: 300,
               useNativeDriver: true,
             }).start();
           }}
           onError={(syntheticEvent) => {
-            if (!mountedRef.current) return;
             const { nativeEvent } = syntheticEvent;
             console.error('[Chat] WebView error:', nativeEvent);
-            hasLoadedRef.current = false;
+            loadStartedRef.current = false;
             setLoading(false);
             setError(true);
           }}
           onHttpError={(syntheticEvent) => {
-            if (!mountedRef.current) return;
             const { nativeEvent } = syntheticEvent;
             console.error('[Chat] WebView HTTP error:', nativeEvent.statusCode);
-            hasLoadedRef.current = false;
-            setLoading(false);
-            setError(true);
           }}
           onRenderProcessGone={(syntheticEvent) => {
-            if (!mountedRef.current) return;
             const { nativeEvent } = syntheticEvent;
             console.error('[Chat] WebView process gone:', nativeEvent);
-            hasLoadedRef.current = false;
+            loadStartedRef.current = false;
             setLoading(false);
             setError(true);
             setKey(prev => prev + 1);
-          }}
-          onMessage={(event) => {
-            try {
-              const data = JSON.parse(event.nativeEvent.data);
-              if (data.type === 'CONTENT_READY') {
-                console.log('[Chat] Content ready message received');
-              }
-            } catch {
-              console.log('[Chat] Received non-JSON message:', event.nativeEvent.data);
-            }
           }}
           />
         </Animated.View>
