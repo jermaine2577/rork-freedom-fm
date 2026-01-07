@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity, Linking, Modal, AppState, Animated } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
+import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity, Linking, Modal, AppState } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -7,6 +7,26 @@ import { useTerms } from '@/contexts/TermsContext';
 import TermsAgreementScreen from '@/components/TermsAgreementScreen';
 import { Mail, AlertCircle, X } from 'lucide-react-native';
 import colors from '@/constants/colors';
+
+const TopButtons = memo(({ top, onContactPress, onRefreshPress, showRefresh }: {
+  top: number;
+  onContactPress: () => void;
+  onRefreshPress: () => void;
+  showRefresh: boolean;
+}) => (
+  <View style={[styles.topButtons, { top }]}>
+    <TouchableOpacity style={styles.contactButton} onPress={onContactPress}>
+      <Mail size={20} color="#FFFFFF" />
+      <Text style={styles.contactButtonText}>Report</Text>
+    </TouchableOpacity>
+    {showRefresh && (
+      <TouchableOpacity style={styles.refreshButton} onPress={onRefreshPress}>
+        <Text style={styles.refreshButtonText}>↻</Text>
+      </TouchableOpacity>
+    )}
+  </View>
+));
+TopButtons.displayName = 'TopButtons';
 
 export default function ChatScreen() {
   const { hasAcceptedTerms, isLoading: termsLoading } = useTerms();
@@ -16,42 +36,30 @@ export default function ChatScreen() {
   const [retryCount, setRetryCount] = useState(0);
   const [showReportModal, setShowReportModal] = useState(false);
   const [key, setKey] = useState(0);
-  const [timestamp, setTimestamp] = useState(Date.now());
-  const webViewOpacity = useRef(new Animated.Value(0)).current;
-  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const webViewRef = useRef<any>(null);
   const mountedRef = useRef(true);
+  const hasLoadedRef = useRef(false);
 
   const handleRetry = useCallback(() => {
     console.log('[Chat] Retry button pressed');
-    if (loadingTimeoutRef.current) {
-      clearTimeout(loadingTimeoutRef.current);
-      loadingTimeoutRef.current = null;
-    }
     setError(false);
     setLoading(true);
-    webViewOpacity.setValue(0);
+    hasLoadedRef.current = false;
     setRetryCount(prev => prev + 1);
     setKey(prev => prev + 1);
-    setTimestamp(Date.now());
-  }, [webViewOpacity]);
+  }, []);
 
   const handleRefresh = useCallback(() => {
     console.log('[Chat] Refresh button pressed');
-    if (loadingTimeoutRef.current) {
-      clearTimeout(loadingTimeoutRef.current);
-      loadingTimeoutRef.current = null;
-    }
     setError(false);
     setLoading(true);
-    webViewOpacity.setValue(0);
-    setTimestamp(Date.now());
+    hasLoadedRef.current = false;
     if (webViewRef.current) {
       webViewRef.current.reload();
     } else {
       setKey(prev => prev + 1);
     }
-  }, [webViewOpacity]);
+  }, []);
 
   const handleContactPress = () => {
     setShowReportModal(true);
@@ -66,10 +74,6 @@ export default function ChatScreen() {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-        loadingTimeoutRef.current = null;
-      }
     };
   }, []);
 
@@ -86,27 +90,7 @@ export default function ChatScreen() {
     };
   }, [error, handleRetry]);
 
-  useEffect(() => {
-    if (loading && !error) {
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
-      loadingTimeoutRef.current = setTimeout(() => {
-        if (mountedRef.current && loading) {
-          console.log('[Chat] Loading timeout - forcing error state');
-          setLoading(false);
-          setError(true);
-        }
-      }, 10000);
-    }
 
-    return () => {
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-        loadingTimeoutRef.current = null;
-      }
-    };
-  }, [loading, error, retryCount]);
 
   if (termsLoading) {
     return (
@@ -174,17 +158,12 @@ export default function ChatScreen() {
   if (Platform.OS === 'web') {
     return (
       <View style={styles.container}>
-        <View style={[styles.topButtons, { top: insets.top + 50 }]}>
-          <TouchableOpacity style={styles.contactButton} onPress={handleContactPress}>
-            <Mail size={20} color="#FFFFFF" />
-            <Text style={styles.contactButtonText}>Report</Text>
-          </TouchableOpacity>
-          {!loading && !error && (
-            <TouchableOpacity style={styles.refreshButton} onPress={handleRefresh}>
-              <Text style={styles.refreshButtonText}>↻</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        <TopButtons 
+          top={insets.top + 50}
+          onContactPress={handleContactPress}
+          onRefreshPress={handleRefresh}
+          showRefresh={!loading && !error}
+        />
         {loading && !error && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#FF6B35" />
@@ -200,8 +179,8 @@ export default function ChatScreen() {
         )}
         {!error && (
           <iframe
-            key={`${retryCount}-${timestamp}`}
-            src={`https://freedomfm1065.com/mobile-chatroom/?t=${timestamp}&nocache=${Math.random()}`}
+            key={retryCount}
+            src={`https://freedomfm1065.com/mobile-chatroom/?t=${Date.now()}`}
             style={{
               width: '100%',
               height: '100%',
@@ -298,17 +277,12 @@ export default function ChatScreen() {
         </View>
       </Modal>
 
-      <View style={[styles.topButtons, { top: insets.top + 50 }]}>
-        <TouchableOpacity style={styles.contactButton} onPress={handleContactPress}>
-          <Mail size={20} color="#FFFFFF" />
-          <Text style={styles.contactButtonText}>Report</Text>
-        </TouchableOpacity>
-        {!loading && !error && (
-          <TouchableOpacity style={styles.refreshButton} onPress={handleRefresh}>
-            <Text style={styles.refreshButtonText}>↻</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      <TopButtons 
+        top={insets.top + 50}
+        onContactPress={handleContactPress}
+        onRefreshPress={handleRefresh}
+        showRefresh={!loading && !error}
+      />
       {loading && !error && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#FF6B35" />
@@ -323,37 +297,20 @@ export default function ChatScreen() {
         </View>
       )}
       {!error && (
-        <Animated.View style={{ flex: 1, opacity: webViewOpacity }}>
-          <WebView
-            ref={webViewRef}
-            key={`${retryCount}-${key}-${timestamp}`}
-            source={{ 
-              uri: `https://freedomfm1065.com/mobile-chatroom/?t=${timestamp}&nocache=${Math.random()}`,
-              headers: {
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0'
-              }
-            }}
-            style={styles.webview}
-          injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
-          injectedJavaScript={injectedJavaScript}
-          onMessage={(event) => {
-            if (event.nativeEvent.data === 'CONTENT_READY') {
-              console.log('[Chat] Content ready signal received');
-              if (loadingTimeoutRef.current) {
-                clearTimeout(loadingTimeoutRef.current);
-                loadingTimeoutRef.current = null;
-              }
-              setLoading(false);
-              setError(false);
-              Animated.timing(webViewOpacity, {
-                toValue: 1,
-                duration: 300,
-                useNativeDriver: true,
-              }).start();
+        <WebView
+          ref={webViewRef}
+          key={`${retryCount}-${key}`}
+          source={{ 
+            uri: `https://freedomfm1065.com/mobile-chatroom/?t=${Date.now()}`,
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0'
             }
           }}
+          style={styles.webview}
+          injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
+          injectedJavaScript={injectedJavaScript}
           javaScriptEnabled={true}
           domStorageEnabled={true}
           startInLoadingState={false}
@@ -362,24 +319,23 @@ export default function ChatScreen() {
           mixedContentMode="always"
           originWhitelist={['*']}
           onLoadStart={() => {
-            if (!mountedRef.current) return;
+            if (!mountedRef.current || hasLoadedRef.current) return;
             console.log('[Chat] WebView load started');
             setLoading(true);
-            webViewOpacity.setValue(0);
             setError(false);
           }}
           onLoadEnd={() => {
             if (!mountedRef.current) return;
             console.log('[Chat] WebView load ended');
+            hasLoadedRef.current = true;
+            setLoading(false);
+            setError(false);
           }}
           onError={(syntheticEvent) => {
             if (!mountedRef.current) return;
             const { nativeEvent } = syntheticEvent;
             console.error('[Chat] WebView error:', nativeEvent);
-            if (loadingTimeoutRef.current) {
-              clearTimeout(loadingTimeoutRef.current);
-              loadingTimeoutRef.current = null;
-            }
+            hasLoadedRef.current = false;
             setLoading(false);
             setError(true);
           }}
@@ -387,10 +343,7 @@ export default function ChatScreen() {
             if (!mountedRef.current) return;
             const { nativeEvent } = syntheticEvent;
             console.error('[Chat] WebView HTTP error:', nativeEvent.statusCode);
-            if (loadingTimeoutRef.current) {
-              clearTimeout(loadingTimeoutRef.current);
-              loadingTimeoutRef.current = null;
-            }
+            hasLoadedRef.current = false;
             setLoading(false);
             setError(true);
           }}
@@ -398,16 +351,12 @@ export default function ChatScreen() {
             if (!mountedRef.current) return;
             const { nativeEvent } = syntheticEvent;
             console.error('[Chat] WebView process gone:', nativeEvent);
-            if (loadingTimeoutRef.current) {
-              clearTimeout(loadingTimeoutRef.current);
-              loadingTimeoutRef.current = null;
-            }
+            hasLoadedRef.current = false;
             setLoading(false);
             setError(true);
             setKey(prev => prev + 1);
           }}
-          />
-        </Animated.View>
+        />
       )}
     </View>
   );
