@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
-import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity, Linking, Modal, AppState } from 'react-native';
+import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity, Linking, Modal, AppState, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -39,27 +39,30 @@ export default function ChatScreen() {
   const webViewRef = useRef<any>(null);
   const mountedRef = useRef(true);
   const hasLoadedRef = useRef(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const handleRetry = useCallback(() => {
     console.log('[Chat] Retry button pressed');
     setError(false);
     setLoading(true);
     hasLoadedRef.current = false;
+    fadeAnim.setValue(0);
     setRetryCount(prev => prev + 1);
     setKey(prev => prev + 1);
-  }, []);
+  }, [fadeAnim]);
 
   const handleRefresh = useCallback(() => {
     console.log('[Chat] Refresh button pressed');
     setError(false);
     setLoading(true);
     hasLoadedRef.current = false;
+    fadeAnim.setValue(0);
     if (webViewRef.current) {
       webViewRef.current.reload();
     } else {
       setKey(prev => prev + 1);
     }
-  }, []);
+  }, [fadeAnim]);
 
   const handleContactPress = () => {
     setShowReportModal(true);
@@ -297,18 +300,19 @@ export default function ChatScreen() {
         </View>
       )}
       {!error && (
-        <WebView
-          ref={webViewRef}
-          key={`${retryCount}-${key}`}
-          source={{ 
-            uri: `https://freedomfm1065.com/mobile-chatroom/?t=${Date.now()}`,
-            headers: {
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'Pragma': 'no-cache',
-              'Expires': '0'
-            }
-          }}
-          style={styles.webview}
+        <Animated.View style={[styles.webview, { opacity: fadeAnim }]}>
+          <WebView
+            ref={webViewRef}
+            key={`${retryCount}-${key}`}
+            source={{ 
+              uri: `https://freedomfm1065.com/mobile-chatroom/?t=${Date.now()}`,
+              headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+              }
+            }}
+            style={styles.webviewInner}
           injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
           injectedJavaScript={injectedJavaScript}
           javaScriptEnabled={true}
@@ -330,6 +334,11 @@ export default function ChatScreen() {
             hasLoadedRef.current = true;
             setLoading(false);
             setError(false);
+            Animated.timing(fadeAnim, {
+              toValue: 1,
+              duration: 400,
+              useNativeDriver: true,
+            }).start();
           }}
           onError={(syntheticEvent) => {
             if (!mountedRef.current) return;
@@ -366,7 +375,8 @@ export default function ChatScreen() {
               console.log('[Chat] Received non-JSON message:', event.nativeEvent.data);
             }
           }}
-        />
+          />
+        </Animated.View>
       )}
     </View>
   );
@@ -379,7 +389,10 @@ const styles = StyleSheet.create({
   },
   webview: {
     flex: 1,
-    opacity: 1,
+  },
+  webviewInner: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
   loadingContainer: {
     position: 'absolute',
