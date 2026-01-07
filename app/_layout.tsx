@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { ActivityIndicator, StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { RadioProvider } from "@/contexts/RadioContext";
@@ -11,7 +11,14 @@ import colors from "@/constants/colors";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import TermsAgreementScreen from "@/components/TermsAgreementScreen";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 10,
+    },
+  },
+});
 
 function RootLayoutNav() {
   return (
@@ -50,25 +57,6 @@ function AppContent() {
 }
 
 export default function RootLayout() {
-  const [isReady, setIsReady] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setIsReady(true), 100);
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (!isReady) {
-    return (
-      <LinearGradient
-        colors={[colors.gradientStart, colors.gradientMiddle, colors.gradientEnd]}
-        locations={[0, 0.5, 1]}
-        style={styles.loadingContainer}
-      >
-        <ActivityIndicator size="large" color={colors.text} />
-      </LinearGradient>
-    );
-  }
-
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
