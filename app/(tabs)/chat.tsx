@@ -275,12 +275,6 @@ export default function ChatScreen() {
 
       {loading && !error && <ClimbingLoader />}
       
-      <TopButtons 
-        top={insets.top + 50}
-        onContactPress={handleContactPress}
-        onRefreshPress={handleRefresh}
-        showRefresh={!loading && !error}
-      />
       {error && (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Failed to load chat</Text>
@@ -335,6 +329,13 @@ export default function ChatScreen() {
           />
         </View>
       )}
+      
+      <TopButtons 
+        top={insets.top + 50}
+        onContactPress={handleContactPress}
+        onRefreshPress={handleRefresh}
+        showRefresh={!loading && !error}
+      />
     </View>
   );
 }
