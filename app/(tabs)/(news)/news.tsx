@@ -102,13 +102,25 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
     
     const responseText = await response.text();
     
+    if (!responseText || responseText.trim().length === 0) {
+      console.error('Server returned empty response');
+      throw new Error('Server returned empty response');
+    }
+    
+    const firstChar = responseText.trim()[0];
+    if (firstChar !== '[' && firstChar !== '{') {
+      console.error('Response does not appear to be JSON');
+      console.error('- First 200 chars:', responseText.substring(0, 200));
+      throw new Error('Server returned invalid data format');
+    }
+    
     let posts: WordPressPost[];
     try {
       posts = JSON.parse(responseText);
     } catch (parseError: any) {
       console.error('JSON Parse Error Details:');
       console.error('- Error:', parseError?.message || String(parseError));
-      console.error('- Response preview:', responseText.substring(0, 500));
+      console.error('- Response preview:', responseText.substring(0, 200));
       throw new Error('Unable to parse news data from server');
     }
     console.log('Successfully fetched', posts.length, 'posts');
