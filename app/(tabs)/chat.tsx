@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
-import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity, Linking, Modal, AppState, Animated, Easing } from 'react-native';
+import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity, Linking, Modal, AppState } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,68 +9,11 @@ import { Mail, AlertCircle, X } from 'lucide-react-native';
 import colors from '@/constants/colors';
 
 const ClimbingLoader = memo(() => {
-  const climberAnim = useRef(new Animated.Value(0)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.sequence([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.loop(
-        Animated.timing(climberAnim, {
-          toValue: 1,
-          duration: 3000,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        })
-      ),
-    ]).start();
-  }, [climberAnim, fadeAnim]);
-
-  const climberTranslateY = climberAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [100, -200],
-  });
-
-  const climberRotate = climberAnim.interpolate({
-    inputRange: [0, 0.25, 0.5, 0.75, 1],
-    outputRange: ['0deg', '-5deg', '0deg', '5deg', '0deg'],
-  });
-
   return (
-    <Animated.View style={[styles.climbingContainer, { opacity: fadeAnim }]}>
-      <View style={styles.wallBackground}>
-        {[...Array(6)].map((_, i) => (
-          <View key={i} style={styles.brickRow}>
-            {[...Array(4)].map((_, j) => (
-              <View key={j} style={[styles.brick, j % 2 === i % 2 ? { marginLeft: 20 } : {}]} />
-            ))}
-          </View>
-        ))}
-      </View>
-      
-      <Animated.View
-        style={[
-          styles.climber,
-          {
-            transform: [
-              { translateY: climberTranslateY },
-              { rotate: climberRotate },
-            ],
-          },
-        ]}
-      >
-        <Text style={styles.climberEmoji}>🧗</Text>
-      </Animated.View>
-
-      <View style={styles.loadingTextContainer}>
-        <Text style={styles.climbingText}>Climbing up on di Freedom Wall...</Text>
-        <ActivityIndicator size="small" color="#FF6B35" style={{ marginTop: 12 }} />
-      </View>
-    </Animated.View>
+    <View style={styles.climbingContainer}>
+      <Text style={styles.climbingText}>Climbing up on di Freedom Wall...</Text>
+      <ActivityIndicator size="large" color="#FF6B35" style={{ marginTop: 16 }} />
+    </View>
   );
 });
 ClimbingLoader.displayName = 'ClimbingLoader';
@@ -104,29 +47,26 @@ export default function ChatScreen() {
   const [showReportModal, setShowReportModal] = useState(false);
   const webViewRef = useRef<any>(null);
   const loadStartedRef = useRef(false);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const handleRetry = useCallback(() => {
     console.log('[Chat] Retry button pressed');
     setError(false);
     setLoading(true);
     loadStartedRef.current = false;
-    fadeAnim.setValue(0);
     setKey(prev => prev + 1);
-  }, [fadeAnim]);
+  }, []);
 
   const handleRefresh = useCallback(() => {
     console.log('[Chat] Refresh button pressed');
     setError(false);
     setLoading(true);
     loadStartedRef.current = false;
-    fadeAnim.setValue(0);
     if (webViewRef.current) {
       webViewRef.current.reload();
     } else {
       setKey(prev => prev + 1);
     }
-  }, [fadeAnim]);
+  }, []);
 
   const handleContactPress = () => {
     setShowReportModal(true);
@@ -349,7 +289,7 @@ export default function ChatScreen() {
         </View>
       )}
       {!error && (
-        <Animated.View style={[styles.webview, { opacity: fadeAnim }]}>
+        <View style={styles.webview}>
           <WebView
             ref={webViewRef}
             key={key}
@@ -372,11 +312,6 @@ export default function ChatScreen() {
             console.log('[Chat] WebView load ended');
             setLoading(false);
             setError(false);
-            Animated.timing(fadeAnim, {
-              toValue: 1,
-              duration: 300,
-              useNativeDriver: true,
-            }).start();
           }}
           onError={(syntheticEvent) => {
             const { nativeEvent } = syntheticEvent;
@@ -398,7 +333,7 @@ export default function ChatScreen() {
             setKey(prev => prev + 1);
           }}
           />
-        </Animated.View>
+        </View>
       )}
     </View>
   );
@@ -638,52 +573,15 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 100,
-  },
-  wallBackground: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    opacity: 0.3,
-  },
-  brickRow: {
-    flexDirection: 'row',
-    marginBottom: 4,
-  },
-  brick: {
-    width: 60,
-    height: 30,
-    backgroundColor: '#8B4513',
-    marginHorizontal: 2,
-    borderRadius: 2,
-    borderWidth: 1,
-    borderColor: '#654321',
-  },
-  climber: {
-    position: 'absolute',
-    bottom: '30%',
-    zIndex: 2,
-  },
-  climberEmoji: {
-    fontSize: 80,
-  },
-  loadingTextContainer: {
-    position: 'absolute',
-    bottom: '15%',
-    alignItems: 'center',
   },
   climbingText: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
   },
 });
