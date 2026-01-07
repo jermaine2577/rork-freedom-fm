@@ -205,7 +205,7 @@ export default function ChatScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} pointerEvents="box-none">
       <Modal
         visible={showReportModal}
         transparent={true}
@@ -283,7 +283,7 @@ export default function ChatScreen() {
         </View>
       )}
       {!error && (
-        <View style={styles.webview}>
+        <View style={styles.webview} pointerEvents="auto">
           <WebView
             ref={webViewRef}
             key={key}
@@ -404,7 +404,8 @@ const styles = StyleSheet.create({
     right: 12,
     flexDirection: 'row',
     gap: 8,
-    zIndex: 1000,
+    zIndex: 9999,
+    elevation: 10,
   },
   contactButton: {
     backgroundColor: '#FF6B35',
@@ -418,7 +419,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
-    elevation: 5,
+    elevation: 12,
   },
   refreshButton: {
     backgroundColor: '#333',
@@ -431,7 +432,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
-    elevation: 5,
+    elevation: 12,
   },
   refreshButtonText: {
     color: '#FFFFFF',
