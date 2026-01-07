@@ -150,7 +150,7 @@ export default function ChatScreen() {
       style.textContent = \`${injectedCSS}\`;
       document.head.appendChild(style);
       
-      window.ReactNativeWebView.postMessage('CONTENT_READY');
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'CONTENT_READY' }));
     })();
     true;
   `;
@@ -355,6 +355,16 @@ export default function ChatScreen() {
             setLoading(false);
             setError(true);
             setKey(prev => prev + 1);
+          }}
+          onMessage={(event) => {
+            try {
+              const data = JSON.parse(event.nativeEvent.data);
+              if (data.type === 'CONTENT_READY') {
+                console.log('[Chat] Content ready message received');
+              }
+            } catch {
+              console.log('[Chat] Received non-JSON message:', event.nativeEvent.data);
+            }
           }}
         />
       )}
