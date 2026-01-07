@@ -5,9 +5,11 @@ import { ActivityIndicator, StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { RadioProvider } from "@/contexts/RadioContext";
 import { ChatProvider } from "@/contexts/ChatContext";
-import { TermsProvider } from "@/contexts/TermsContext";
+import { TermsProvider, useTerms } from "@/contexts/TermsContext";
 import { LinearGradient } from "expo-linear-gradient";
 import colors from "@/constants/colors";
+import ErrorBoundary from "@/components/ErrorBoundary";
+import TermsAgreementScreen from "@/components/TermsAgreementScreen";
 
 const queryClient = new QueryClient();
 
@@ -16,6 +18,34 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerBackTitle: "Back" }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
     </Stack>
+  );
+}
+
+function AppContent() {
+  const { hasAcceptedTerms, isLoading } = useTerms();
+
+  if (isLoading) {
+    return (
+      <LinearGradient
+        colors={[colors.gradientStart, colors.gradientMiddle, colors.gradientEnd]}
+        locations={[0, 0.5, 1]}
+        style={styles.loadingContainer}
+      >
+        <ActivityIndicator size="large" color={colors.text} />
+      </LinearGradient>
+    );
+  }
+
+  if (!hasAcceptedTerms) {
+    return <TermsAgreementScreen />;
+  }
+
+  return (
+    <RadioProvider>
+      <ChatProvider>
+        <RootLayoutNav />
+      </ChatProvider>
+    </RadioProvider>
   );
 }
 
@@ -40,17 +70,15 @@ export default function RootLayout() {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <TermsProvider>
-          <RadioProvider>
-            <ChatProvider>
-              <RootLayoutNav />
-            </ChatProvider>
-          </RadioProvider>
-        </TermsProvider>
-      </GestureHandlerRootView>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <TermsProvider>
+            <AppContent />
+          </TermsProvider>
+        </GestureHandlerRootView>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 
