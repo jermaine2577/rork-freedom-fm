@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
-import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity, Linking, Modal, AppState, Animated } from 'react-native';
+import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity, Linking, Modal, AppState, Animated, Easing } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -7,6 +7,73 @@ import { useTerms } from '@/contexts/TermsContext';
 import TermsAgreementScreen from '@/components/TermsAgreementScreen';
 import { Mail, AlertCircle, X } from 'lucide-react-native';
 import colors from '@/constants/colors';
+
+const ClimbingLoader = memo(() => {
+  const climberAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.loop(
+        Animated.timing(climberAnim, {
+          toValue: 1,
+          duration: 3000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        })
+      ),
+    ]).start();
+  }, [climberAnim, fadeAnim]);
+
+  const climberTranslateY = climberAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [100, -200],
+  });
+
+  const climberRotate = climberAnim.interpolate({
+    inputRange: [0, 0.25, 0.5, 0.75, 1],
+    outputRange: ['0deg', '-5deg', '0deg', '5deg', '0deg'],
+  });
+
+  return (
+    <Animated.View style={[styles.climbingContainer, { opacity: fadeAnim }]}>
+      <View style={styles.wallBackground}>
+        {[...Array(6)].map((_, i) => (
+          <View key={i} style={styles.brickRow}>
+            {[...Array(4)].map((_, j) => (
+              <View key={j} style={[styles.brick, j % 2 === i % 2 ? { marginLeft: 20 } : {}]} />
+            ))}
+          </View>
+        ))}
+      </View>
+      
+      <Animated.View
+        style={[
+          styles.climber,
+          {
+            transform: [
+              { translateY: climberTranslateY },
+              { rotate: climberRotate },
+            ],
+          },
+        ]}
+      >
+        <Text style={styles.climberEmoji}>🧗</Text>
+      </Animated.View>
+
+      <View style={styles.loadingTextContainer}>
+        <Text style={styles.climbingText}>Climbing up on di Freedom Wall...</Text>
+        <ActivityIndicator size="small" color="#FF6B35" style={{ marginTop: 12 }} />
+      </View>
+    </Animated.View>
+  );
+});
+ClimbingLoader.displayName = 'ClimbingLoader';
 
 const TopButtons = memo(({ top, onContactPress, onRefreshPress, showRefresh }: {
   top: number;
@@ -266,6 +333,8 @@ export default function ChatScreen() {
         </View>
       </Modal>
 
+      {loading && !error && <ClimbingLoader />}
+      
       <TopButtons 
         top={insets.top + 50}
         onContactPress={handleContactPress}
@@ -294,12 +363,6 @@ export default function ChatScreen() {
           cacheEnabled={true}
           mixedContentMode="always"
           originWhitelist={['*']}
-          renderLoading={() => (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#FF6B35" />
-              <Text style={styles.loadingText}>Loading the freedom wall...</Text>
-            </View>
-          )}
           onLoadStart={() => {
             if (loadStartedRef.current) return;
             loadStartedRef.current = true;
@@ -568,5 +631,59 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: colors.text,
+  },
+  climbingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#1a1a1a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  wallBackground: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    opacity: 0.3,
+  },
+  brickRow: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  brick: {
+    width: 60,
+    height: 30,
+    backgroundColor: '#8B4513',
+    marginHorizontal: 2,
+    borderRadius: 2,
+    borderWidth: 1,
+    borderColor: '#654321',
+  },
+  climber: {
+    position: 'absolute',
+    bottom: '30%',
+    zIndex: 2,
+  },
+  climberEmoji: {
+    fontSize: 80,
+  },
+  loadingTextContainer: {
+    position: 'absolute',
+    bottom: '15%',
+    alignItems: 'center',
+  },
+  climbingText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
 });
