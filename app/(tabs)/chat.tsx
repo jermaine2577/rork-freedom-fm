@@ -97,7 +97,7 @@ export default function ChatScreen() {
           setLoading(false);
           setError(true);
         }
-      }, 20000);
+      }, 10000);
     }
 
     return () => {
@@ -166,9 +166,7 @@ export default function ChatScreen() {
       style.textContent = \`${injectedCSS}\`;
       document.head.appendChild(style);
       
-      setTimeout(() => {
-        window.ReactNativeWebView.postMessage('CONTENT_READY');
-      }, 1000);
+      window.ReactNativeWebView.postMessage('CONTENT_READY');
     })();
     true;
   `;
@@ -347,7 +345,7 @@ export default function ChatScreen() {
                 loadingTimeoutRef.current = null;
               }
               setWebViewOpacity(1);
-              setTimeout(() => setLoading(false), 300);
+              setLoading(false);
               setError(false);
             }
           }}
