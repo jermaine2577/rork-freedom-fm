@@ -403,7 +403,7 @@ const styles = StyleSheet.create({
     right: 12,
     flexDirection: 'row',
     gap: 8,
-    zIndex: 10,
+    zIndex: 1000,
   },
   contactButton: {
     backgroundColor: '#FF6B35',
