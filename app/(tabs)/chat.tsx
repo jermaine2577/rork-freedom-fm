@@ -143,6 +143,21 @@ export default function ChatScreen() {
       padding: 0 !important;
       margin: 0 !important;
     }
+    button, a, input, textarea, select, [role="button"], .button {
+      pointer-events: auto !important;
+      -webkit-user-select: auto !important;
+      user-select: auto !important;
+      -webkit-touch-callout: default !important;
+      cursor: pointer !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+      display: inline-block !important;
+    }
+    * {
+      -webkit-tap-highlight-color: rgba(0,0,0,0.1);
+      -webkit-user-select: auto;
+      user-select: auto;
+    }
   `;
 
   const injectedJavaScriptBeforeContentLoaded = `
@@ -165,6 +180,27 @@ export default function ChatScreen() {
       const style = document.createElement('style');
       style.textContent = \`${injectedCSS}\`;
       document.head.appendChild(style);
+      
+      function ensureButtonsVisible() {
+        const buttons = document.querySelectorAll('button, a, input, [role="button"], .button, .delete-btn, .block-btn, .reply-btn');
+        buttons.forEach(function(btn) {
+          btn.style.pointerEvents = 'auto';
+          btn.style.opacity = '1';
+          btn.style.visibility = 'visible';
+          btn.style.display = btn.tagName === 'A' || btn.tagName === 'BUTTON' ? 'inline-block' : btn.style.display || 'block';
+          btn.style.webkitUserSelect = 'auto';
+          btn.style.userSelect = 'auto';
+        });
+      }
+      
+      ensureButtonsVisible();
+      
+      setTimeout(ensureButtonsVisible, 500);
+      setTimeout(ensureButtonsVisible, 1000);
+      setTimeout(ensureButtonsVisible, 2000);
+      
+      const observer = new MutationObserver(ensureButtonsVisible);
+      observer.observe(document.body, { childList: true, subtree: true });
       
       window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'CONTENT_READY' }));
     })();
@@ -311,6 +347,16 @@ export default function ChatScreen() {
           cacheEnabled={true}
           mixedContentMode="always"
           originWhitelist={['*']}
+          allowsInlineMediaPlayback={true}
+          mediaPlaybackRequiresUserAction={false}
+          allowsFullscreenVideo={false}
+          bounces={false}
+          scrollEnabled={true}
+          showsVerticalScrollIndicator={true}
+          showsHorizontalScrollIndicator={false}
+          javaScriptCanOpenWindowsAutomatically={true}
+          allowFileAccess={true}
+          allowUniversalAccessFromFileURLs={true}
           onLoadStart={() => {
             if (loadStartedRef.current) return;
             loadStartedRef.current = true;
