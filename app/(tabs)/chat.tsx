@@ -24,13 +24,27 @@ const TopButtons = memo(({ top, onContactPress, onRefreshPress, showRefresh }: {
   onRefreshPress: () => void;
   showRefresh: boolean;
 }) => (
-  <View style={[styles.topButtons, { top }]}>
-    <TouchableOpacity style={styles.contactButton} onPress={onContactPress}>
+  <View 
+    style={[styles.topButtons, { top }]} 
+    pointerEvents="box-none"
+    collapsable={false}
+  >
+    <TouchableOpacity 
+      style={styles.contactButton} 
+      onPress={onContactPress}
+      activeOpacity={0.7}
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+    >
       <Mail size={20} color="#FFFFFF" />
       <Text style={styles.contactButtonText}>Report</Text>
     </TouchableOpacity>
     {showRefresh && (
-      <TouchableOpacity style={styles.refreshButton} onPress={onRefreshPress}>
+      <TouchableOpacity 
+        style={styles.refreshButton} 
+        onPress={onRefreshPress}
+        activeOpacity={0.7}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
         <Text style={styles.refreshButtonText}>↻</Text>
       </TouchableOpacity>
     )}
@@ -205,7 +219,7 @@ export default function ChatScreen() {
   }
 
   return (
-    <View style={styles.container} pointerEvents="box-none">
+    <View style={styles.container}>
       <Modal
         visible={showReportModal}
         transparent={true}
@@ -283,7 +297,7 @@ export default function ChatScreen() {
         </View>
       )}
       {!error && (
-        <View style={styles.webview} pointerEvents="auto">
+        <View style={styles.webview}>
           <WebView
             ref={webViewRef}
             key={key}
@@ -405,7 +419,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     zIndex: 9999,
-    elevation: 10,
+    elevation: 999,
   },
   contactButton: {
     backgroundColor: '#FF6B35',
@@ -419,7 +433,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
-    elevation: 12,
+    elevation: 1000,
   },
   refreshButton: {
     backgroundColor: '#333',
@@ -432,7 +446,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
-    elevation: 12,
+    elevation: 1000,
   },
   refreshButtonText: {
     color: '#FFFFFF',
