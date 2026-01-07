@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity, Linking, Modal, AppState } from 'react-native';
+import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity, Linking, Modal, AppState, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,7 +17,7 @@ export default function ChatScreen() {
   const [showReportModal, setShowReportModal] = useState(false);
   const [key, setKey] = useState(0);
   const [timestamp, setTimestamp] = useState(Date.now());
-  const [webViewOpacity, setWebViewOpacity] = useState(0);
+  const webViewOpacity = useRef(new Animated.Value(0)).current;
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const webViewRef = useRef<any>(null);
   const mountedRef = useRef(true);
@@ -30,11 +30,11 @@ export default function ChatScreen() {
     }
     setError(false);
     setLoading(true);
-    setWebViewOpacity(0);
+    webViewOpacity.setValue(0);
     setRetryCount(prev => prev + 1);
     setKey(prev => prev + 1);
     setTimestamp(Date.now());
-  }, []);
+  }, [webViewOpacity]);
 
   const handleRefresh = useCallback(() => {
     console.log('[Chat] Refresh button pressed');
@@ -44,14 +44,14 @@ export default function ChatScreen() {
     }
     setError(false);
     setLoading(true);
-    setWebViewOpacity(0);
+    webViewOpacity.setValue(0);
     setTimestamp(Date.now());
     if (webViewRef.current) {
       webViewRef.current.reload();
     } else {
       setKey(prev => prev + 1);
     }
-  }, []);
+  }, [webViewOpacity]);
 
   const handleContactPress = () => {
     setShowReportModal(true);
@@ -323,18 +323,19 @@ export default function ChatScreen() {
         </View>
       )}
       {!error && (
-        <WebView
-          ref={webViewRef}
-          key={`${retryCount}-${key}-${timestamp}`}
-          source={{ 
-            uri: `https://freedomfm1065.com/mobile-chatroom/?t=${timestamp}&nocache=${Math.random()}`,
-            headers: {
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'Pragma': 'no-cache',
-              'Expires': '0'
-            }
-          }}
-          style={[styles.webview, { opacity: webViewOpacity }]}
+        <Animated.View style={{ flex: 1, opacity: webViewOpacity }}>
+          <WebView
+            ref={webViewRef}
+            key={`${retryCount}-${key}-${timestamp}`}
+            source={{ 
+              uri: `https://freedomfm1065.com/mobile-chatroom/?t=${timestamp}&nocache=${Math.random()}`,
+              headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+              }
+            }}
+            style={styles.webview}
           injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
           injectedJavaScript={injectedJavaScript}
           onMessage={(event) => {
@@ -344,9 +345,13 @@ export default function ChatScreen() {
                 clearTimeout(loadingTimeoutRef.current);
                 loadingTimeoutRef.current = null;
               }
-              setWebViewOpacity(1);
               setLoading(false);
               setError(false);
+              Animated.timing(webViewOpacity, {
+                toValue: 1,
+                duration: 300,
+                useNativeDriver: true,
+              }).start();
             }
           }}
           javaScriptEnabled={true}
@@ -360,7 +365,7 @@ export default function ChatScreen() {
             if (!mountedRef.current) return;
             console.log('[Chat] WebView load started');
             setLoading(true);
-            setWebViewOpacity(0);
+            webViewOpacity.setValue(0);
             setError(false);
           }}
           onLoadEnd={() => {
@@ -401,7 +406,8 @@ export default function ChatScreen() {
             setError(true);
             setKey(prev => prev + 1);
           }}
-        />
+          />
+        </Animated.View>
       )}
     </View>
   );
