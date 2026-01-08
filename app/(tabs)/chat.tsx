@@ -243,6 +243,7 @@ export default function ChatScreen() {
 
   return (
     <View style={styles.container}>
+      <View style={[styles.statusBarBg, { height: insets.top }]} />
       <View style={[styles.backgroundFill, { paddingBottom: insets.bottom }]} />
       <Modal
         visible={showReportModal}
@@ -321,7 +322,7 @@ export default function ChatScreen() {
         </View>
       )}
       {!error && (
-        <View style={[styles.webview, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        <View style={[styles.webview, { marginTop: insets.top, paddingBottom: insets.bottom }]}>
           <WebView
             ref={webViewRef}
             key={key}
@@ -392,6 +393,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  statusBarBg: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#000',
+    zIndex: 0,
   },
   backgroundFill: {
     position: 'absolute',
