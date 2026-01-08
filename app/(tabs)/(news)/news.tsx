@@ -10,6 +10,7 @@ import {
   Animated,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Calendar, Tag, AlertCircle } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
@@ -218,6 +219,7 @@ const SkeletonCard = () => {
 
 export default function NewsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { data: articles, isLoading, error, refetch } = useQuery({
     queryKey: ['wordpressNews'],
     queryFn: fetchWordPressPosts,
@@ -281,7 +283,10 @@ export default function NewsScreen() {
           data={[1, 2, 3, 4, 5]}
           renderItem={() => <SkeletonCard />}
           keyExtractor={(item) => `skeleton-${item}`}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: insets.bottom + 16 }
+          ]}
           showsVerticalScrollIndicator={false}
         />
       </View>
@@ -311,7 +316,10 @@ export default function NewsScreen() {
         data={articles || []}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: insets.bottom + 16 }
+        ]}
         showsVerticalScrollIndicator={false}
         removeClippedSubviews={true}
         maxToRenderPerBatch={10}
@@ -337,7 +345,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   listContent: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     gap: 16,
   },
   card: {

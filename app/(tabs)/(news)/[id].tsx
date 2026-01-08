@@ -12,6 +12,7 @@ import {
   Alert,
   Animated,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { Calendar, Tag, AlertCircle, Share2 } from 'lucide-react-native';
@@ -224,6 +225,7 @@ const cleanHtmlContent = (html: string): string => {
 
 export default function ArticleDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const insets = useSafeAreaInsets();
 
   const { data: article, isLoading, error, refetch } = useQuery({
     queryKey: ['article', id],
@@ -322,7 +324,11 @@ export default function ArticleDetailScreen() {
           ),
         }}
       />
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+      >
       <Image source={{ uri: article.imageUrl }} style={styles.heroImage} />
       
       <View style={styles.content}>
@@ -370,7 +376,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
   },
   content: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
     backgroundColor: '#1a1a1a',
   },
   categoryBadge: {
@@ -415,7 +422,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 26,
     color: colors.text,
-    marginBottom: 40,
+    marginBottom: 20,
   },
   centerContainer: {
     flex: 1,

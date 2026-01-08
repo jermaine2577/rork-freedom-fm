@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Modal } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Music, Cake, Heart, Calendar, ChevronRight, Mail, HelpCircle } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
@@ -46,6 +47,7 @@ const REQUEST_OPTIONS: RequestOption[] = [
 
 export default function RequestIndexScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [showContactModal, setShowContactModal] = React.useState(false);
 
   const handleContactPress = () => {
@@ -65,7 +67,10 @@ export default function RequestIndexScreen() {
     >
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 40 }
+        ]}
       >
         <View style={styles.header}>
           <Text style={styles.title}>Make a Request</Text>
@@ -189,8 +194,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingTop: 40,
-    paddingBottom: 40,
     paddingHorizontal: 20,
   },
   header: {
