@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -220,16 +220,26 @@ const SkeletonCard = () => {
 export default function NewsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
+  
   const { data: articles, isLoading, error, refetch } = useQuery({
     queryKey: ['wordpressNews'],
     queryFn: fetchWordPressPosts,
     retry: 2,
     retryDelay: 1000,
-    staleTime: 30 * 1000,
-    gcTime: 5 * 60 * 1000,
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: true,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    enabled: hasInitiallyLoaded,
   });
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setHasInitiallyLoaded(true);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [refreshing, setRefreshing] = useState(false);
 

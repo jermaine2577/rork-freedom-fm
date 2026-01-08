@@ -53,7 +53,7 @@ const TopButtons = memo(({ top, onContactPress, onRefreshPress, showRefresh }: {
 TopButtons.displayName = 'TopButtons';
 
 export default function ChatScreen() {
-  const { hasAcceptedTerms, isLoading: termsLoading } = useTerms();
+  const { hasAcceptedTerms } = useTerms();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -105,19 +105,6 @@ export default function ChatScreen() {
       subscription.remove();
     };
   }, [error, handleRetry]);
-
-
-
-  if (termsLoading) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF6B35" />
-          <Text style={styles.loadingText}>Loading...</Text>
-        </View>
-      </View>
-    );
-  }
 
   if (!hasAcceptedTerms) {
     return <TermsAgreementScreen />;
