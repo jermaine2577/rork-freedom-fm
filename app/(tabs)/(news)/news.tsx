@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Animated,
+  Platform,
 } from 'react-native';
 
 import { Calendar, Tag, AlertCircle } from 'lucide-react-native';
@@ -54,8 +55,11 @@ const decodeHtmlEntities = (text: string): string => {
 };
 
 const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
+  console.log('[NEWS FETCH] Platform:', Platform.OS);
+  console.log('[NEWS FETCH] USE_MOCK_DATA:', USE_MOCK_DATA);
+  
   if (USE_MOCK_DATA) {
-    console.log('Using mock data');
+    console.log('[NEWS FETCH] Using mock data (forced)');
     await new Promise(resolve => setTimeout(resolve, 500));
     const { newsArticles } = await import('@/mocks/news');
     return newsArticles;
@@ -64,13 +68,15 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   
   try {
-    console.log('Fetching WordPress posts from:', WORDPRESS_URL);
+    console.log('[NEWS FETCH] Starting fetch from:', WORDPRESS_URL);
+    console.log('[NEWS FETCH] Timeout set to:', Platform.OS === 'android' ? '30 seconds' : '15 seconds');
     
     const controller = new AbortController();
+    const timeoutDuration = Platform.OS === 'android' ? 30000 : 15000;
     timeoutId = setTimeout(() => {
-      console.log('Request timed out after 15 seconds');
+      console.log('[NEWS FETCH] Request timed out after', timeoutDuration / 1000, 'seconds');
       controller.abort();
-    }, 15000);
+    }, timeoutDuration);
     
     const response = await fetch(WORDPRESS_URL, {
       method: 'GET',
@@ -86,31 +92,31 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
       timeoutId = undefined;
     }
     
-    console.log('Response status:', response.status);
-    console.log('Response content-type:', response.headers.get('content-type'));
+    console.log('[NEWS FETCH] Response status:', response.status);
+    console.log('[NEWS FETCH] Response content-type:', response.headers.get('content-type'));
     
     if (!response.ok) {
-      console.error('Failed to fetch posts:', response.status, response.statusText);
+      console.error('[NEWS FETCH] Failed to fetch posts:', response.status, response.statusText);
       throw new Error(`Server error: ${response.status}`);
     }
     
     const contentType = response.headers.get('content-type');
     if (contentType && !contentType.includes('application/json')) {
-      console.error('Server returned non-JSON response:', contentType);
+      console.error('[NEWS FETCH] Server returned non-JSON response:', contentType);
       throw new Error('Server returned invalid content type');
     }
     
     const responseText = await response.text();
     
     if (!responseText || responseText.trim().length === 0) {
-      console.error('Server returned empty response');
+      console.error('[NEWS FETCH] Server returned empty response');
       throw new Error('Server returned empty response');
     }
     
     const firstChar = responseText.trim()[0];
     if (firstChar !== '[' && firstChar !== '{') {
-      console.error('Response does not appear to be JSON');
-      console.error('- First 200 chars:', responseText.substring(0, 200));
+      console.error('[NEWS FETCH] Response does not appear to be JSON');
+      console.error('[NEWS FETCH] First 200 chars:', responseText.substring(0, 200));
       throw new Error('Server returned invalid data format');
     }
     
@@ -118,12 +124,13 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
     try {
       posts = JSON.parse(responseText);
     } catch (parseError: any) {
-      console.error('JSON Parse Error Details:');
-      console.error('- Error:', parseError?.message || String(parseError));
-      console.error('- Response preview:', responseText.substring(0, 200));
+      console.error('[NEWS FETCH] JSON Parse Error Details:');
+      console.error('[NEWS FETCH] Error:', parseError?.message || String(parseError));
+      console.error('[NEWS FETCH] Response preview:', responseText.substring(0, 200));
       throw new Error('Unable to parse news data from server');
     }
-    console.log('Successfully fetched', posts.length, 'posts');
+    console.log('[NEWS FETCH] Successfully fetched', posts.length, 'posts');
+    console.log('[NEWS FETCH] First article title:', posts[0]?.title?.rendered || 'N/A');
     
     if (!Array.isArray(posts)) {
       throw new Error('Invalid data structure');
@@ -149,15 +156,16 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
     }
     
     if (error.name === 'AbortError') {
-      console.log('Request was aborted (timeout or cancelled)');
+      console.log('[NEWS FETCH] Request was aborted (timeout or cancelled)');
     } else {
-      console.error('Error fetching WordPress posts:', error);
-      console.error('Error name:', error.name);
-      console.error('Error message:', error.message);
+      console.error('[NEWS FETCH] Error fetching WordPress posts:', error);
+      console.error('[NEWS FETCH] Error name:', error.name);
+      console.error('[NEWS FETCH] Error message:', error.message);
     }
     
     if (FALLBACK_TO_MOCK_ON_ERROR) {
-      console.log('Falling back to mock data');
+      console.log('[NEWS FETCH] ⚠️ FALLING BACK TO MOCK DATA ⚠️');
+      console.log('[NEWS FETCH] This means real articles failed to load on', Platform.OS);
       await new Promise(resolve => setTimeout(resolve, 300));
       const { newsArticles } = await import('@/mocks/news');
       return newsArticles;
