@@ -321,7 +321,7 @@ export default function ChatScreen() {
         </View>
       )}
       {!error && (
-        <View style={[styles.webview, { paddingBottom: insets.bottom }]}>
+        <View style={[styles.webview, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
           <WebView
             ref={webViewRef}
             key={key}
