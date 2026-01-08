@@ -142,13 +142,19 @@ const fetchArticle = async (id: string): Promise<NewsArticle> => {
       
       let cleanedText = rawText.trim();
       
-      if (Platform.OS === 'android') {
-        cleanedText = cleanedText
-          .replace(/^\uFEFF/, '')
-          .replace(/\r\n/g, '\n')
-          .replace(/[\u0000-\u0019]+/g, '');
-        
-        console.log('Android: Cleaned article text first 200 chars:', cleanedText.substring(0, 200));
+      // Clean up common issues on all platforms
+      cleanedText = cleanedText
+        .replace(/^\uFEFF/, '') // Remove BOM
+        .replace(/\r\n/g, '\n') // Normalize line endings
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]+/g, ''); // Remove control chars except tab/newline
+      
+      console.log('Cleaned article text first 200 chars:', cleanedText.substring(0, 200));
+      console.log('First char code:', cleanedText.charCodeAt(0));
+      
+      // Validate that response looks like JSON
+      if (!cleanedText.startsWith('[') && !cleanedText.startsWith('{')) {
+        console.error('Response does not start with [ or {, starts with:', cleanedText.substring(0, 50));
+        throw new Error('Invalid JSON response - does not start with array or object');
       }
       
       post = JSON.parse(cleanedText);
