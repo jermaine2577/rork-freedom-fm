@@ -238,6 +238,8 @@ export default function ArticleDetailScreen() {
   const handleShare = async () => {
     if (!article) return;
     
+    console.log('Share button pressed - Platform:', Platform.OS);
+    
     try {
       if (Platform.OS === 'web') {
         await Clipboard.setStringAsync(article.link || '');
@@ -254,10 +256,17 @@ export default function ArticleDetailScreen() {
               title: article.title,
             };
         
+        console.log('Opening native share dialog...');
         const result = await Share.share(shareContent);
         
+        console.log('Share result:', result);
         if (result.action === Share.sharedAction) {
           console.log('Article shared successfully');
+          if (result.activityType) {
+            console.log('Shared via:', result.activityType);
+          }
+        } else if (result.action === Share.dismissedAction) {
+          console.log('Share dialog dismissed');
         }
       }
     } catch (error) {
