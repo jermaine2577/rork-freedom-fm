@@ -1,7 +1,22 @@
-import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
 import { Platform } from 'react-native';
+
+let Audio: any = null;
+let InterruptionModeAndroid: any = null;
+let InterruptionModeIOS: any = null;
+
+if (Platform.OS !== 'web') {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const ExpoAV = require('expo-av');
+    Audio = ExpoAV.Audio;
+    InterruptionModeAndroid = ExpoAV.InterruptionModeAndroid;
+    InterruptionModeIOS = ExpoAV.InterruptionModeIOS;
+  } catch (error) {
+    console.warn('expo-av not available:', error);
+  }
+}
 
 const STREAM_URLS = {
   version1: 'https://media.slactech.com:8012/stream',
@@ -16,27 +31,33 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   const [volume, setVolume] = useState(1.0);
   const [error, setError] = useState<string | null>(null);
   const [currentStream, setCurrentStream] = useState<StreamVersion>('version1');
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const soundRef = useRef<any>(null);
   const audioSetupRef = useRef(false);
   const isPlayingRef = useRef(false);
   const isSwitchingRef = useRef(false);
 
   const setupAudio = useCallback(async () => {
     if (audioSetupRef.current) return;
+    if (Platform.OS === 'web') {
+      console.log('Audio not supported on web');
+      return;
+    }
+    if (!Audio) {
+      console.warn('Audio module not available');
+      return;
+    }
     
     try {
       audioSetupRef.current = true;
-      if (Platform.OS !== 'web') {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: true,
-          shouldDuckAndroid: true,
-          playThroughEarpieceAndroid: false,
-          interruptionModeIOS: InterruptionModeIOS.DoNotMix,
-          interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-        });
-      }
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+      });
     } catch (error) {
       console.error('Error setting up audio:', error);
       audioSetupRef.current = false;
@@ -62,7 +83,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   useEffect(() => {
     return () => {
       if (soundRef.current) {
-        soundRef.current.unloadAsync().catch((err) => console.error('Error unloading sound:', err));
+        soundRef.current.unloadAsync().catch((err: any) => console.error('Error unloading sound:', err));
       }
     };
   }, []);
@@ -106,6 +127,15 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   }, []);
 
   const play = useCallback(async (streamVersion?: StreamVersion) => {
+    if (Platform.OS === 'web') {
+      setError('Audio playback is not supported on web. Please use the mobile app.');
+      return;
+    }
+    if (!Audio) {
+      setError('Audio module not available');
+      return;
+    }
+    
     try {
       await setupAudio();
       
@@ -151,7 +181,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       setCurrentStream(streamToUse);
       console.log('New sound created and should be playing');
       
-      if (Platform.OS !== 'web') {
+      if (Platform.OS === 'android') {
         try {
           await newSound.setStatusAsync({
             androidImplementation: 'MediaPlayer',
@@ -162,7 +192,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         }
       }
       
-      if (Platform.OS !== 'web') {
+      if (Audio) {
         try {
           await Audio.setIsEnabledAsync(true);
         } catch (e) {
