@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -226,26 +226,15 @@ const SkeletonCard = () => {
 export default function NewsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
   
-  const { data: articles, isLoading, error, refetch } = useQuery({
+  const { data: articles, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['wordpressNews'],
     queryFn: fetchWordPressPosts,
-    retry: 2,
-    retryDelay: 1000,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
-    enabled: hasInitiallyLoaded,
+    retry: 1,
+    retryDelay: 500,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
   });
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setHasInitiallyLoaded(true);
-    }, 100);
-    return () => clearTimeout(timer);
-  }, []);
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -292,7 +281,7 @@ export default function NewsScreen() {
     </TouchableOpacity>
   ), [router]);
 
-  if (isLoading && !articles) {
+  if ((isLoading || isFetching) && !articles) {
     return (
       <View style={styles.container}>
         <FlatList
