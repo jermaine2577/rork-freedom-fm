@@ -81,8 +81,8 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
     const response = await fetch(WORDPRESS_URL, {
       method: 'GET',
       headers: {
-        'Accept': 'application/json; charset=utf-8',
-        'Content-Type': 'application/json; charset=utf-8',
+        'Accept': 'application/json',
+        'User-Agent': Platform.OS === 'android' ? 'FreedomFM-Android/1.0' : 'FreedomFM-iOS/1.0',
       },
       signal: controller.signal,
     });
@@ -108,23 +108,29 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
     
     let posts: WordPressPost[];
     try {
-      posts = await response.json();
+      const rawText = await response.text();
+      console.log('[NEWS FETCH] Response length:', rawText.length);
+      console.log('[NEWS FETCH] First 200 chars:', rawText.substring(0, 200));
+      
+      let cleanedText = rawText.trim();
+      
+      if (Platform.OS === 'android') {
+        cleanedText = cleanedText
+          .replace(/^\uFEFF/, '')
+          .replace(/\r\n/g, '\n')
+          .replace(/[\u0000-\u0019]+/g, '');
+        
+        console.log('[NEWS FETCH] Android: Cleaned text first 200 chars:', cleanedText.substring(0, 200));
+      }
+      
+      posts = JSON.parse(cleanedText);
       console.log('[NEWS FETCH] JSON parsed successfully, got', Array.isArray(posts) ? posts.length : 0, 'items');
     } catch (parseError: any) {
       console.error('[NEWS FETCH] ==================== JSON PARSE ERROR ====================');
       console.error('[NEWS FETCH] Platform:', Platform.OS);
       console.error('[NEWS FETCH] Error message:', parseError?.message || String(parseError));
       console.error('[NEWS FETCH] Error name:', parseError?.name || 'unknown');
-      
-      try {
-        const rawText = await response.clone().text();
-        console.error('[NEWS FETCH] Response length:', rawText.length);
-        console.error('[NEWS FETCH] First 100 chars:', JSON.stringify(rawText.substring(0, 100)));
-        console.error('[NEWS FETCH] Last 100 chars:', JSON.stringify(rawText.substring(rawText.length - 100)));
-      } catch (e) {
-        console.error('[NEWS FETCH] Could not read response text:', e);
-      }
-      
+      console.error('[NEWS FETCH] Error stack:', parseError?.stack);
       console.error('[NEWS FETCH] ============================================================');
       throw new Error('Unable to parse news from server - invalid JSON format');
     }

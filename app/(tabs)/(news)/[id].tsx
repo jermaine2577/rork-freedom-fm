@@ -110,8 +110,8 @@ const fetchArticle = async (id: string): Promise<NewsArticle> => {
       {
         method: 'GET',
         headers: {
-          'Accept': 'application/json; charset=utf-8',
-          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json',
+          'User-Agent': Platform.OS === 'android' ? 'FreedomFM-Android/1.0' : 'FreedomFM-iOS/1.0',
         },
         signal: controller.signal,
       }
@@ -135,7 +135,22 @@ const fetchArticle = async (id: string): Promise<NewsArticle> => {
     
     let post: WordPressPost;
     try {
-      post = await response.json();
+      const rawText = await response.text();
+      console.log('Article response length:', rawText.length);
+      console.log('Article first 200 chars:', rawText.substring(0, 200));
+      
+      let cleanedText = rawText.trim();
+      
+      if (Platform.OS === 'android') {
+        cleanedText = cleanedText
+          .replace(/^\uFEFF/, '')
+          .replace(/\r\n/g, '\n')
+          .replace(/[\u0000-\u0019]+/g, '');
+        
+        console.log('Android: Cleaned article text first 200 chars:', cleanedText.substring(0, 200));
+      }
+      
+      post = JSON.parse(cleanedText);
       console.log('Successfully fetched and parsed article:', post.id);
     } catch (parseError: any) {
       console.error('==================== JSON PARSE ERROR (Article) ====================');
@@ -143,6 +158,7 @@ const fetchArticle = async (id: string): Promise<NewsArticle> => {
       console.error('Article ID:', id);
       console.error('Error:', parseError?.message || String(parseError));
       console.error('Error name:', parseError?.name || 'unknown');
+      console.error('Error stack:', parseError?.stack);
       console.error('====================================================================');
       throw new Error('Unable to parse article from server - invalid JSON format');
     }
