@@ -18,6 +18,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   const [currentStream, setCurrentStream] = useState<StreamVersion>('version1');
   const soundRef = useRef<Audio.Sound | null>(null);
   const audioSetupRef = useRef(false);
+  const isPlayingRef = useRef(false);
+  const isSwitchingRef = useRef(false);
 
   const setupAudio = useCallback(async () => {
     if (audioSetupRef.current) return;
@@ -79,6 +81,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     if (status.isLoaded) {
       if (status.isPlaying) {
         console.log('Audio is actively playing');
+        isPlayingRef.current = true;
         setIsPlaying(true);
         setIsLoading(false);
         setError(null);
@@ -87,12 +90,16 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         setIsLoading(true);
       } else {
         console.log('Audio loaded but not playing');
-        setIsPlaying(false);
+        if (!isSwitchingRef.current) {
+          isPlayingRef.current = false;
+          setIsPlaying(false);
+        }
         setIsLoading(false);
       }
     } else if (status.error) {
       console.error('Playback error:', status.error);
       setError('Playback error: ' + status.error);
+      isPlayingRef.current = false;
       setIsPlaying(false);
       setIsLoading(false);
     }
@@ -197,6 +204,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     try {
       if (soundRef.current) {
         await soundRef.current.pauseAsync();
+        isPlayingRef.current = false;
         setIsPlaying(false);
         setError(null);
       }
@@ -212,12 +220,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         await soundRef.current.stopAsync();
         await soundRef.current.unloadAsync();
         soundRef.current = null;
+        isPlayingRef.current = false;
         setIsPlaying(false);
         setError(null);
       }
     } catch (error) {
       console.error('Error stopping stream:', error);
       soundRef.current = null;
+      isPlayingRef.current = false;
       setIsPlaying(false);
     }
   }, []);
@@ -239,25 +249,47 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   }, []);
 
   const switchStream = useCallback(async (streamVersion: StreamVersion) => {
-    console.log('Switching to stream:', streamVersion);
-    const wasPlaying = isPlaying;
+    if (isSwitchingRef.current) {
+      console.log('Already switching, ignoring request');
+      return;
+    }
     
-    if (soundRef.current) {
-      try {
-        await soundRef.current.unloadAsync();
-      } catch (e) {
-        console.warn('Error unloading sound:', e);
+    try {
+      isSwitchingRef.current = true;
+      console.log('Switching to stream:', streamVersion);
+      const wasPlaying = isPlayingRef.current;
+      
+      setIsLoading(true);
+      setError(null);
+      
+      if (soundRef.current) {
+        try {
+          await soundRef.current.stopAsync();
+          await soundRef.current.unloadAsync();
+        } catch (e) {
+          console.warn('Error unloading sound:', e);
+        }
+        soundRef.current = null;
       }
-      soundRef.current = null;
+      
+      isPlayingRef.current = false;
+      setIsPlaying(false);
+      setCurrentStream(streamVersion);
+      
+      if (wasPlaying) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await play(streamVersion);
+      } else {
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('Error switching stream:', error);
+      setError('Failed to switch stream');
+      setIsLoading(false);
+    } finally {
+      isSwitchingRef.current = false;
     }
-    
-    setIsPlaying(false);
-    setCurrentStream(streamVersion);
-    
-    if (wasPlaying) {
-      await play(streamVersion);
-    }
-  }, [isPlaying, play]);
+  }, [play]);
 
   return useMemo(
     () => ({
