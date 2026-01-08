@@ -37,7 +37,7 @@ interface WordPressPost {
 
 const WORDPRESS_URL = 'https://freedomfm1065.com/wp-json/wp/v2/posts?_embed&per_page=20';
 const USE_MOCK_DATA = false;
-const FALLBACK_TO_MOCK_ON_ERROR = false;
+const FALLBACK_TO_MOCK_ON_ERROR = true;
 
 const decodeHtmlEntities = (text: string): string => {
   return text
@@ -215,10 +215,12 @@ export default function NewsScreen() {
   const { data: articles, isLoading, error, refetch } = useQuery({
     queryKey: ['wordpressNews'],
     queryFn: fetchWordPressPosts,
-    retry: 1,
-    retryDelay: 800,
-    staleTime: 3 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    retry: 2,
+    retryDelay: 1000,
+    staleTime: 30 * 1000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 
   const [refreshing, setRefreshing] = useState(false);
