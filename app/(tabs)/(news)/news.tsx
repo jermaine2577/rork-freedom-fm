@@ -81,10 +81,10 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
     const response = await fetch(WORDPRESS_URL, {
       method: 'GET',
       headers: {
-        'Accept': 'application/json',
+        'Accept': 'application/json; charset=utf-8',
+        'Content-Type': 'application/json; charset=utf-8',
       },
       signal: controller.signal,
-      cache: 'no-cache',
     });
     
     if (timeoutId) {
@@ -106,28 +106,27 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
       throw new Error('Server returned invalid content type');
     }
     
-    const responseText = await response.text();
-    
-    if (!responseText || responseText.trim().length === 0) {
-      console.error('[NEWS FETCH] Server returned empty response');
-      throw new Error('Server returned empty response');
-    }
-    
-    const firstChar = responseText.trim()[0];
-    if (firstChar !== '[' && firstChar !== '{') {
-      console.error('[NEWS FETCH] Response does not appear to be JSON');
-      console.error('[NEWS FETCH] First 200 chars:', responseText.substring(0, 200));
-      throw new Error('Server returned invalid data format');
-    }
-    
     let posts: WordPressPost[];
     try {
-      posts = JSON.parse(responseText);
+      posts = await response.json();
+      console.log('[NEWS FETCH] JSON parsed successfully, got', Array.isArray(posts) ? posts.length : 0, 'items');
     } catch (parseError: any) {
-      console.error('[NEWS FETCH] JSON Parse Error Details:');
-      console.error('[NEWS FETCH] Error:', parseError?.message || String(parseError));
-      console.error('[NEWS FETCH] Response preview:', responseText.substring(0, 200));
-      throw new Error('Unable to parse news data from server');
+      console.error('[NEWS FETCH] ==================== JSON PARSE ERROR ====================');
+      console.error('[NEWS FETCH] Platform:', Platform.OS);
+      console.error('[NEWS FETCH] Error message:', parseError?.message || String(parseError));
+      console.error('[NEWS FETCH] Error name:', parseError?.name || 'unknown');
+      
+      try {
+        const rawText = await response.clone().text();
+        console.error('[NEWS FETCH] Response length:', rawText.length);
+        console.error('[NEWS FETCH] First 100 chars:', JSON.stringify(rawText.substring(0, 100)));
+        console.error('[NEWS FETCH] Last 100 chars:', JSON.stringify(rawText.substring(rawText.length - 100)));
+      } catch (e) {
+        console.error('[NEWS FETCH] Could not read response text:', e);
+      }
+      
+      console.error('[NEWS FETCH] ============================================================');
+      throw new Error('Unable to parse news from server - invalid JSON format');
     }
     console.log('[NEWS FETCH] Successfully fetched', posts.length, 'posts');
     console.log('[NEWS FETCH] First article title:', posts[0]?.title?.rendered || 'N/A');

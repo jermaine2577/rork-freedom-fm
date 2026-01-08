@@ -110,7 +110,8 @@ const fetchArticle = async (id: string): Promise<NewsArticle> => {
       {
         method: 'GET',
         headers: {
-          'Accept': 'application/json',
+          'Accept': 'application/json; charset=utf-8',
+          'Content-Type': 'application/json; charset=utf-8',
         },
         signal: controller.signal,
       }
@@ -135,12 +136,16 @@ const fetchArticle = async (id: string): Promise<NewsArticle> => {
     let post: WordPressPost;
     try {
       post = await response.json();
+      console.log('Successfully fetched and parsed article:', post.id);
     } catch (parseError: any) {
-      console.error('JSON Parse Error Details:');
-      console.error('- Error:', parseError?.message || String(parseError));
-      throw new Error('Unable to parse article data from server');
+      console.error('==================== JSON PARSE ERROR (Article) ====================');
+      console.error('Platform:', Platform.OS);
+      console.error('Article ID:', id);
+      console.error('Error:', parseError?.message || String(parseError));
+      console.error('Error name:', parseError?.name || 'unknown');
+      console.error('====================================================================');
+      throw new Error('Unable to parse article from server - invalid JSON format');
     }
-    console.log('Successfully fetched article:', post.id);
 
     return {
       id: post.id.toString(),
