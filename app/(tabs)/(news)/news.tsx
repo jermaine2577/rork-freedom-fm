@@ -37,7 +37,7 @@ interface WordPressPost {
 
 const WORDPRESS_URL = 'https://freedomfm1065.com/wp-json/wp/v2/posts?_embed&per_page=20';
 const USE_MOCK_DATA = false;
-const FALLBACK_TO_MOCK_ON_ERROR = true;
+const FALLBACK_TO_MOCK_ON_ERROR = false;
 
 const decodeHtmlEntities = (text: string): string => {
   return text
