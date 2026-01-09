@@ -69,23 +69,25 @@ export const [TermsProvider, useTerms] = createContextHook(() => {
         if (Platform.OS === 'web') {
           const accepted = await storage.getItem(TERMS_ACCEPTED_KEY);
           if (mounted) setHasAcceptedTerms(accepted === 'true');
-          return;
+        } else {
+          const timeoutMs = 2000;
+          const accepted = await Promise.race<string | null>([
+            storage.getItem(TERMS_ACCEPTED_KEY),
+            new Promise<string | null>((resolve) => {
+              setTimeout(() => {
+                console.warn('[Terms] getItem timeout, continuing without stored terms');
+                resolve(null);
+              }, timeoutMs);
+            }),
+          ]);
+
+          if (mounted) {
+            setHasAcceptedTerms(accepted === 'true');
+          }
         }
 
-        const timeoutMs = 2000;
-        const accepted = await Promise.race<string | null>([
-          storage.getItem(TERMS_ACCEPTED_KEY),
-          new Promise<string | null>((resolve) => {
-            setTimeout(() => {
-              console.warn('[Terms] getItem timeout, continuing without stored terms');
-              resolve(null);
-            }, timeoutMs);
-          }),
-        ]);
 
-        if (mounted) {
-          setHasAcceptedTerms(accepted === 'true');
-        }
+
       } catch (error) {
         console.log('[Terms] Failed to load terms:', error);
         if (mounted) setHasAcceptedTerms(false);
