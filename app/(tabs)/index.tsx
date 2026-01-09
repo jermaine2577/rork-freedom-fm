@@ -97,11 +97,11 @@ export default function PlayerScreen() {
   };
 
   const logoHeight = clamp(
-    availableHeight * 0.22,
-    isSmallScreen ? 118 : 130,
-    isSmallScreen ? 165 : 220
+    Math.max(availableHeight * 0.23, visualizerSize * 1.28),
+    isSmallScreen ? 132 : 150,
+    isSmallScreen ? 190 : 250
   );
-  const logoWidth = isSmallScreen ? width * 0.96 : isMediumScreen ? width : width * 1.02;
+  const logoWidth = isSmallScreen ? width * 0.98 : isMediumScreen ? width * 1.02 : width * 1.04;
 
   const logoToCircleSpacing = clamp(
     (isSmallScreen ? -6 : isMediumScreen ? -10 : -12) + (availableHeight < 560 ? 6 : 0),
