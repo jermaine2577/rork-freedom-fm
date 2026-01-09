@@ -101,6 +101,7 @@ export default function PlayerScreen() {
             width: isSmallScreen ? width * 0.65 : isMediumScreen ? width * 0.7 : width * 0.75,
             height: isSmallScreen ? 55 : isMediumScreen ? 65 : 75,
             marginBottom: isSmallScreen ? 6 : 10,
+            alignSelf: 'center',
           }}
           resizeMode="contain"
         />
