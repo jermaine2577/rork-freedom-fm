@@ -7,6 +7,7 @@ import {
   Animated,
   Dimensions,
   Image,
+  ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -85,20 +86,27 @@ export default function PlayerScreen() {
     }
   };
 
+  const logoHeight = isSmallScreen ? 155 : isMediumScreen ? 190 : 220;
+  const logoWidth = isSmallScreen ? width * 0.96 : isMediumScreen ? width : width * 1.02;
+  const logoToCircleSpacing = isSmallScreen ? -8 : isMediumScreen ? -12 : -14;
+
   return (
     <LinearGradient
       colors={[colors.gradientStart, colors.gradientMiddle, colors.gradientEnd]}
       locations={[0, 0.5, 1]}
       style={styles.container}
     >
-      <View 
-        style={[
-          styles.content, 
-          { 
-            paddingTop: insets.top + 8, 
-            paddingBottom: tabBarHeight + (isSmallScreen ? 28 : 24),
-          }
+      <ScrollView
+        testID="radio-scroll"
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: insets.top + 10,
+            paddingBottom: tabBarHeight + 28,
+          },
         ]}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
       >
         <View style={{ width: '100%', alignItems: 'center', justifyContent: 'center' }}>
           <Image
@@ -109,19 +117,21 @@ export default function PlayerScreen() {
               setLogoFailed(true);
             }}
             style={{
-              width: isSmallScreen ? width * 0.96 : isMediumScreen ? width : width * 1.02,
-              height: isSmallScreen ? 155 : isMediumScreen ? 190 : 220,
+              width: logoWidth,
+              height: logoHeight,
             }}
             resizeMode="contain"
           />
         </View>
-        <View style={{
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: visualizerSize,
-          width: visualizerSize,
-          marginTop: isSmallScreen ? -14 : isMediumScreen ? -18 : -22,
-        }}>
+        <View
+          style={{
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: visualizerSize,
+            width: visualizerSize,
+            marginTop: logoToCircleSpacing,
+          }}
+        >
           
           <Animated.View
             style={[
@@ -325,7 +335,7 @@ export default function PlayerScreen() {
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
-      </View>
+      </ScrollView>
     </LinearGradient>
   );
 }
@@ -335,10 +345,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
-    justifyContent: 'space-evenly',
+    justifyContent: 'flex-start',
     paddingHorizontal: 20,
+    gap: 10,
   },
   outerCircle: {
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
@@ -440,6 +451,7 @@ const styles = StyleSheet.create({
   streamSelector: {
     alignItems: 'center',
     paddingHorizontal: 20,
+    width: '100%',
   },
   streamButton: {
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
