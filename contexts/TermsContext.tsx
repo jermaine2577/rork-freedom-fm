@@ -7,9 +7,7 @@ const TERMS_ACCEPTED_KEY = '@freedom_fm_terms_accepted';
 let cachedTermsStatus: boolean | null = null;
 
 export const [TermsProvider, useTerms] = createContextHook(() => {
-  const [hasAcceptedTerms, setHasAcceptedTerms] = useState<boolean>(() => {
-    return cachedTermsStatus ?? true;
-  });
+  const [hasAcceptedTerms, setHasAcceptedTerms] = useState<boolean>(cachedTermsStatus ?? false);
   const [isLoading, setIsLoading] = useState<boolean>(cachedTermsStatus === null);
 
   useEffect(() => {
@@ -18,22 +16,20 @@ export const [TermsProvider, useTerms] = createContextHook(() => {
       return;
     }
     
-    let mounted = true;
-    AsyncStorage.getItem(TERMS_ACCEPTED_KEY).then((accepted) => {
-      cachedTermsStatus = accepted === 'true';
-      if (mounted) {
+    const loadTerms = async () => {
+      try {
+        const accepted = await AsyncStorage.getItem(TERMS_ACCEPTED_KEY);
+        cachedTermsStatus = accepted === 'true';
         setHasAcceptedTerms(cachedTermsStatus);
-        setIsLoading(false);
-      }
-    }).catch(() => {
-      cachedTermsStatus = false;
-      if (mounted) {
+      } catch {
+        cachedTermsStatus = false;
         setHasAcceptedTerms(false);
+      } finally {
         setIsLoading(false);
       }
-    });
+    };
     
-    return () => { mounted = false; };
+    loadTerms();
   }, []);
 
   const acceptTerms = async () => {
