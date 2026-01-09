@@ -218,6 +218,7 @@ export default function ChatScreen() {
               width: '100%',
               height: '100%',
               border: 'none',
+              flex: 1,
             }}
             title="Freedom Wall Chat"
             onLoad={() => {
@@ -230,13 +231,6 @@ export default function ChatScreen() {
             }}
           />
         )}
-        <style>{`
-          iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-          }
-        `}</style>
       </View>
     );
   }
@@ -324,30 +318,33 @@ export default function ChatScreen() {
         </View>
       )}
       {!error && (
-        <View style={[styles.webview, { paddingBottom: insets.bottom }]}>
+        <View style={styles.webview}>
           <WebView
             ref={webViewRef}
             key={key}
             source={{ uri: 'https://freedomfm1065.com/mobile-chatroom/' }}
             style={styles.webviewInner}
-          injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
-          injectedJavaScript={injectedJavaScript}
-          javaScriptEnabled={true}
-          domStorageEnabled={true}
-          startInLoadingState={true}
-          cacheEnabled={true}
-          mixedContentMode="always"
-          originWhitelist={['*']}
-          allowsInlineMediaPlayback={true}
-          mediaPlaybackRequiresUserAction={false}
-          allowsFullscreenVideo={false}
-          bounces={false}
-          scrollEnabled={true}
-          showsVerticalScrollIndicator={true}
-          showsHorizontalScrollIndicator={false}
-          javaScriptCanOpenWindowsAutomatically={true}
-          allowFileAccess={true}
-          allowUniversalAccessFromFileURLs={true}
+            injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
+            injectedJavaScript={injectedJavaScript}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            startInLoadingState={true}
+            cacheEnabled={true}
+            mixedContentMode="always"
+            originWhitelist={['*']}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            allowsFullscreenVideo={false}
+            bounces={true}
+            scrollEnabled={true}
+            showsVerticalScrollIndicator={true}
+            showsHorizontalScrollIndicator={false}
+            javaScriptCanOpenWindowsAutomatically={true}
+            allowFileAccess={true}
+            allowUniversalAccessFromFileURLs={true}
+            nestedScrollEnabled={true}
+            overScrollMode="always"
+            contentMode="mobile"
           onLoadStart={() => {
             if (loadStartedRef.current) return;
             loadStartedRef.current = true;
@@ -394,14 +391,15 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#1a1a1a',
   },
   webview: {
     flex: 1,
+    overflow: 'hidden',
   },
   webviewInner: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#FFFFFF',
   },
   loadingContainer: {
     position: 'absolute',
@@ -639,8 +637,8 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingVertical: 14,
-    backgroundColor: '#000',
+    paddingVertical: 12,
+    backgroundColor: '#1a1a1a',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 107, 53, 0.3)',
   },
