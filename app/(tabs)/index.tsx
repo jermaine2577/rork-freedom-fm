@@ -263,8 +263,8 @@ export default function PlayerScreen() {
               style={[
                 styles.streamButton,
                 {
-                  paddingHorizontal: isSmallScreen ? 18 : 22,
-                  paddingVertical: isSmallScreen ? 8 : 10,
+                  paddingHorizontal: isSmallScreen ? 24 : 32,
+                  paddingVertical: isSmallScreen ? 12 : 14,
                 },
                 currentStream === 'version1' && styles.streamButtonActive,
               ]}
@@ -275,7 +275,7 @@ export default function PlayerScreen() {
                 style={[
                   styles.streamButtonText,
                   {
-                    fontSize: isSmallScreen ? 11 : 13,
+                    fontSize: isSmallScreen ? 13 : 15,
                   },
                   currentStream === 'version1' && styles.streamButtonTextActive,
                 ]}
@@ -287,8 +287,8 @@ export default function PlayerScreen() {
               style={[
                 styles.streamButton,
                 {
-                  paddingHorizontal: isSmallScreen ? 18 : 22,
-                  paddingVertical: isSmallScreen ? 8 : 10,
+                  paddingHorizontal: isSmallScreen ? 24 : 32,
+                  paddingVertical: isSmallScreen ? 12 : 14,
                 },
                 currentStream === 'version2' && styles.streamButtonActive,
               ]}
@@ -299,7 +299,7 @@ export default function PlayerScreen() {
                 style={[
                   styles.streamButtonText,
                   {
-                    fontSize: isSmallScreen ? 11 : 13,
+                    fontSize: isSmallScreen ? 13 : 15,
                   },
                   currentStream === 'version2' && styles.streamButtonTextActive,
                 ]}
