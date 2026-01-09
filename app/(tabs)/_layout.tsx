@@ -1,27 +1,11 @@
 import { Tabs } from "expo-router";
 import { Radio, Newspaper, MessageCircle, Music } from "lucide-react-native";
 import React from "react";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import colors from "@/constants/colors";
-import { useTerms } from "@/contexts/TermsContext";
-import TermsAgreementScreen from "@/components/TermsAgreementScreen";
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
-  const { hasAcceptedTerms, isLoading } = useTerms();
-
-  if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.yellow} />
-      </View>
-    );
-  }
-
-  if (!hasAcceptedTerms) {
-    return <TermsAgreementScreen />;
-  }
   
   return (
     <Tabs
@@ -75,12 +59,3 @@ export default function TabLayout() {
     </Tabs>
   );
 }
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
