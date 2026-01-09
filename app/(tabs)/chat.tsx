@@ -3,7 +3,7 @@ import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity, 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useTerms } from '@/contexts/TermsContext';
+import { TermsProvider, useTerms } from '@/contexts/TermsContext';
 import TermsAgreementScreen from '@/components/TermsAgreementScreen';
 import { Mail, AlertCircle, X } from 'lucide-react-native';
 import colors from '@/constants/colors';
@@ -52,7 +52,7 @@ const TopButtons = memo(({ top, onContactPress, onRefreshPress, showRefresh }: {
 ));
 TopButtons.displayName = 'TopButtons';
 
-export default function ChatScreen() {
+function ChatScreenContent() {
   const { hasAcceptedTerms } = useTerms();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
@@ -463,6 +463,14 @@ export default function ChatScreen() {
         showRefresh={!loading && !error}
       />
     </View>
+  );
+}
+
+export default function ChatScreen() {
+  return (
+    <TermsProvider>
+      <ChatScreenContent />
+    </TermsProvider>
   );
 }
 
