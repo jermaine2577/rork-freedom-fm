@@ -10,6 +10,7 @@ export default function NewsLayout() {
         },
         headerTintColor: colors.text,
         headerShadowVisible: false,
+        headerTitleAlign: 'center',
       }}
     >
       <Stack.Screen
