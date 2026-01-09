@@ -4,6 +4,7 @@ import React from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { RadioProvider } from "@/contexts/RadioContext";
 import { ChatProvider } from "@/contexts/ChatContext";
+import { TermsProvider } from "@/contexts/TermsContext";
 
 
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -35,11 +36,13 @@ export default function RootLayout() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView style={{ flex: 1 }}>
-          <RadioProvider>
-            <ChatProvider>
-              <RootLayoutNav />
-            </ChatProvider>
-          </RadioProvider>
+          <TermsProvider>
+            <RadioProvider>
+              <ChatProvider>
+                <RootLayoutNav />
+              </ChatProvider>
+            </RadioProvider>
+          </TermsProvider>
         </GestureHandlerRootView>
       </QueryClientProvider>
     </ErrorBoundary>
