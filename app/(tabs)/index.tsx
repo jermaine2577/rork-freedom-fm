@@ -7,7 +7,6 @@ import {
   Animated,
   Dimensions,
   Image,
-  ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -41,7 +40,18 @@ export default function PlayerScreen() {
   const isSmallScreen = height < 700;
   const isMediumScreen = height >= 700 && height < 800;
   const tabBarHeight = 60 + insets.bottom;
-  const visualizerSize = isSmallScreen ? Math.min(width * 0.38, 150) : isMediumScreen ? Math.min(width * 0.42, 170) : Math.min(width * 0.48, 200);
+
+  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+
+  const topPad = insets.top + 10;
+  const bottomPad = tabBarHeight + 18;
+  const availableHeight = Math.max(0, height - topPad - bottomPad);
+
+  const visualizerSize = clamp(
+    Math.min(width * 0.44, availableHeight * 0.32),
+    isSmallScreen ? 120 : 140,
+    isSmallScreen ? 160 : 200
+  );
 
   useEffect(() => {
     if (isPlaying) {
@@ -86,9 +96,18 @@ export default function PlayerScreen() {
     }
   };
 
-  const logoHeight = isSmallScreen ? 155 : isMediumScreen ? 190 : 220;
+  const logoHeight = clamp(
+    availableHeight * 0.22,
+    isSmallScreen ? 118 : 130,
+    isSmallScreen ? 165 : 220
+  );
   const logoWidth = isSmallScreen ? width * 0.96 : isMediumScreen ? width : width * 1.02;
-  const logoToCircleSpacing = isSmallScreen ? -8 : isMediumScreen ? -12 : -14;
+
+  const logoToCircleSpacing = clamp(
+    (isSmallScreen ? -6 : isMediumScreen ? -10 : -12) + (availableHeight < 560 ? 6 : 0),
+    -4,
+    10
+  );
 
   return (
     <LinearGradient
@@ -96,17 +115,15 @@ export default function PlayerScreen() {
       locations={[0, 0.5, 1]}
       style={styles.container}
     >
-      <ScrollView
-        testID="radio-scroll"
-        contentContainerStyle={[
+      <View
+        testID="radio-screen"
+        style={[
           styles.content,
           {
-            paddingTop: insets.top + 10,
-            paddingBottom: tabBarHeight + 28,
+            paddingTop: topPad,
+            paddingBottom: bottomPad,
           },
         ]}
-        showsVerticalScrollIndicator={false}
-        bounces={false}
       >
         <View style={{ width: '100%', alignItems: 'center', justifyContent: 'center' }}>
           <Image
@@ -335,7 +352,7 @@ export default function PlayerScreen() {
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
-      </ScrollView>
+      </View>
     </LinearGradient>
   );
 }
@@ -345,11 +362,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flexGrow: 1,
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'flex-start',
     paddingHorizontal: 20,
-    gap: 10,
+    gap: 8,
   },
   outerCircle: {
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
