@@ -109,8 +109,8 @@ export default function PlayerScreen() {
               setLogoFailed(true);
             }}
             style={{
-              width: isSmallScreen ? width * 0.9 : isMediumScreen ? width * 0.95 : width,
-              height: isSmallScreen ? 120 : isMediumScreen ? 150 : 170,
+              width: isSmallScreen ? width * 0.92 : isMediumScreen ? width * 0.98 : width,
+              height: isSmallScreen ? 140 : isMediumScreen ? 175 : 200,
             }}
             resizeMode="contain"
           />
