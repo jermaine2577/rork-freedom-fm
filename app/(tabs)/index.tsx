@@ -95,16 +95,17 @@ export default function PlayerScreen() {
           }
         ]}
       >
-        <Image
-          source={{ uri: 'https://www.freedomskn.com/resources/uploads/2014/08/logo_ff.png' }}
-          style={{ 
-            width: isSmallScreen ? width * 0.65 : isMediumScreen ? width * 0.7 : width * 0.75,
-            height: isSmallScreen ? 55 : isMediumScreen ? 65 : 75,
-            marginBottom: isSmallScreen ? 6 : 10,
-            alignSelf: 'center',
-          }}
-          resizeMode="contain"
-        />
+        <View style={{ width: '100%', alignItems: 'center', justifyContent: 'center' }}>
+          <Image
+            source={{ uri: 'https://www.freedomskn.com/resources/uploads/2014/08/logo_ff.png' }}
+            style={{ 
+              width: isSmallScreen ? width * 0.65 : isMediumScreen ? width * 0.7 : width * 0.75,
+              height: isSmallScreen ? 55 : isMediumScreen ? 65 : 75,
+              marginBottom: isSmallScreen ? 6 : 10,
+            }}
+            resizeMode="contain"
+          />
+        </View>
         <View style={{
           alignItems: 'center',
           justifyContent: 'center',
