@@ -51,15 +51,121 @@ const TopButtons = memo(({ top, onContactPress, onRefreshPress, showRefresh }: {
 ));
 TopButtons.displayName = 'TopButtons';
 
-let WebViewComponent: React.ComponentType<any> | null = null;
-
-if (Platform.OS !== 'web') {
-  try {
-    WebViewComponent = require('react-native-webview').WebView;
-  } catch (e) {
-    console.log('[Chat] WebView not available:', e);
-  }
+interface NativeWebViewProps {
+  webViewRef: React.RefObject<any>;
+  webViewKey: number;
+  uri: string;
+  injectedJavaScriptBeforeContentLoaded: string;
+  injectedJavaScript: string;
+  loadStartedRef: React.MutableRefObject<boolean>;
+  setLoading: (loading: boolean) => void;
+  setError: (error: boolean) => void;
+  setKey: React.Dispatch<React.SetStateAction<number>>;
+  handleRetry: () => void;
 }
+
+const NativeWebView = memo(({ 
+  webViewRef, 
+  webViewKey, 
+  uri, 
+  injectedJavaScriptBeforeContentLoaded, 
+  injectedJavaScript,
+  loadStartedRef,
+  setLoading,
+  setError,
+  setKey,
+  handleRetry,
+}: NativeWebViewProps) => {
+  const [WebViewComponent, setWebViewComponent] = useState<React.ComponentType<any> | null>(null);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    
+    try {
+      const webview = require('react-native-webview');
+      if (webview?.WebView) {
+        setWebViewComponent(() => webview.WebView);
+      } else {
+        setLoadError(true);
+      }
+    } catch {
+      console.log('[Chat] Failed to load WebView');
+      setLoadError(true);
+    }
+  }, []);
+
+  if (loadError || !WebViewComponent) {
+    return (
+      <View style={styles.errorContainer} testID="chatWebViewMissing">
+        <Text style={styles.errorText}>Chat unavailable on this platform</Text>
+        <Text style={styles.errorSubtext}>Please open on a mobile device and try again.</Text>
+        <Text onPress={handleRetry} style={styles.retryButton}>Retry</Text>
+      </View>
+    );
+  }
+
+  return (
+    <WebViewComponent
+      ref={webViewRef}
+      key={webViewKey}
+      source={{ uri }}
+      style={styles.webviewInner}
+      injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
+      injectedJavaScript={injectedJavaScript}
+      javaScriptEnabled={true}
+      domStorageEnabled={true}
+      startInLoadingState={true}
+      cacheEnabled={false}
+      cacheMode="LOAD_NO_CACHE"
+      mixedContentMode="always"
+      originWhitelist={['*']}
+      allowsInlineMediaPlayback={true}
+      mediaPlaybackRequiresUserAction={false}
+      allowsFullscreenVideo={false}
+      bounces={true}
+      scrollEnabled={true}
+      showsVerticalScrollIndicator={true}
+      showsHorizontalScrollIndicator={false}
+      javaScriptCanOpenWindowsAutomatically={true}
+      allowFileAccess={true}
+      allowUniversalAccessFromFileURLs={true}
+      nestedScrollEnabled={true}
+      overScrollMode="always"
+      contentMode="mobile"
+      onLoadStart={() => {
+        if (loadStartedRef.current) return;
+        loadStartedRef.current = true;
+        console.log('[Chat] WebView load started');
+      }}
+      onLoadEnd={() => {
+        console.log('[Chat] WebView load ended');
+        setLoading(false);
+        setError(false);
+      }}
+      onError={(syntheticEvent: any) => {
+        const { nativeEvent } = syntheticEvent;
+        console.error('[Chat] WebView error:', nativeEvent);
+        loadStartedRef.current = false;
+        setLoading(false);
+        setError(true);
+      }}
+      onHttpError={(syntheticEvent: any) => {
+        const { nativeEvent } = syntheticEvent;
+        console.error('[Chat] WebView HTTP error:', nativeEvent.statusCode);
+      }}
+      onRenderProcessGone={(syntheticEvent: any) => {
+        const { nativeEvent } = syntheticEvent;
+        console.error('[Chat] WebView process gone:', nativeEvent);
+        loadStartedRef.current = false;
+        setLoading(false);
+        setError(true);
+        setKey(prev => prev + 1);
+      }}
+    />
+  );
+});
+NativeWebView.displayName = 'NativeWebView';
 
 function ChatScreenContent() {
   const { hasAcceptedTerms, isLoading: isTermsLoading } = useTerms();
@@ -432,71 +538,18 @@ function ChatScreenContent() {
       )}
       {!error && (
         <View style={styles.webview}>
-          {WebViewComponent ? (
-            <WebViewComponent
-              ref={webViewRef}
-              key={key}
-              source={{ uri: `https://freedomfm1065.com/mobile-chatroom/?_t=${cacheBuster}&_k=${key}` }}
-              style={styles.webviewInner}
-              injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
-              injectedJavaScript={injectedJavaScript}
-              javaScriptEnabled={true}
-              domStorageEnabled={true}
-              startInLoadingState={true}
-              cacheEnabled={false}
-              cacheMode="LOAD_NO_CACHE"
-              mixedContentMode="always"
-              originWhitelist={['*']}
-              allowsInlineMediaPlayback={true}
-              mediaPlaybackRequiresUserAction={false}
-              allowsFullscreenVideo={false}
-              bounces={true}
-              scrollEnabled={true}
-              showsVerticalScrollIndicator={true}
-              showsHorizontalScrollIndicator={false}
-              javaScriptCanOpenWindowsAutomatically={true}
-              allowFileAccess={true}
-              allowUniversalAccessFromFileURLs={true}
-              nestedScrollEnabled={true}
-              overScrollMode="always"
-              contentMode="mobile"
-              onLoadStart={() => {
-                if (loadStartedRef.current) return;
-                loadStartedRef.current = true;
-                console.log('[Chat] WebView load started');
-              }}
-              onLoadEnd={() => {
-                console.log('[Chat] WebView load ended');
-                setLoading(false);
-                setError(false);
-              }}
-              onError={(syntheticEvent: any) => {
-                const { nativeEvent } = syntheticEvent;
-                console.error('[Chat] WebView error:', nativeEvent);
-                loadStartedRef.current = false;
-                setLoading(false);
-                setError(true);
-              }}
-              onHttpError={(syntheticEvent: any) => {
-                const { nativeEvent } = syntheticEvent;
-                console.error('[Chat] WebView HTTP error:', nativeEvent.statusCode);
-              }}
-              onRenderProcessGone={(syntheticEvent: any) => {
-                const { nativeEvent } = syntheticEvent;
-                console.error('[Chat] WebView process gone:', nativeEvent);
-                loadStartedRef.current = false;
-                setLoading(false);
-                setError(true);
-                setKey(prev => prev + 1);
-              }}
-            />
-          ) : (
-            <View style={styles.errorContainer} testID="chatWebViewMissing">
-              <Text style={styles.errorText}>Chat unavailable on this platform</Text>
-              <Text style={styles.errorSubtext}>Please open on a mobile device and try again.</Text>
-              <Text onPress={handleRetry} style={styles.retryButton}>Retry</Text>
-            </View>
-          )}
+          <NativeWebView
+            webViewRef={webViewRef}
+            webViewKey={key}
+            uri={`https://freedomfm1065.com/mobile-chatroom/?_t=${cacheBuster}&_k=${key}`}
+            injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
+            injectedJavaScript={injectedJavaScript}
+            loadStartedRef={loadStartedRef}
+            setLoading={setLoading}
+            setError={setError}
+            setKey={setKey}
+            handleRetry={handleRetry}
+          />
         </View>
       )}
       
