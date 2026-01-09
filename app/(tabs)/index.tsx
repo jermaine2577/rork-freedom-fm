@@ -44,13 +44,15 @@ export default function PlayerScreen() {
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
   const topPad = insets.top + 10;
-  const bottomPad = tabBarHeight + 18;
+  const bottomPad = tabBarHeight + 34;
   const availableHeight = Math.max(0, height - topPad - bottomPad);
 
+  const compactMode = availableHeight < 560;
+
   const visualizerSize = clamp(
-    Math.min(width * 0.44, availableHeight * 0.32),
-    isSmallScreen ? 120 : 140,
-    isSmallScreen ? 160 : 200
+    Math.min(width * 0.42, availableHeight * 0.28),
+    isSmallScreen || compactMode ? 108 : 128,
+    isSmallScreen || compactMode ? 150 : 176
   );
 
   useEffect(() => {
@@ -97,16 +99,16 @@ export default function PlayerScreen() {
   };
 
   const logoHeight = clamp(
-    Math.max(availableHeight * 0.23, visualizerSize * 1.28),
-    isSmallScreen ? 132 : 150,
-    isSmallScreen ? 190 : 250
+    Math.max(availableHeight * 0.24, visualizerSize * 1.38),
+    isSmallScreen || compactMode ? 132 : 154,
+    isSmallScreen || compactMode ? 200 : 260
   );
-  const logoWidth = isSmallScreen ? width * 0.98 : isMediumScreen ? width * 1.02 : width * 1.04;
+  const logoWidth = isSmallScreen || compactMode ? width * 0.98 : isMediumScreen ? width * 1.01 : width * 1.02;
 
   const logoToCircleSpacing = clamp(
-    (isSmallScreen ? -6 : isMediumScreen ? -10 : -12) + (availableHeight < 560 ? 6 : 0),
-    -4,
-    10
+    (isSmallScreen || compactMode ? -14 : isMediumScreen ? -18 : -20),
+    -22,
+    -6
   );
 
   return (
@@ -223,32 +225,32 @@ export default function PlayerScreen() {
         </View>
 
         <View style={[styles.nowPlaying, {
-          marginTop: isSmallScreen ? 6 : 10,
-          marginBottom: isSmallScreen ? 4 : 6,
+          marginTop: isSmallScreen || compactMode ? 4 : 10,
+          marginBottom: isSmallScreen || compactMode ? 2 : 6,
         }]}>
           <Text style={[styles.nowPlayingLabel, {
-            fontSize: isSmallScreen ? 9 : 11,
-            marginBottom: isSmallScreen ? 2 : 4,
+            fontSize: isSmallScreen || compactMode ? 9 : 11,
+            marginBottom: isSmallScreen || compactMode ? 2 : 4,
           }]}>NOW PLAYING</Text>
           <Text style={[styles.songTitle, {
-            fontSize: isSmallScreen ? 18 : isMediumScreen ? 20 : 22,
+            fontSize: isSmallScreen || compactMode ? 18 : isMediumScreen ? 20 : 22,
           }]}>Live Radio Stream</Text>
           <Text style={[styles.artist, {
-            fontSize: isSmallScreen ? 12 : 14,
+            fontSize: isSmallScreen || compactMode ? 12 : 14,
           }]}>World Class Radio At Its Very Best!</Text>
         </View>
 
         <View style={[styles.controls, {
-          marginVertical: isSmallScreen ? 4 : 8,
+          marginVertical: isSmallScreen || compactMode ? 2 : 8,
         }]}>
           <TouchableOpacity
             style={[
               styles.playButton,
               {
-                width: isSmallScreen ? 70 : isMediumScreen ? 80 : 90,
-                height: isSmallScreen ? 70 : isMediumScreen ? 80 : 90,
-                borderRadius: isSmallScreen ? 35 : isMediumScreen ? 40 : 45,
-                borderWidth: isSmallScreen ? 3 : 4,
+                width: isSmallScreen || compactMode ? 68 : isMediumScreen ? 80 : 90,
+                height: isSmallScreen || compactMode ? 68 : isMediumScreen ? 80 : 90,
+                borderRadius: isSmallScreen || compactMode ? 34 : isMediumScreen ? 40 : 45,
+                borderWidth: isSmallScreen || compactMode ? 3 : 4,
               },
               isLoading && styles.playButtonLoading,
             ]}
@@ -262,10 +264,10 @@ export default function PlayerScreen() {
               style={styles.playButtonGradient}
             >
               {isPlaying ? (
-                <Pause size={isSmallScreen ? 32 : isMediumScreen ? 38 : 44} color={colors.text} fill={colors.text} />
+                <Pause size={isSmallScreen || compactMode ? 32 : isMediumScreen ? 38 : 44} color={colors.text} fill={colors.text} />
               ) : (
-                <View style={{ marginLeft: isSmallScreen ? 4 : 5 }}>
-                  <Play size={isSmallScreen ? 32 : isMediumScreen ? 38 : 44} color={colors.text} fill={colors.text} />
+                <View style={{ marginLeft: isSmallScreen || compactMode ? 4 : 5 }}>
+                  <Play size={isSmallScreen || compactMode ? 32 : isMediumScreen ? 38 : 44} color={colors.text} fill={colors.text} />
                 </View>
               )}
             </LinearGradient>
@@ -273,12 +275,12 @@ export default function PlayerScreen() {
         </View>
 
         <View style={[styles.liveIndicator, {
-          paddingHorizontal: isSmallScreen ? 14 : 18,
-          paddingVertical: isSmallScreen ? 6 : 8,
+          paddingHorizontal: isSmallScreen || compactMode ? 14 : 18,
+          paddingVertical: isSmallScreen || compactMode ? 6 : 8,
         }]}>
           <View style={styles.liveDot} />
           <Text style={[styles.liveText, {
-            fontSize: isSmallScreen ? 11 : 13,
+            fontSize: isSmallScreen || compactMode ? 11 : 13,
           }]}>LIVE</Text>
           <Volume2 size={14} color={colors.textSecondary} />
         </View>
@@ -287,21 +289,21 @@ export default function PlayerScreen() {
           style={[
             styles.streamSelector,
             {
-              marginTop: isSmallScreen ? 10 : 16,
-              marginBottom: isSmallScreen ? 14 : 18,
+              marginTop: isSmallScreen || compactMode ? 8 : 16,
+              marginBottom: isSmallScreen || compactMode ? 10 : 18,
             },
           ]}
         >
           <View style={{
             flexDirection: 'row',
-            gap: isSmallScreen ? 8 : 12,
+            gap: isSmallScreen || compactMode ? 8 : 12,
           }}>
             <TouchableOpacity
               style={[
                 styles.streamButton,
                 {
-                  paddingHorizontal: isSmallScreen ? 24 : 32,
-                  paddingVertical: isSmallScreen ? 12 : 14,
+                  paddingHorizontal: isSmallScreen || compactMode ? 18 : 32,
+                  paddingVertical: isSmallScreen || compactMode ? 10 : 14,
                 },
                 currentStream === 'version1' && styles.streamButtonActive,
               ]}
@@ -312,7 +314,7 @@ export default function PlayerScreen() {
                 style={[
                   styles.streamButtonText,
                   {
-                    fontSize: isSmallScreen ? 13 : 15,
+                    fontSize: isSmallScreen || compactMode ? 13 : 15,
                   },
                   currentStream === 'version1' && styles.streamButtonTextActive,
                 ]}
@@ -324,8 +326,8 @@ export default function PlayerScreen() {
               style={[
                 styles.streamButton,
                 {
-                  paddingHorizontal: isSmallScreen ? 24 : 32,
-                  paddingVertical: isSmallScreen ? 12 : 14,
+                  paddingHorizontal: isSmallScreen || compactMode ? 18 : 32,
+                  paddingVertical: isSmallScreen || compactMode ? 10 : 14,
                 },
                 currentStream === 'version2' && styles.streamButtonActive,
               ]}
@@ -336,7 +338,7 @@ export default function PlayerScreen() {
                 style={[
                   styles.streamButtonText,
                   {
-                    fontSize: isSmallScreen ? 13 : 15,
+                    fontSize: isSmallScreen || compactMode ? 13 : 15,
                   },
                   currentStream === 'version2' && styles.streamButtonTextActive,
                 ]}
@@ -348,7 +350,7 @@ export default function PlayerScreen() {
         </View>
 
         {error && (
-          <View style={[styles.errorContainer, { marginTop: isSmallScreen ? 6 : 8 }]}>
+          <View style={[styles.errorContainer, { marginTop: isSmallScreen || compactMode ? 6 : 8 }]}>
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
