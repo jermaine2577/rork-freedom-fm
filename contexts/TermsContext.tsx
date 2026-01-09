@@ -6,6 +6,7 @@ const TERMS_ACCEPTED_KEY = '@freedom_fm_terms_accepted';
 
 export const [TermsProvider, useTerms] = createContextHook(() => {
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
     let mounted = true;
@@ -19,6 +20,10 @@ export const [TermsProvider, useTerms] = createContextHook(() => {
         console.error('Failed to load terms status:', error);
         if (mounted) {
           setHasAcceptedTerms(false);
+        }
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
         }
       }
     };
@@ -50,6 +55,7 @@ export const [TermsProvider, useTerms] = createContextHook(() => {
 
   return {
     hasAcceptedTerms,
+    isLoading,
     acceptTerms,
     resetTerms,
   };
