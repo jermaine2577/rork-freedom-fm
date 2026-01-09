@@ -7,6 +7,16 @@ import TermsAgreementScreen from '@/components/TermsAgreementScreen';
 import { Mail, AlertCircle, X } from 'lucide-react-native';
 import colors from '@/constants/colors';
 
+let WebViewModule: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    WebViewModule = require('react-native-webview').WebView;
+  } catch {
+    console.log('[Chat] WebView not available');
+  }
+}
+
 const ClimbingLoader = memo(() => {
   return (
     <View style={styles.climbingContainer}>
@@ -76,26 +86,7 @@ const NativeWebView = memo(({
   setKey,
   handleRetry,
 }: NativeWebViewProps) => {
-  const [WebViewComponent, setWebViewComponent] = useState<React.ComponentType<any> | null>(null);
-  const [loadError, setLoadError] = useState(false);
-
-  useEffect(() => {
-    if (Platform.OS === 'web') return;
-    
-    try {
-      const webview = require('react-native-webview');
-      if (webview?.WebView) {
-        setWebViewComponent(() => webview.WebView);
-      } else {
-        setLoadError(true);
-      }
-    } catch {
-      console.log('[Chat] Failed to load WebView');
-      setLoadError(true);
-    }
-  }, []);
-
-  if (loadError || !WebViewComponent) {
+  if (!WebViewModule) {
     return (
       <View style={styles.errorContainer} testID="chatWebViewMissing">
         <Text style={styles.errorText}>Chat unavailable on this platform</Text>
@@ -106,7 +97,7 @@ const NativeWebView = memo(({
   }
 
   return (
-    <WebViewComponent
+    <WebViewModule
       ref={webViewRef}
       key={webViewKey}
       source={{ uri }}
