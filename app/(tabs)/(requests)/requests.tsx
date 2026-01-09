@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Modal, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Music, Cake, Heart, Calendar, ChevronRight, Mail, HelpCircle } from 'lucide-react-native';
@@ -45,6 +45,8 @@ const REQUEST_OPTIONS: RequestOption[] = [
   },
 ];
 
+const isWeb = Platform.OS === 'web';
+
 export default function RequestIndexScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -69,17 +71,22 @@ export default function RequestIndexScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 40 }
+          { 
+            paddingTop: insets.top + 40, 
+            paddingBottom: insets.bottom + 40,
+          }
         ]}
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>Make a Request</Text>
-          <Text style={styles.subtitle}>
-            Choose the type of request you&apos;d like to submit
-          </Text>
-        </View>
+        <View style={styles.innerContent}>
+          <View style={styles.header}>
+            <Text style={styles.title}>Make a Request</Text>
+            <Text style={styles.subtitle}>
+              Choose the type of request you&apos;d like to submit
+            </Text>
+          </View>
 
-        <View style={styles.optionsContainer}>
+          <View style={styles.optionsContainer}>
           {REQUEST_OPTIONS.map((option) => {
             const Icon = option.icon;
             return (
@@ -100,26 +107,27 @@ export default function RequestIndexScreen() {
               </TouchableOpacity>
             );
           })}
-        </View>
+          </View>
 
-        <TouchableOpacity
-          style={styles.contactCard}
+          <TouchableOpacity
+            style={styles.contactCard}
           onPress={handleContactPress}
           activeOpacity={0.7}
         >
           <View style={styles.contactIconContainer}>
             <HelpCircle size={24} color={colors.yellow} />
           </View>
-          <View style={styles.contactContent}>
-            <Text style={styles.contactTitle}>Need Help?</Text>
-            <Text style={styles.contactSubtitle}>Contact us for support or to report issues</Text>
-          </View>
-        </TouchableOpacity>
+            <View style={styles.contactContent}>
+              <Text style={styles.contactTitle}>Need Help?</Text>
+              <Text style={styles.contactSubtitle}>Contact us for support or to report issues</Text>
+            </View>
+          </TouchableOpacity>
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            All requests will be sent to Freedom FM 106.5
-          </Text>
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              All requests will be sent to Freedom FM 106.5
+            </Text>
+          </View>
         </View>
       </ScrollView>
 
@@ -195,6 +203,11 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  innerContent: {
+    width: '100%',
+    maxWidth: isWeb ? 500 : undefined,
   },
   header: {
     marginBottom: 32,
@@ -211,7 +224,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   optionsContainer: {
-    gap: 16,
+    marginTop: 0,
   },
   optionCard: {
     flexDirection: 'row',
@@ -221,7 +234,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.2)',
-    gap: 16,
+    marginBottom: 16,
   },
   iconContainer: {
     width: 56,
@@ -232,10 +245,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
+    marginRight: 16,
   },
   optionContent: {
     flex: 1,
-    gap: 4,
   },
   optionTitle: {
     fontSize: 18,
@@ -246,6 +259,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     lineHeight: 20,
+    marginTop: 4,
   },
   footer: {
     marginTop: 32,
@@ -267,8 +281,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 2,
     borderColor: 'rgba(255, 107, 53, 0.3)',
-    gap: 16,
-    marginTop: 24,
+    marginTop: 8,
   },
   contactIconContainer: {
     width: 56,
@@ -279,10 +292,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
+    marginRight: 16,
   },
   contactContent: {
     flex: 1,
-    gap: 4,
   },
   contactTitle: {
     fontSize: 18,
@@ -293,6 +306,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     lineHeight: 20,
+    marginTop: 4,
   },
   modalOverlay: {
     flex: 1,
@@ -347,7 +361,6 @@ const styles = StyleSheet.create({
   emailContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
     paddingHorizontal: 20,
     paddingVertical: 14,
@@ -360,6 +373,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: colors.text,
+    marginLeft: 10,
   },
   modalFooter: {
     fontSize: 14,
@@ -371,7 +385,6 @@ const styles = StyleSheet.create({
   },
   modalButtons: {
     flexDirection: 'row',
-    gap: 12,
     width: '100%',
   },
   cancelButton: {
@@ -382,6 +395,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     alignItems: 'center',
+    marginRight: 12,
   },
   cancelButtonText: {
     fontSize: 16,
@@ -400,11 +414,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
   },
   sendButtonText: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: colors.text,
+    marginLeft: 8,
   },
 });
