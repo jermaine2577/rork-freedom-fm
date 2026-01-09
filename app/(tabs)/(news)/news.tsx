@@ -55,27 +55,29 @@ const decodeHtmlEntities = (text: string): string => {
     .replace(/&nbsp;/g, ' ');
 };
 
+const getMockData = async (): Promise<NewsArticle[]> => {
+  const { newsArticles } = await import('@/mocks/news');
+  return newsArticles;
+};
+
 const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
-  console.log('[NEWS FETCH] Platform:', Platform.OS);
-  console.log('[NEWS FETCH] USE_MOCK_DATA:', USE_MOCK_DATA);
-  
   if (USE_MOCK_DATA) {
-    console.log('[NEWS FETCH] Using mock data (forced)');
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const { newsArticles } = await import('@/mocks/news');
-    return newsArticles;
+    console.log('[NEWS] Using mock data');
+    return getMockData();
+  }
+
+  // On web, CORS may block external API - use mock data directly
+  if (Platform.OS === 'web') {
+    console.log('[NEWS] Web platform detected - using mock data to avoid CORS issues');
+    return getMockData();
   }
 
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   
   try {
-    console.log('[NEWS FETCH] Starting fetch from:', WORDPRESS_URL);
-    console.log('[NEWS FETCH] Timeout set to:', Platform.OS === 'android' ? '30 seconds' : '15 seconds');
-    
     const controller = new AbortController();
     const timeoutDuration = Platform.OS === 'android' ? 30000 : 15000;
     timeoutId = setTimeout(() => {
-      console.log('[NEWS FETCH] Request timed out after', timeoutDuration / 1000, 'seconds');
       controller.abort();
     }, timeoutDuration);
     
@@ -93,64 +95,38 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
       timeoutId = undefined;
     }
     
-    console.log('[NEWS FETCH] Response status:', response.status);
-    console.log('[NEWS FETCH] Response content-type:', response.headers.get('content-type'));
-    
     if (!response.ok) {
-      console.error('[NEWS FETCH] Failed to fetch posts:', response.status, response.statusText);
       throw new Error(`Server error: ${response.status}`);
     }
     
     const contentType = response.headers.get('content-type');
     if (contentType && !contentType.includes('application/json')) {
-      console.error('[NEWS FETCH] Server returned non-JSON response:', contentType);
       throw new Error('Server returned invalid content type');
     }
     
     let posts: WordPressPost[];
     try {
       const rawText = await response.text();
-      console.log('[NEWS FETCH] Response length:', rawText.length);
-      console.log('[NEWS FETCH] First 200 chars:', rawText.substring(0, 200));
+      let cleanedText = rawText.trim()
+        .replace(/^\uFEFF/, '')
+        .replace(/\r\n/g, '\n')
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]+/g, '');
       
-      let cleanedText = rawText.trim();
-      
-      // Clean up common issues on all platforms
-      cleanedText = cleanedText
-        .replace(/^\uFEFF/, '') // Remove BOM
-        .replace(/\r\n/g, '\n') // Normalize line endings
-        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]+/g, ''); // Remove control chars except tab/newline
-      
-      console.log('[NEWS FETCH] Cleaned text first 200 chars:', cleanedText.substring(0, 200));
-      console.log('[NEWS FETCH] First char code:', cleanedText.charCodeAt(0));
-      
-      // Validate that response looks like JSON array
       if (!cleanedText.startsWith('[') && !cleanedText.startsWith('{')) {
-        console.error('[NEWS FETCH] Response does not start with [ or {, starts with:', cleanedText.substring(0, 50));
-        throw new Error('Invalid JSON response - does not start with array or object');
+        throw new Error('Invalid JSON response');
       }
       
       posts = JSON.parse(cleanedText);
-      console.log('[NEWS FETCH] JSON parsed successfully, got', Array.isArray(posts) ? posts.length : 0, 'items');
-    } catch (parseError: any) {
-      console.error('[NEWS FETCH] ==================== JSON PARSE ERROR ====================');
-      console.error('[NEWS FETCH] Platform:', Platform.OS);
-      console.error('[NEWS FETCH] Error message:', parseError?.message || String(parseError));
-      console.error('[NEWS FETCH] Error name:', parseError?.name || 'unknown');
-      console.error('[NEWS FETCH] Error stack:', parseError?.stack);
-      console.error('[NEWS FETCH] ============================================================');
-      throw new Error('Unable to parse news from server - invalid JSON format');
-    }
-    console.log('[NEWS FETCH] Successfully fetched', posts.length, 'posts');
-    console.log('[NEWS FETCH] First article title:', posts[0]?.title?.rendered || 'N/A');
-    
-    if (!Array.isArray(posts)) {
-      throw new Error('Invalid data structure');
+    } catch {
+      console.log('[NEWS] JSON parse error, using fallback');
+      throw new Error('Unable to parse news from server');
     }
     
-    if (posts.length === 0) {
+    if (!Array.isArray(posts) || posts.length === 0) {
       throw new Error('No posts available');
     }
+    
+    console.log('[NEWS] Successfully fetched', posts.length, 'posts');
     
     return posts.map((post) => ({
       id: post.id.toString(),
@@ -167,20 +143,9 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
       clearTimeout(timeoutId);
     }
     
-    if (error.name === 'AbortError') {
-      console.log('[NEWS FETCH] Request was aborted (timeout or cancelled)');
-    } else {
-      console.error('[NEWS FETCH] Error fetching WordPress posts:', error);
-      console.error('[NEWS FETCH] Error name:', error.name);
-      console.error('[NEWS FETCH] Error message:', error.message);
-    }
-    
     if (FALLBACK_TO_MOCK_ON_ERROR) {
-      console.log('[NEWS FETCH] ⚠️ FALLING BACK TO MOCK DATA ⚠️');
-      console.log('[NEWS FETCH] This means real articles failed to load on', Platform.OS);
-      await new Promise(resolve => setTimeout(resolve, 300));
-      const { newsArticles } = await import('@/mocks/news');
-      return newsArticles;
+      console.log('[NEWS] Network error, using mock data');
+      return getMockData();
     }
     
     throw error;
@@ -230,8 +195,7 @@ export default function NewsScreen() {
   const { data: articles, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['wordpressNews'],
     queryFn: fetchWordPressPosts,
-    retry: 1,
-    retryDelay: 500,
+    retry: false,
     staleTime: 2 * 60 * 1000,
     gcTime: 5 * 60 * 1000,
   });
