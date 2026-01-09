@@ -64,14 +64,14 @@ function ChatScreenContent() {
   const cacheBuster = useMemo(() => Date.now() + key, [key]);
 
   useEffect(() => {
-    if (Platform.OS === 'web' && loading) {
+    if (Platform.OS === 'web') {
       const timeout = setTimeout(() => {
         console.log('[Chat] Web loading timeout - forcing load complete');
         setLoading(false);
-      }, 5000);
+      }, 3000);
       return () => clearTimeout(timeout);
     }
-  }, [loading, key]);
+  }, [key]);
 
   const handleRetry = useCallback(() => {
     console.log('[Chat] Retry button pressed');
@@ -298,18 +298,13 @@ function ChatScreenContent() {
                 height: '100%',
                 border: 'none',
                 flex: 1,
-                display: loading ? 'none' : 'block',
+                opacity: loading ? 0 : 1,
               } as any}
               title="Freedom Wall Chat"
               onLoad={() => {
                 console.log('[Chat] iframe onLoad fired');
                 setLoading(false);
                 setError(false);
-              }}
-              onError={() => {
-                console.log('[Chat] iframe onError fired');
-                setLoading(false);
-                setError(true);
               }}
             />
           </View>
