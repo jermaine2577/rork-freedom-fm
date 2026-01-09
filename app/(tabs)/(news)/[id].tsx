@@ -245,41 +245,59 @@ export default function ArticleDetailScreen() {
 
   const handleShare = async () => {
     if (!article) return;
-    
-    console.log('Share button pressed - Platform:', Platform.OS);
-    
+
+    console.log('[NEWS][SHARE] pressed', {
+      platform: Platform.OS,
+      id: article.id,
+      link: article.link,
+    });
+
+    const shareUrl = article.link ?? '';
+    const shareMessage = `${article.title}\n\n${article.excerpt}\n\n${shareUrl}`.trim();
+
     try {
       if (Platform.OS === 'web') {
-        await Clipboard.setStringAsync(article.link || '');
-        Alert.alert('Link Copied', 'The article link has been copied to your clipboard.');
-      } else {
-        const shareContent = Platform.OS === 'ios'
+        const nav = (globalThis as any)?.navigator as any;
+        if (nav?.share) {
+          console.log('[NEWS][SHARE] Using Web Share API');
+          await nav.share({ title: article.title, text: `${article.title}\n\n${article.excerpt}`, url: shareUrl });
+          return;
+        }
+
+        console.log('[NEWS][SHARE] Web Share API unavailable; copying link');
+        if (shareUrl) {
+          await Clipboard.setStringAsync(shareUrl);
+          Alert.alert('Link Copied', 'The article link has been copied to your clipboard.');
+        } else {
+          Alert.alert('Nothing to share', 'This article does not have a valid link yet.');
+        }
+        return;
+      }
+
+      console.log('[NEWS][SHARE] Opening native share sheet');
+
+      const result = await Share.share(
+        Platform.OS === 'ios'
           ? {
               message: `${article.title}\n\n${article.excerpt}`,
-              url: article.link,
+              url: shareUrl,
               title: article.title,
             }
           : {
-              message: `${article.title}\n\n${article.excerpt}\n\nRead more: ${article.link}`,
+              message: shareMessage,
               title: article.title,
-            };
-        
-        console.log('Opening native share dialog...');
-        const result = await Share.share(shareContent);
-        
-        console.log('Share result:', result);
-        if (result.action === Share.sharedAction) {
-          console.log('Article shared successfully');
-          if (result.activityType) {
-            console.log('Shared via:', result.activityType);
-          }
-        } else if (result.action === Share.dismissedAction) {
-          console.log('Share dialog dismissed');
-        }
-      }
-    } catch (error) {
-      console.error('Error sharing article:', error);
-      Alert.alert('Error', 'Could not share the article. Please try again.');
+            },
+        Platform.OS === 'android'
+          ? {
+              dialogTitle: 'Share article',
+            }
+          : undefined
+      );
+
+      console.log('[NEWS][SHARE] result', result);
+    } catch (e) {
+      console.error('[NEWS][SHARE] error', e);
+      Alert.alert('Error', 'Could not open share options. Please try again.');
     }
   };
 
@@ -324,7 +342,12 @@ export default function ArticleDetailScreen() {
       <Stack.Screen
         options={{
           headerRight: () => (
-            <TouchableOpacity onPress={handleShare} style={styles.shareButton}>
+            <TouchableOpacity
+              onPress={handleShare}
+              style={styles.shareButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              testID="news-article-share"
+            >
               <Share2 size={24} color={colors.text} />
             </TouchableOpacity>
           ),
