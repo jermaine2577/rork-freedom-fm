@@ -36,7 +36,7 @@ interface WordPressPost {
   };
 }
 
-const WORDPRESS_URL = 'https://freedomfm1065.com/wp-json/wp/v2/posts?_embed&per_page=20';
+const WORDPRESS_URL = 'https://freedomfm1065.com/wp-json/wp/v2/posts?_embed&per_page=20&orderby=date&order=desc';
 const USE_MOCK_DATA = false;
 
 const decodeHtmlEntities = (text: string): string => {
@@ -82,13 +82,16 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
     
     console.log('[NEWS] Fetching from WordPress API...');
     
-    const response = await fetch(WORDPRESS_URL, {
+    const cacheBuster = `&_t=${Date.now()}`;
+    const response = await fetch(WORDPRESS_URL + cacheBuster, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
         'User-Agent': Platform.OS === 'android' ? 'FreedomFM-Android/1.0' : 'FreedomFM-iOS/1.0',
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
       },
       signal: controller.signal,
     });
@@ -201,9 +204,11 @@ export default function NewsScreen() {
     queryFn: fetchWordPressPosts,
     retry: 2,
     staleTime: 0,
-    gcTime: 5 * 60 * 1000,
+    gcTime: 0,
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
+    refetchInterval: 60000,
+    refetchIntervalInBackground: false,
   });
 
   const [refreshing, setRefreshing] = useState(false);
