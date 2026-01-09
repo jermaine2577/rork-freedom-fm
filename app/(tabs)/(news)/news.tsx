@@ -65,35 +65,35 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
     return getMockData();
   }
 
-  // On web, CORS may block external API - use mock data directly
-  if (Platform.OS === 'web') {
-    console.log('[NEWS] Web platform detected - using mock data to avoid CORS issues');
-    return getMockData();
-  }
-
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   
   try {
     const controller = new AbortController();
-    const timeoutDuration = Platform.OS === 'android' ? 10000 : 8000;
+    const timeoutDuration = Platform.OS === 'web' ? 15000 : Platform.OS === 'android' ? 10000 : 8000;
     timeoutId = setTimeout(() => {
       controller.abort();
     }, timeoutDuration);
     
-    console.log('[NEWS] Fetching from WordPress API...');
+    console.log('[NEWS] Fetching from WordPress API...', Platform.OS);
     
-    const cacheBuster = `&_t=${Date.now()}`;
+    const cacheBuster = `&_t=${Date.now()}&rand=${Math.random()}`;
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+    };
+    
+    if (Platform.OS !== 'web') {
+      headers['Content-Type'] = 'application/json';
+      headers['User-Agent'] = Platform.OS === 'android' ? 'FreedomFM-Android/1.0' : 'FreedomFM-iOS/1.0';
+      headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+      headers['Pragma'] = 'no-cache';
+      headers['Expires'] = '0';
+    }
+    
     const response = await fetch(WORDPRESS_URL + cacheBuster, {
       method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'User-Agent': Platform.OS === 'android' ? 'FreedomFM-Android/1.0' : 'FreedomFM-iOS/1.0',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
-      },
+      headers,
       signal: controller.signal,
+      cache: 'no-store',
     });
     
     if (timeoutId) {
