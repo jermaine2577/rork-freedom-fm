@@ -48,11 +48,15 @@ export default function PlayerScreen() {
   const availableHeight = Math.max(0, height - topPad - bottomPad);
 
   const compactMode = availableHeight < 560;
+  const ultraCompactMode = availableHeight < 500;
+
+  const contentHorizontalPadding = ultraCompactMode ? 14 : compactMode ? 16 : 20;
+  const contentGap = ultraCompactMode ? 4 : compactMode ? 6 : 8;
 
   const visualizerSize = clamp(
-    Math.min(width * 0.42, availableHeight * 0.28),
-    isSmallScreen || compactMode ? 108 : 128,
-    isSmallScreen || compactMode ? 150 : 176
+    Math.min(width * 0.4, availableHeight * (ultraCompactMode ? 0.22 : 0.26)),
+    ultraCompactMode ? 96 : isSmallScreen || compactMode ? 104 : 124,
+    ultraCompactMode ? 132 : isSmallScreen || compactMode ? 148 : 170
   );
 
   useEffect(() => {
@@ -99,16 +103,22 @@ export default function PlayerScreen() {
   };
 
   const logoHeight = clamp(
-    Math.max(availableHeight * 0.24, visualizerSize * 1.38),
-    isSmallScreen || compactMode ? 132 : 154,
-    isSmallScreen || compactMode ? 200 : 260
+    Math.max(availableHeight * (ultraCompactMode ? 0.2 : 0.22), visualizerSize * (ultraCompactMode ? 1.2 : 1.3)),
+    ultraCompactMode ? 118 : isSmallScreen || compactMode ? 128 : 150,
+    ultraCompactMode ? 172 : isSmallScreen || compactMode ? 198 : 236
   );
-  const logoWidth = isSmallScreen || compactMode ? width * 0.98 : isMediumScreen ? width * 1.01 : width * 1.02;
+  const logoWidth = ultraCompactMode
+    ? width * 0.92
+    : isSmallScreen || compactMode
+      ? width * 0.94
+      : isMediumScreen
+        ? width * 0.96
+        : width * 0.98;
 
   const logoToCircleSpacing = clamp(
-    (isSmallScreen || compactMode ? -14 : isMediumScreen ? -18 : -20),
-    -22,
-    -6
+    (ultraCompactMode ? -10 : isSmallScreen || compactMode ? -12 : isMediumScreen ? -16 : -18),
+    -18,
+    -4
   );
 
   return (
@@ -124,6 +134,8 @@ export default function PlayerScreen() {
           {
             paddingTop: topPad,
             paddingBottom: bottomPad,
+            paddingHorizontal: contentHorizontalPadding,
+            gap: contentGap,
           },
         ]}
       >
@@ -225,8 +237,8 @@ export default function PlayerScreen() {
         </View>
 
         <View style={[styles.nowPlaying, {
-          marginTop: isSmallScreen || compactMode ? 4 : 10,
-          marginBottom: isSmallScreen || compactMode ? 2 : 6,
+          marginTop: ultraCompactMode ? 2 : isSmallScreen || compactMode ? 4 : 10,
+          marginBottom: ultraCompactMode ? 0 : isSmallScreen || compactMode ? 2 : 6,
         }]}>
           <Text style={[styles.nowPlayingLabel, {
             fontSize: isSmallScreen || compactMode ? 9 : 11,
@@ -241,16 +253,16 @@ export default function PlayerScreen() {
         </View>
 
         <View style={[styles.controls, {
-          marginVertical: isSmallScreen || compactMode ? 2 : 8,
+          marginVertical: ultraCompactMode ? 0 : isSmallScreen || compactMode ? 2 : 8,
         }]}>
           <TouchableOpacity
             style={[
               styles.playButton,
               {
-                width: isSmallScreen || compactMode ? 68 : isMediumScreen ? 80 : 90,
-                height: isSmallScreen || compactMode ? 68 : isMediumScreen ? 80 : 90,
-                borderRadius: isSmallScreen || compactMode ? 34 : isMediumScreen ? 40 : 45,
-                borderWidth: isSmallScreen || compactMode ? 3 : 4,
+                width: ultraCompactMode ? 64 : isSmallScreen || compactMode ? 68 : isMediumScreen ? 80 : 90,
+                height: ultraCompactMode ? 64 : isSmallScreen || compactMode ? 68 : isMediumScreen ? 80 : 90,
+                borderRadius: ultraCompactMode ? 32 : isSmallScreen || compactMode ? 34 : isMediumScreen ? 40 : 45,
+                borderWidth: ultraCompactMode ? 3 : isSmallScreen || compactMode ? 3 : 4,
               },
               isLoading && styles.playButtonLoading,
             ]}
@@ -258,7 +270,7 @@ export default function PlayerScreen() {
             disabled={isLoading}
           >
             <LinearGradient
-              colors={['rgba(0, 0, 0, 0.7)', 'rgba(0, 0, 0, 0.5)']}
+              colors={['rgba(0, 0, 0, 0.72)', 'rgba(0, 0, 0, 0.52)']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.playButtonGradient}
@@ -289,8 +301,8 @@ export default function PlayerScreen() {
           style={[
             styles.streamSelector,
             {
-              marginTop: isSmallScreen || compactMode ? 8 : 16,
-              marginBottom: isSmallScreen || compactMode ? 10 : 18,
+              marginTop: ultraCompactMode ? 6 : isSmallScreen || compactMode ? 8 : 16,
+              marginBottom: ultraCompactMode ? 8 : isSmallScreen || compactMode ? 10 : 18,
             },
           ]}
         >
