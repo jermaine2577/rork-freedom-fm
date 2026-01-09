@@ -198,7 +198,7 @@ export default function ChatScreen() {
     return (
       <View style={styles.container}>
         <TopButtons 
-          top={insets.top + 50}
+          top={insets.top + 60}
           onContactPress={handleContactPress}
           onRefreshPress={handleRefresh}
           showRefresh={!loading && !error}
@@ -243,6 +243,10 @@ export default function ChatScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Freedom Wall</Text>
+      </View>
+
       <Modal
         visible={showReportModal}
         transparent={true}
@@ -378,7 +382,7 @@ export default function ChatScreen() {
       )}
       
       <TopButtons 
-        top={insets.top + 50}
+        top={insets.top + 60}
         onContactPress={handleContactPress}
         onRefreshPress={handleRefresh}
         showRefresh={!loading && !error}
@@ -632,5 +636,18 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: '#000',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 107, 53, 0.3)',
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FF6B35',
+    letterSpacing: 0.5,
   },
 });
