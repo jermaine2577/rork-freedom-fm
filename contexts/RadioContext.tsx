@@ -135,6 +135,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   const play = useCallback(async (streamVersion?: StreamVersion) => {
     if (Platform.OS === 'web') {
       setError('Audio playback is not supported on web. Please use the mobile app.');
+      setIsLoading(false);
       return;
     }
     
