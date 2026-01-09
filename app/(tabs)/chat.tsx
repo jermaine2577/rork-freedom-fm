@@ -61,6 +61,7 @@ export default function ChatScreen() {
   const [showReportModal, setShowReportModal] = useState(false);
   const webViewRef = useRef<any>(null);
   const loadStartedRef = useRef(false);
+  const [cacheBuster] = useState(() => Date.now());
 
   const handleRetry = useCallback(() => {
     console.log('[Chat] Retry button pressed');
@@ -281,7 +282,7 @@ export default function ChatScreen() {
           <View style={styles.webview}>
             <iframe
               key={key}
-              src="https://freedomfm1065.com/mobile-chatroom/"
+              src={`https://freedomfm1065.com/mobile-chatroom/?_t=${cacheBuster}&_k=${key}`}
               style={{
                 width: '100%',
                 height: '100%',
@@ -398,14 +399,15 @@ export default function ChatScreen() {
           <WebView
             ref={webViewRef}
             key={key}
-            source={{ uri: 'https://freedomfm1065.com/mobile-chatroom/' }}
+            source={{ uri: `https://freedomfm1065.com/mobile-chatroom/?_t=${cacheBuster}&_k=${key}` }}
             style={styles.webviewInner}
             injectedJavaScriptBeforeContentLoaded={injectedJavaScriptBeforeContentLoaded}
             injectedJavaScript={injectedJavaScript}
             javaScriptEnabled={true}
             domStorageEnabled={true}
             startInLoadingState={true}
-            cacheEnabled={true}
+            cacheEnabled={false}
+            cacheMode="LOAD_NO_CACHE"
             mixedContentMode="always"
             originWhitelist={['*']}
             allowsInlineMediaPlayback={true}
