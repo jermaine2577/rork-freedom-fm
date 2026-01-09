@@ -11,7 +11,7 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const { hasAcceptedTerms, isLoading } = useTerms();
 
-  if (isLoading) {
+  if (isLoading && !hasAcceptedTerms) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.yellow} />

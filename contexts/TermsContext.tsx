@@ -4,35 +4,36 @@ import createContextHook from '@nkzw/create-context-hook';
 
 const TERMS_ACCEPTED_KEY = '@freedom_fm_terms_accepted';
 
+let cachedTermsStatus: boolean | null = null;
+
 export const [TermsProvider, useTerms] = createContextHook(() => {
-  const [hasAcceptedTerms, setHasAcceptedTerms] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [hasAcceptedTerms, setHasAcceptedTerms] = useState<boolean>(() => {
+    return cachedTermsStatus ?? true;
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(cachedTermsStatus === null);
 
   useEffect(() => {
+    if (cachedTermsStatus !== null) {
+      setIsLoading(false);
+      return;
+    }
+    
     let mounted = true;
-    const loadTermsStatus = async () => {
-      try {
-        const accepted = await AsyncStorage.getItem(TERMS_ACCEPTED_KEY);
-        if (mounted) {
-          setHasAcceptedTerms(accepted === 'true');
-        }
-      } catch (error) {
-        console.error('Failed to load terms status:', error);
-        if (mounted) {
-          setHasAcceptedTerms(false);
-        }
-      } finally {
-        if (mounted) {
-          setIsLoading(false);
-        }
+    AsyncStorage.getItem(TERMS_ACCEPTED_KEY).then((accepted) => {
+      cachedTermsStatus = accepted === 'true';
+      if (mounted) {
+        setHasAcceptedTerms(cachedTermsStatus);
+        setIsLoading(false);
       }
-    };
+    }).catch(() => {
+      cachedTermsStatus = false;
+      if (mounted) {
+        setHasAcceptedTerms(false);
+        setIsLoading(false);
+      }
+    });
     
-    loadTermsStatus();
-    
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
 
   const acceptTerms = async () => {
