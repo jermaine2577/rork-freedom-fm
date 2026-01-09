@@ -378,7 +378,7 @@ export default function ChatScreen() {
       )}
       
       <TopButtons 
-        top={50}
+        top={insets.top + 50}
         onContactPress={handleContactPress}
         onRefreshPress={handleRefresh}
         showRefresh={!loading && !error}
