@@ -14,16 +14,20 @@ import { Play, Pause, Volume2, Radio } from 'lucide-react-native';
 import { useRadio } from '@/contexts/RadioContext';
 import colors from '@/constants/colors';
 
+const RADIO_LOGO_URI = 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/b3vamp0ku602q6ojiaqvd';
+
 export default function PlayerScreen() {
   const { isPlaying, isLoading, error, play, pause, currentStream, switchStream } = useRadio();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
   
-  const [dimensions, setDimensions] = useState(() => {
+  const [dimensions, setDimensions] = useState<{ width: number; height: number }>(() => {
     const { width, height } = Dimensions.get('window');
     return { width, height };
   });
+
+  const [logoFailed, setLogoFailed] = useState<boolean>(false);
 
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
@@ -98,14 +102,15 @@ export default function PlayerScreen() {
         <View style={{ width: '100%', alignItems: 'center', justifyContent: 'center' }}>
           <Image
             testID="radio-logo"
-            source={require('../../assets/images/icon.png')}
+            source={logoFailed ? require('../../assets/images/icon.png') : { uri: RADIO_LOGO_URI }}
             onError={(e) => {
-              console.log('[Radio] Local logo failed to render', { nativeEvent: e?.nativeEvent });
+              console.log('[Radio] Logo failed to render', { nativeEvent: e?.nativeEvent });
+              setLogoFailed(true);
             }}
             style={{
-              width: isSmallScreen ? width * 0.65 : isMediumScreen ? width * 0.7 : width * 0.75,
-              height: isSmallScreen ? 55 : isMediumScreen ? 65 : 75,
-              marginBottom: isSmallScreen ? 6 : 10,
+              width: isSmallScreen ? width * 0.72 : isMediumScreen ? width * 0.78 : width * 0.82,
+              height: isSmallScreen ? 70 : isMediumScreen ? 84 : 96,
+              marginBottom: isSmallScreen ? 8 : 12,
             }}
             resizeMode="contain"
           />
