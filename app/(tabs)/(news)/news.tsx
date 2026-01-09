@@ -199,10 +199,11 @@ export default function NewsScreen() {
   const { data: articles, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['wordpressNews'],
     queryFn: fetchWordPressPosts,
-    retry: false,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-    networkMode: 'offlineFirst',
+    retry: 2,
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 
   const [refreshing, setRefreshing] = useState(false);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
 import { View, StyleSheet, Platform, ActivityIndicator, Text, TouchableOpacity, Linking, Modal, AppState } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -61,7 +61,7 @@ export default function ChatScreen() {
   const [showReportModal, setShowReportModal] = useState(false);
   const webViewRef = useRef<any>(null);
   const loadStartedRef = useRef(false);
-  const [cacheBuster] = useState(() => Date.now());
+  const cacheBuster = useMemo(() => Date.now() + key, [key]);
 
   const handleRetry = useCallback(() => {
     console.log('[Chat] Retry button pressed');
