@@ -245,7 +245,6 @@ export default function PlayerScreen() {
         <View style={[styles.liveIndicator, {
           paddingHorizontal: isSmallScreen ? 16 : 20,
           paddingVertical: isSmallScreen ? 8 : 10,
-          marginBottom: isSmallScreen ? 10 : 14,
         }]}>
           <View style={styles.liveDot} />
           <Text style={[styles.liveText, {
@@ -254,7 +253,7 @@ export default function PlayerScreen() {
           <Volume2 size={16} color={colors.textSecondary} />
         </View>
 
-        <View style={styles.streamSelector}>
+        <View style={[styles.streamSelector, { marginTop: isSmallScreen ? 16 : 24 }]}>
           <View style={{
             flexDirection: 'row',
             gap: isSmallScreen ? 10 : 12,
@@ -430,8 +429,6 @@ const styles = StyleSheet.create({
   streamSelector: {
     alignItems: 'center',
     paddingHorizontal: 20,
-    marginTop: 'auto',
-    paddingBottom: 16,
   },
   streamButton: {
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
