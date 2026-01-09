@@ -96,7 +96,7 @@ export default function PlayerScreen() {
           styles.content, 
           { 
             paddingTop: insets.top + 8, 
-            paddingBottom: tabBarHeight + 10,
+            paddingBottom: tabBarHeight + (isSmallScreen ? 28 : 24),
           }
         ]}
       >
@@ -256,7 +256,15 @@ export default function PlayerScreen() {
           <Volume2 size={14} color={colors.textSecondary} />
         </View>
 
-        <View style={[styles.streamSelector, { marginTop: isSmallScreen ? 10 : 16 }]}>
+        <View
+          style={[
+            styles.streamSelector,
+            {
+              marginTop: isSmallScreen ? 10 : 16,
+              marginBottom: isSmallScreen ? 14 : 18,
+            },
+          ]}
+        >
           <View style={{
             flexDirection: 'row',
             gap: isSmallScreen ? 8 : 12,
