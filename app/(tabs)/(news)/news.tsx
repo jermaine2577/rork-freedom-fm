@@ -38,7 +38,6 @@ interface WordPressPost {
 
 const WORDPRESS_URL = 'https://freedomfm1065.com/wp-json/wp/v2/posts?_embed&per_page=20';
 const USE_MOCK_DATA = false;
-const FALLBACK_TO_MOCK_ON_ERROR = true;
 
 const decodeHtmlEntities = (text: string): string => {
   return text
@@ -76,16 +75,20 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
   
   try {
     const controller = new AbortController();
-    const timeoutDuration = Platform.OS === 'android' ? 30000 : 15000;
+    const timeoutDuration = Platform.OS === 'android' ? 30000 : 20000;
     timeoutId = setTimeout(() => {
       controller.abort();
     }, timeoutDuration);
+    
+    console.log('[NEWS] Fetching from WordPress API...');
     
     const response = await fetch(WORDPRESS_URL, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
+        'Content-Type': 'application/json',
         'User-Agent': Platform.OS === 'android' ? 'FreedomFM-Android/1.0' : 'FreedomFM-iOS/1.0',
+        'Cache-Control': 'no-cache',
       },
       signal: controller.signal,
     });
@@ -96,11 +99,13 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
     }
     
     if (!response.ok) {
+      console.log('[NEWS] Server returned error status:', response.status);
       throw new Error(`Server error: ${response.status}`);
     }
     
     const contentType = response.headers.get('content-type');
     if (contentType && !contentType.includes('application/json')) {
+      console.log('[NEWS] Invalid content type:', contentType);
       throw new Error('Server returned invalid content type');
     }
     
@@ -113,17 +118,19 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
         .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]+/g, '');
       
       if (!cleanedText.startsWith('[') && !cleanedText.startsWith('{')) {
+        console.log('[NEWS] Response does not start with JSON');
         throw new Error('Invalid JSON response');
       }
       
       posts = JSON.parse(cleanedText);
     } catch {
-      console.log('[NEWS] JSON parse error, using fallback');
-      throw new Error('Unable to parse news from server');
+      console.log('[NEWS] JSON parse error, falling back to mock data');
+      return getMockData();
     }
     
     if (!Array.isArray(posts) || posts.length === 0) {
-      throw new Error('No posts available');
+      console.log('[NEWS] No posts in response, using mock data');
+      return getMockData();
     }
     
     console.log('[NEWS] Successfully fetched', posts.length, 'posts');
@@ -143,12 +150,9 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
       clearTimeout(timeoutId);
     }
     
-    if (FALLBACK_TO_MOCK_ON_ERROR) {
-      console.log('[NEWS] Network error, using mock data');
-      return getMockData();
-    }
-    
-    throw error;
+    // Always fallback to mock data on any error
+    console.log('[NEWS] Network error occurred, using mock data. Error:', error?.message || 'Unknown');
+    return getMockData();
   }
 };
 
