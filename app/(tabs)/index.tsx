@@ -109,8 +109,8 @@ export default function PlayerScreen() {
               setLogoFailed(true);
             }}
             style={{
-              width: isSmallScreen ? width * 0.92 : isMediumScreen ? width * 0.98 : width,
-              height: isSmallScreen ? 140 : isMediumScreen ? 175 : 200,
+              width: isSmallScreen ? width * 0.96 : isMediumScreen ? width : width * 1.02,
+              height: isSmallScreen ? 155 : isMediumScreen ? 190 : 220,
             }}
             resizeMode="contain"
           />
@@ -120,7 +120,9 @@ export default function PlayerScreen() {
           justifyContent: 'center',
           height: visualizerSize,
           width: visualizerSize,
+          marginTop: isSmallScreen ? -14 : isMediumScreen ? -18 : -22,
         }}>
+          
           <Animated.View
             style={[
               styles.outerCircle,
