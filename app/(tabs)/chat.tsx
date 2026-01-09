@@ -732,5 +732,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
     color: '#FFFFFF',
+    textAlign: 'center',
   },
 });
