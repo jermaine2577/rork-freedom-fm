@@ -99,7 +99,7 @@ export default function PlayerScreen() {
           }
         ]}
       >
-        <View style={{ width: '100%', alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ width: '100%', alignItems: 'center', justifyContent: 'center', marginBottom: isSmallScreen ? 4 : 6 }}>
           <Image
             testID="radio-logo"
             source={logoFailed ? require('../../assets/images/icon.png') : { uri: RADIO_LOGO_URI }}
@@ -108,9 +108,8 @@ export default function PlayerScreen() {
               setLogoFailed(true);
             }}
             style={{
-              width: isSmallScreen ? width * 0.82 : isMediumScreen ? width * 0.86 : width * 0.9,
-              height: isSmallScreen ? 90 : isMediumScreen ? 110 : 125,
-              marginBottom: isSmallScreen ? 8 : 12,
+              width: isSmallScreen ? width * 0.88 : isMediumScreen ? width * 0.92 : width * 0.95,
+              height: isSmallScreen ? 110 : isMediumScreen ? 135 : 155,
             }}
             resizeMode="contain"
           />
@@ -194,8 +193,8 @@ export default function PlayerScreen() {
         </View>
 
         <View style={[styles.nowPlaying, {
-          marginTop: isSmallScreen ? 8 : 12,
-          marginBottom: isSmallScreen ? 8 : 12,
+          marginTop: isSmallScreen ? 12 : 16,
+          marginBottom: isSmallScreen ? 6 : 10,
         }]}>
           <Text style={[styles.nowPlayingLabel, {
             fontSize: isSmallScreen ? 10 : 12,
@@ -210,7 +209,7 @@ export default function PlayerScreen() {
         </View>
 
         <View style={[styles.controls, {
-          marginVertical: isSmallScreen ? 8 : 12,
+          marginVertical: isSmallScreen ? 6 : 10,
         }]}>
           <TouchableOpacity
             style={[
@@ -246,7 +245,7 @@ export default function PlayerScreen() {
         <View style={[styles.liveIndicator, {
           paddingHorizontal: isSmallScreen ? 16 : 20,
           paddingVertical: isSmallScreen ? 8 : 10,
-          marginBottom: isSmallScreen ? 6 : 8,
+          marginBottom: isSmallScreen ? 10 : 14,
         }]}>
           <View style={styles.liveDot} />
           <Text style={[styles.liveText, {
@@ -328,7 +327,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'space-evenly',
+    justifyContent: 'flex-start',
     paddingHorizontal: 20,
   },
   outerCircle: {
@@ -431,6 +430,8 @@ const styles = StyleSheet.create({
   streamSelector: {
     alignItems: 'center',
     paddingHorizontal: 20,
+    marginTop: 'auto',
+    paddingBottom: 16,
   },
   streamButton: {
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
