@@ -138,7 +138,14 @@ function ChatScreenContent() {
 
 
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextAppState) => {
+    const addListener: unknown = (AppState as any)?.addEventListener;
+
+    if (typeof addListener !== 'function') {
+      console.log('[Chat] AppState.addEventListener not available on this platform');
+      return;
+    }
+
+    const subscription = (AppState as any).addEventListener('change', (nextAppState: string) => {
       if (nextAppState === 'active' && error) {
         console.log('[Chat] App became active, resetting error state');
         handleRetry();
@@ -146,7 +153,11 @@ function ChatScreenContent() {
     });
 
     return () => {
-      subscription.remove();
+      try {
+        (subscription as any)?.remove?.();
+      } catch (e) {
+        console.log('[Chat] Failed to remove AppState subscription', e);
+      }
     };
   }, [error, handleRetry]);
 
