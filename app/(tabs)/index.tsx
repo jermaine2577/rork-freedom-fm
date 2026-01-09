@@ -16,7 +16,6 @@ import colors from '@/constants/colors';
 
 export default function PlayerScreen() {
   const { isPlaying, isLoading, error, play, pause, currentStream, switchStream } = useRadio();
-  const [logoFailed, setLogoFailed] = useState<boolean>(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
@@ -99,16 +98,9 @@ export default function PlayerScreen() {
         <View style={{ width: '100%', alignItems: 'center', justifyContent: 'center' }}>
           <Image
             testID="radio-logo"
-            source={
-              logoFailed
-                ? require('../../assets/images/icon.png')
-                : { uri: 'https://www.freedomskn.com/resources/uploads/2014/08/logo_ff.png' }
-            }
+            source={require('../../assets/images/icon.png')}
             onError={(e) => {
-              console.log('[Radio] Logo failed to load, falling back to local icon', {
-                nativeEvent: e?.nativeEvent,
-              });
-              setLogoFailed(true);
+              console.log('[Radio] Local logo failed to render', { nativeEvent: e?.nativeEvent });
             }}
             style={{
               width: isSmallScreen ? width * 0.65 : isMediumScreen ? width * 0.7 : width * 0.75,
