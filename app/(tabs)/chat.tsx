@@ -196,13 +196,80 @@ export default function ChatScreen() {
 
   if (Platform.OS === 'web') {
     return (
-      <View style={styles.container}>
-        <TopButtons 
-          top={insets.top + 60}
-          onContactPress={handleContactPress}
-          onRefreshPress={handleRefresh}
-          showRefresh={!loading && !error}
-        />
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Freedom Wall</Text>
+        </View>
+
+        <Modal
+          visible={showReportModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowReportModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <LinearGradient
+                colors={[colors.gradientStart, colors.gradientMiddle, colors.gradientEnd]}
+                locations={[0, 0.5, 1]}
+                style={styles.modalGradient}
+              >
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setShowReportModal(false)}
+                >
+                  <X size={24} color={colors.text} />
+                </TouchableOpacity>
+                
+                <View style={styles.modalIconContainer}>
+                  <View style={styles.modalIconCircle}>
+                    <AlertCircle size={48} color={colors.text} strokeWidth={2} />
+                  </View>
+                </View>
+
+                <Text style={styles.modalTitle}>Report Content</Text>
+                
+                <Text style={styles.modalMessage}>
+                  To report inappropriate content or behavior, please contact us at:
+                </Text>
+                
+                <View style={styles.emailContainer}>
+                  <Mail size={18} color={colors.text} />
+                  <Text style={styles.emailText}>freedomradio1065@yahoo.com</Text>
+                </View>
+
+                <Text style={styles.modalFooter}>
+                  We respond to all reports within 24 hours
+                </Text>
+
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={styles.cancelButton}
+                    onPress={() => setShowReportModal(false)}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={styles.sendButton}
+                    onPress={handleSendEmail}
+                  >
+                    <LinearGradient
+                      colors={['rgba(0, 0, 0, 0.7)', 'rgba(0, 0, 0, 0.5)']}
+                      style={styles.sendButtonGradient}
+                    >
+                      <Mail size={20} color={colors.text} />
+                      <Text style={styles.sendButtonText}>Send Email</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </LinearGradient>
+            </View>
+          </View>
+        </Modal>
+
+        {loading && !error && <ClimbingLoader />}
+        
         {error && (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>Failed to load chat</Text>
@@ -211,26 +278,35 @@ export default function ChatScreen() {
           </View>
         )}
         {!error && (
-          <iframe
-            key={key}
-            src="https://freedomfm1065.com/mobile-chatroom/"
-            style={{
-              width: '100%',
-              height: '100%',
-              border: 'none',
-              flex: 1,
-            }}
-            title="Freedom Wall Chat"
-            onLoad={() => {
-              setLoading(false);
-              setError(false);
-            }}
-            onError={() => {
-              setLoading(false);
-              setError(true);
-            }}
-          />
+          <View style={styles.webview}>
+            <iframe
+              key={key}
+              src="https://freedomfm1065.com/mobile-chatroom/"
+              style={{
+                width: '100%',
+                height: '100%',
+                border: 'none',
+                flex: 1,
+              } as any}
+              title="Freedom Wall Chat"
+              onLoad={() => {
+                setLoading(false);
+                setError(false);
+              }}
+              onError={() => {
+                setLoading(false);
+                setError(true);
+              }}
+            />
+          </View>
         )}
+        
+        <TopButtons 
+          top={insets.top + 60}
+          onContactPress={handleContactPress}
+          onRefreshPress={handleRefresh}
+          showRefresh={!loading && !error}
+        />
       </View>
     );
   }
