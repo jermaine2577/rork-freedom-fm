@@ -54,7 +54,7 @@ TopButtons.displayName = 'TopButtons';
 type WebViewComponentType = React.ComponentType<any> | null;
 
 function ChatScreenContent() {
-  const { hasAcceptedTerms } = useTerms();
+  const { hasAcceptedTerms, isLoading: isTermsLoading } = useTerms();
 
   const [WebViewComponent, setWebViewComponent] = useState<WebViewComponentType>(null);
 
@@ -149,6 +149,14 @@ function ChatScreenContent() {
       subscription.remove();
     };
   }, [error, handleRetry]);
+
+  if (isTermsLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]} testID="chat-terms-loading">
+        <ClimbingLoader />
+      </View>
+    );
+  }
 
   if (!hasAcceptedTerms) {
     return <TermsAgreementScreen />;

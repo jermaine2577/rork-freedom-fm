@@ -13,7 +13,17 @@ export const [TermsProvider, useTerms] = createContextHook(() => {
     
     const loadTerms = async () => {
       try {
-        const accepted = await AsyncStorage.getItem(TERMS_ACCEPTED_KEY);
+        const timeoutMs = 1500;
+        const accepted = await Promise.race<string | null>([
+          AsyncStorage.getItem(TERMS_ACCEPTED_KEY),
+          new Promise<string | null>((resolve) => {
+            setTimeout(() => {
+              console.warn('[Terms] AsyncStorage.getItem timeout, continuing without stored terms');
+              resolve(null);
+            }, timeoutMs);
+          }),
+        ]);
+
         if (mounted) {
           setHasAcceptedTerms(accepted === 'true');
         }
