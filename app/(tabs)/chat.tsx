@@ -51,42 +51,18 @@ const TopButtons = memo(({ top, onContactPress, onRefreshPress, showRefresh }: {
 ));
 TopButtons.displayName = 'TopButtons';
 
-type WebViewComponentType = React.ComponentType<any> | null;
+let WebViewComponent: React.ComponentType<any> | null = null;
+
+if (Platform.OS !== 'web') {
+  try {
+    WebViewComponent = require('react-native-webview').WebView;
+  } catch (e) {
+    console.log('[Chat] WebView not available:', e);
+  }
+}
 
 function ChatScreenContent() {
   const { hasAcceptedTerms, isLoading: isTermsLoading } = useTerms();
-
-  const [WebViewComponent, setWebViewComponent] = useState<WebViewComponentType>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadWebView = async () => {
-      if (Platform.OS === 'web') {
-        setWebViewComponent(null);
-        return;
-      }
-
-      try {
-        const mod: any = await import('react-native-webview');
-        const Comp = (mod?.WebView ?? null) as WebViewComponentType;
-        if (!cancelled) {
-          setWebViewComponent(Comp);
-        }
-      } catch (e) {
-        console.error('[Chat] Failed to load react-native-webview module:', e);
-        if (!cancelled) {
-          setWebViewComponent(null);
-        }
-      }
-    };
-
-    loadWebView();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
