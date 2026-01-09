@@ -44,19 +44,23 @@ export default function PlayerScreen() {
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
   const topPad = insets.top + 10;
-  const bottomPad = tabBarHeight + 34;
-  const availableHeight = Math.max(0, height - topPad - bottomPad);
+  const baseBottomPad = tabBarHeight + 16;
+  const availableHeightBase = Math.max(0, height - topPad - baseBottomPad);
 
-  const compactMode = availableHeight < 560;
-  const ultraCompactMode = availableHeight < 500;
+  const compactMode = availableHeightBase < 560;
+  const ultraCompactMode = availableHeightBase < 500;
+
+  const bottomPadExtra = ultraCompactMode ? 10 : compactMode ? 12 : 16;
+  const bottomPad = tabBarHeight + bottomPadExtra;
+  const availableHeight = Math.max(0, height - topPad - bottomPad);
 
   const contentHorizontalPadding = ultraCompactMode ? 14 : compactMode ? 16 : 20;
   const contentGap = ultraCompactMode ? 4 : compactMode ? 6 : 8;
 
   const visualizerSize = clamp(
-    Math.min(width * 0.4, availableHeight * (ultraCompactMode ? 0.22 : 0.26)),
-    ultraCompactMode ? 96 : isSmallScreen || compactMode ? 104 : 124,
-    ultraCompactMode ? 132 : isSmallScreen || compactMode ? 148 : 170
+    Math.min(width * 0.38, availableHeight * (ultraCompactMode ? 0.19 : compactMode ? 0.215 : 0.235)),
+    ultraCompactMode ? 86 : isSmallScreen || compactMode ? 96 : 116,
+    ultraCompactMode ? 122 : isSmallScreen || compactMode ? 140 : 164
   );
 
   useEffect(() => {
@@ -103,9 +107,9 @@ export default function PlayerScreen() {
   };
 
   const logoHeight = clamp(
-    Math.max(availableHeight * (ultraCompactMode ? 0.2 : 0.22), visualizerSize * (ultraCompactMode ? 1.2 : 1.3)),
-    ultraCompactMode ? 118 : isSmallScreen || compactMode ? 128 : 150,
-    ultraCompactMode ? 172 : isSmallScreen || compactMode ? 198 : 236
+    Math.max(availableHeight * (ultraCompactMode ? 0.18 : compactMode ? 0.195 : 0.21), visualizerSize * (ultraCompactMode ? 1.25 : 1.35)),
+    ultraCompactMode ? 112 : isSmallScreen || compactMode ? 124 : 148,
+    ultraCompactMode ? 162 : isSmallScreen || compactMode ? 188 : 220
   );
   const logoWidth = ultraCompactMode
     ? width * 0.92
@@ -116,8 +120,8 @@ export default function PlayerScreen() {
         : width * 0.98;
 
   const logoToCircleSpacing = clamp(
-    (ultraCompactMode ? -10 : isSmallScreen || compactMode ? -12 : isMediumScreen ? -16 : -18),
-    -18,
+    (ultraCompactMode ? -8 : isSmallScreen || compactMode ? -10 : isMediumScreen ? -14 : -16),
+    -16,
     -4
   );
 
@@ -301,8 +305,9 @@ export default function PlayerScreen() {
           style={[
             styles.streamSelector,
             {
-              marginTop: ultraCompactMode ? 6 : isSmallScreen || compactMode ? 8 : 16,
-              marginBottom: ultraCompactMode ? 8 : isSmallScreen || compactMode ? 10 : 18,
+              marginTop: ultraCompactMode ? 4 : isSmallScreen || compactMode ? 6 : 14,
+              marginBottom: ultraCompactMode ? 2 : isSmallScreen || compactMode ? 4 : 10,
+              paddingBottom: ultraCompactMode ? 2 : 4,
             },
           ]}
         >
