@@ -75,7 +75,7 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
   
   try {
     const controller = new AbortController();
-    const timeoutDuration = Platform.OS === 'android' ? 30000 : 20000;
+    const timeoutDuration = Platform.OS === 'android' ? 10000 : 8000;
     timeoutId = setTimeout(() => {
       controller.abort();
     }, timeoutDuration);
@@ -200,8 +200,9 @@ export default function NewsScreen() {
     queryKey: ['wordpressNews'],
     queryFn: fetchWordPressPosts,
     retry: false,
-    staleTime: 2 * 60 * 1000,
-    gcTime: 5 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    networkMode: 'offlineFirst',
   });
 
   const [refreshing, setRefreshing] = useState(false);

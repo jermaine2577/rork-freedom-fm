@@ -5,18 +5,21 @@ import { Platform } from 'react-native';
 let Audio: any = null;
 let InterruptionModeAndroid: any = null;
 let InterruptionModeIOS: any = null;
+let audioModuleLoaded = false;
 
-if (Platform.OS !== 'web') {
+const loadAudioModule = () => {
+  if (audioModuleLoaded || Platform.OS === 'web') return;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const ExpoAV = require('expo-av');
     Audio = ExpoAV.Audio;
     InterruptionModeAndroid = ExpoAV.InterruptionModeAndroid;
     InterruptionModeIOS = ExpoAV.InterruptionModeIOS;
+    audioModuleLoaded = true;
   } catch (error) {
     console.warn('expo-av not available:', error);
   }
-}
+};
 
 const STREAM_URLS = {
   version1: 'https://media.slactech.com:8012/stream',
@@ -42,6 +45,9 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       console.log('Audio not supported on web');
       return;
     }
+    
+    loadAudioModule();
+    
     if (!Audio) {
       console.warn('Audio module not available');
       return;
@@ -131,6 +137,9 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       setError('Audio playback is not supported on web. Please use the mobile app.');
       return;
     }
+    
+    loadAudioModule();
+    
     if (!Audio) {
       setError('Audio module not available');
       return;
