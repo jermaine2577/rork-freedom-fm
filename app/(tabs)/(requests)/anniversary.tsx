@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Platform, ActivityIndicator, Text, TouchableOpacity, Animated } from 'react-native';
+import { StyleSheet, View, Platform, Text, TouchableOpacity, Animated } from 'react-native';
 import WebView from 'react-native-webview';
 import colors from '@/constants/colors';
 import { RefreshCw, Heart } from 'lucide-react-native';
@@ -19,12 +19,12 @@ export default function AnniversaryScreen() {
           Animated.timing(pulseAnim, {
             toValue: 1.1,
             duration: 1000,
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== 'web',
           }),
           Animated.timing(pulseAnim, {
             toValue: 1,
             duration: 1000,
-            useNativeDriver: true,
+            useNativeDriver: Platform.OS !== 'web',
           }),
         ])
       ).start();
@@ -33,7 +33,7 @@ export default function AnniversaryScreen() {
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 300,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }).start();
     }
   }, [loading, fadeAnim, pulseAnim]);
@@ -54,8 +54,23 @@ export default function AnniversaryScreen() {
         />
         {loading && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.yellow} />
-            <Text style={styles.loadingText}>Loading form...</Text>
+            <Animated.View style={[styles.iconPulse, { transform: [{ scale: pulseAnim }] }]}>
+              <View style={styles.iconCircle}>
+                <Heart size={40} color={colors.yellow} strokeWidth={2.5} />
+              </View>
+            </Animated.View>
+            <View style={styles.skeletonContainer}>
+              <View style={styles.skeletonBar} />
+              <View style={styles.skeletonBarShort} />
+              <View style={styles.skeletonBar} />
+              <View style={styles.skeletonBarMedium} />
+            </View>
+            <Text style={styles.loadingText}>Preparing your request form</Text>
+            <View style={styles.dotsContainer}>
+              <View style={[styles.dot, styles.dot1]} />
+              <View style={[styles.dot, styles.dot2]} />
+              <View style={[styles.dot, styles.dot3]} />
+            </View>
           </View>
         )}
       </View>
