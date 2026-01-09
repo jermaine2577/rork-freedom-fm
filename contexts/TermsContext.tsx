@@ -4,32 +4,36 @@ import createContextHook from '@nkzw/create-context-hook';
 
 const TERMS_ACCEPTED_KEY = '@freedom_fm_terms_accepted';
 
-let cachedTermsStatus: boolean | null = null;
-
 export const [TermsProvider, useTerms] = createContextHook(() => {
-  const [hasAcceptedTerms, setHasAcceptedTerms] = useState<boolean>(cachedTermsStatus ?? false);
-  const [isLoading, setIsLoading] = useState<boolean>(cachedTermsStatus === null);
+  const [hasAcceptedTerms, setHasAcceptedTerms] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    if (cachedTermsStatus !== null) {
-      setIsLoading(false);
-      return;
-    }
+    let mounted = true;
     
     const loadTerms = async () => {
       try {
         const accepted = await AsyncStorage.getItem(TERMS_ACCEPTED_KEY);
-        cachedTermsStatus = accepted === 'true';
-        setHasAcceptedTerms(cachedTermsStatus);
-      } catch {
-        cachedTermsStatus = false;
-        setHasAcceptedTerms(false);
+        if (mounted) {
+          setHasAcceptedTerms(accepted === 'true');
+        }
+      } catch (error) {
+        console.log('[Terms] Failed to load terms:', error);
+        if (mounted) {
+          setHasAcceptedTerms(false);
+        }
       } finally {
-        setIsLoading(false);
+        if (mounted) {
+          setIsLoading(false);
+        }
       }
     };
     
     loadTerms();
+    
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const acceptTerms = async () => {
@@ -37,7 +41,7 @@ export const [TermsProvider, useTerms] = createContextHook(() => {
       await AsyncStorage.setItem(TERMS_ACCEPTED_KEY, 'true');
       setHasAcceptedTerms(true);
     } catch (error) {
-      console.error('Failed to save terms acceptance:', error);
+      console.error('[Terms] Failed to save terms acceptance:', error);
     }
   };
 
@@ -46,7 +50,7 @@ export const [TermsProvider, useTerms] = createContextHook(() => {
       await AsyncStorage.removeItem(TERMS_ACCEPTED_KEY);
       setHasAcceptedTerms(false);
     } catch (error) {
-      console.error('Failed to reset terms:', error);
+      console.error('[Terms] Failed to reset terms:', error);
     }
   };
 
