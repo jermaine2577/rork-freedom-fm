@@ -721,9 +721,8 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255, 107, 53, 0.3)',
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FF6B35',
-    letterSpacing: 0.5,
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });
