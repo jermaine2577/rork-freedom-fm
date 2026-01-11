@@ -161,7 +161,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       
       if (soundRef.current) {
         try {
-          await soundRef.current.unloadAsync();
+          const status = await soundRef.current.getStatusAsync();
+          if (status.isLoaded) {
+            await soundRef.current.stopAsync();
+            await soundRef.current.unloadAsync();
+          }
           console.log('Previous sound unloaded');
         } catch (e) {
           console.warn('Error cleaning up previous sound:', e);
@@ -171,47 +175,51 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       
       console.log('Creating new audio stream...');
       
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { 
-          uri: streamUrl,
-          headers: {
-            'User-Agent': 'FreedomFM/1.0',
+      let newSound: any = null;
+      
+      try {
+        const result = await Audio.Sound.createAsync(
+          { 
+            uri: streamUrl,
+            headers: {
+              'User-Agent': 'FreedomFM/1.0',
+            },
           },
-        },
-        { 
-          shouldPlay: true, 
-          volume: volume,
-          isLooping: false,
-          progressUpdateIntervalMillis: 500,
-        },
-        onPlaybackStatusUpdate
-      );
+          { 
+            shouldPlay: false,
+            volume: volume,
+            isLooping: false,
+            progressUpdateIntervalMillis: 500,
+          },
+          onPlaybackStatusUpdate
+        );
+        newSound = result.sound;
+      } catch (createError: any) {
+        console.error('Error creating audio:', createError);
+        setError('Unable to load stream. Please try again.');
+        setIsLoading(false);
+        return;
+      }
+      
+      if (!newSound) {
+        setError('Failed to create audio player');
+        setIsLoading(false);
+        return;
+      }
       
       soundRef.current = newSound;
       setCurrentStream(streamToUse);
-      console.log('New sound created and should be playing');
+      console.log('New sound created');
       
-      if (Platform.OS === 'android') {
-        try {
-          await newSound.setStatusAsync({
-            androidImplementation: 'MediaPlayer',
-          } as any);
-          console.log('Android implementation set to MediaPlayer');
-        } catch (e) {
-          console.warn('Could not set Android implementation:', e);
-        }
+      try {
+        await newSound.playAsync();
+        console.log('Playback started successfully');
+      } catch (playError: any) {
+        console.error('Error starting playback:', playError);
+        setError('Unable to start playback. Please try again.');
+        setIsLoading(false);
+        return;
       }
-      
-      if (Audio) {
-        try {
-          await Audio.setIsEnabledAsync(true);
-        } catch (e) {
-          console.warn('Error enabling audio:', e);
-        }
-      }
-      
-      await newSound.playAsync();
-      console.log('Explicitly called playAsync');
       
       await updateNowPlaying(true);
       
@@ -243,14 +251,21 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   const pause = useCallback(async () => {
     try {
       if (soundRef.current) {
-        await soundRef.current.pauseAsync();
+        const status = await soundRef.current.getStatusAsync();
+        if (status.isLoaded) {
+          await soundRef.current.stopAsync();
+          await soundRef.current.unloadAsync();
+        }
+        soundRef.current = null;
         isPlayingRef.current = false;
         setIsPlaying(false);
         setError(null);
       }
     } catch (error) {
       console.error('Error pausing stream:', error);
-      setError('Failed to pause stream');
+      soundRef.current = null;
+      isPlayingRef.current = false;
+      setIsPlaying(false);
     }
   }, []);
 
