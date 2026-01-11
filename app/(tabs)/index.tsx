@@ -38,28 +38,26 @@ export default function PlayerScreen() {
 
   const { width, height } = dimensions;
   const isSmallScreen = height < 700;
-  const isMediumScreen = height >= 700 && height < 800;
   const tabBarHeight = 60 + insets.bottom;
 
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
-  const topPad = insets.top + 10;
-  const baseBottomPad = tabBarHeight + 16;
-  const availableHeightBase = Math.max(0, height - topPad - baseBottomPad);
-
-  const compactMode = availableHeightBase < 560;
-  const ultraCompactMode = availableHeightBase < 500;
-
-  const bottomPadExtra = ultraCompactMode ? 10 : compactMode ? 12 : 16;
-  const bottomPad = tabBarHeight + bottomPadExtra;
+  const topPad = insets.top + 8;
+  const bottomPad = tabBarHeight + 8;
   const availableHeight = Math.max(0, height - topPad - bottomPad);
 
-  const contentHorizontalPadding = ultraCompactMode ? 14 : compactMode ? 16 : 20;
+  const compactMode = availableHeight < 520;
+  const ultraCompactMode = availableHeight < 450;
+
+  const contentHorizontalPadding = ultraCompactMode ? 12 : compactMode ? 14 : 20;
+
+  const controlsSectionHeight = ultraCompactMode ? 150 : compactMode ? 170 : 200;
+  const mainContentHeight = availableHeight - controlsSectionHeight;
 
   const visualizerSize = clamp(
-    Math.min(width * 0.38, availableHeight * (ultraCompactMode ? 0.19 : compactMode ? 0.215 : 0.235)),
-    ultraCompactMode ? 86 : isSmallScreen || compactMode ? 96 : 116,
-    ultraCompactMode ? 122 : isSmallScreen || compactMode ? 140 : 164
+    Math.min(width * 0.28, mainContentHeight * 0.26),
+    ultraCompactMode ? 65 : compactMode ? 75 : 90,
+    ultraCompactMode ? 90 : compactMode ? 110 : 130
   );
 
   useEffect(() => {
@@ -106,23 +104,13 @@ export default function PlayerScreen() {
   };
 
   const logoHeight = clamp(
-    Math.max(availableHeight * (ultraCompactMode ? 0.18 : compactMode ? 0.195 : 0.21), visualizerSize * (ultraCompactMode ? 1.25 : 1.35)),
-    ultraCompactMode ? 112 : isSmallScreen || compactMode ? 124 : 148,
-    ultraCompactMode ? 162 : isSmallScreen || compactMode ? 188 : 220
+    mainContentHeight * 0.32,
+    ultraCompactMode ? 70 : compactMode ? 90 : 110,
+    ultraCompactMode ? 110 : compactMode ? 140 : 170
   );
-  const logoWidth = ultraCompactMode
-    ? width * 0.92
-    : isSmallScreen || compactMode
-      ? width * 0.94
-      : isMediumScreen
-        ? width * 0.96
-        : width * 0.98;
+  const logoWidth = width * 0.88;
 
-  const logoToCircleSpacing = clamp(
-    (ultraCompactMode ? -8 : isSmallScreen || compactMode ? -10 : isMediumScreen ? -14 : -16),
-    -16,
-    -4
-  );
+  const logoToCircleSpacing = ultraCompactMode ? -2 : compactMode ? -4 : -6;
 
   return (
     <LinearGradient
@@ -141,8 +129,8 @@ export default function PlayerScreen() {
           },
         ]}
       >
-        <View style={styles.mainContent}>
-          <View style={{ width: '100%', alignItems: 'center', justifyContent: 'center' }}>
+        <View style={[styles.mainContent, { height: mainContentHeight }]}>
+          <View style={styles.logoContainer}>
             <Image
               testID="radio-logo"
               source={logoFailed ? require('../../assets/images/icon.png') : { uri: RADIO_LOGO_URI }}
@@ -157,6 +145,7 @@ export default function PlayerScreen() {
               resizeMode="contain"
             />
           </View>
+
           <View
             style={{
               alignItems: 'center',
@@ -166,7 +155,6 @@ export default function PlayerScreen() {
               marginTop: logoToCircleSpacing,
             }}
           >
-            
             <Animated.View
               style={[
                 styles.outerCircle,
@@ -189,7 +177,7 @@ export default function PlayerScreen() {
                   borderRadius: visualizerSize * 0.255,
                   borderWidth: isSmallScreen ? 2 : 3,
                 }]}>
-                  <Radio size={isSmallScreen ? 45 : isMediumScreen ? 52 : 60} color={colors.text} strokeWidth={1.5} />
+                  <Radio size={ultraCompactMode ? 28 : compactMode ? 34 : 42} color={colors.text} strokeWidth={1.5} />
                 </View>
               </View>
             </Animated.View>
@@ -240,86 +228,74 @@ export default function PlayerScreen() {
           </View>
 
           <View style={[styles.nowPlaying, {
-            marginTop: ultraCompactMode ? 2 : isSmallScreen || compactMode ? 4 : 10,
-            marginBottom: ultraCompactMode ? 0 : isSmallScreen || compactMode ? 2 : 6,
+            marginTop: ultraCompactMode ? 4 : compactMode ? 6 : 10,
           }]}>
             <Text style={[styles.nowPlayingLabel, {
-              fontSize: isSmallScreen || compactMode ? 9 : 11,
-              marginBottom: isSmallScreen || compactMode ? 2 : 4,
+              fontSize: ultraCompactMode ? 8 : compactMode ? 9 : 10,
+              marginBottom: 2,
             }]}>NOW PLAYING</Text>
             <Text style={[styles.songTitle, {
-              fontSize: isSmallScreen || compactMode ? 18 : isMediumScreen ? 20 : 22,
+              fontSize: ultraCompactMode ? 15 : compactMode ? 17 : 19,
             }]}>Live Radio Stream</Text>
             <Text style={[styles.artist, {
-              fontSize: isSmallScreen || compactMode ? 12 : 14,
+              fontSize: ultraCompactMode ? 10 : compactMode ? 11 : 13,
             }]}>World Class Radio At Its Very Best!</Text>
           </View>
-
         </View>
 
-        <View style={styles.bottomSection}>
-          <View style={[styles.controls, {
-            marginBottom: ultraCompactMode ? 12 : isSmallScreen || compactMode ? 16 : 24,
-          }]}>
-            <TouchableOpacity
-              style={[
-                styles.playButton,
-                {
-                  width: ultraCompactMode ? 64 : isSmallScreen || compactMode ? 68 : isMediumScreen ? 80 : 90,
-                  height: ultraCompactMode ? 64 : isSmallScreen || compactMode ? 68 : isMediumScreen ? 80 : 90,
-                  borderRadius: ultraCompactMode ? 32 : isSmallScreen || compactMode ? 34 : isMediumScreen ? 40 : 45,
-                  borderWidth: ultraCompactMode ? 3 : isSmallScreen || compactMode ? 3 : 4,
-                },
-                isLoading && styles.playButtonLoading,
-              ]}
-              onPress={handlePlayPause}
-              disabled={isLoading}
+        <View style={[styles.bottomSection, { height: controlsSectionHeight }]}>
+          <TouchableOpacity
+            style={[
+              styles.playButton,
+              {
+                width: ultraCompactMode ? 52 : compactMode ? 60 : 72,
+                height: ultraCompactMode ? 52 : compactMode ? 60 : 72,
+                borderRadius: ultraCompactMode ? 26 : compactMode ? 30 : 36,
+                borderWidth: ultraCompactMode ? 2 : 3,
+              },
+              isLoading && styles.playButtonLoading,
+            ]}
+            onPress={handlePlayPause}
+            disabled={isLoading}
+          >
+            <LinearGradient
+              colors={['rgba(0, 0, 0, 0.72)', 'rgba(0, 0, 0, 0.52)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.playButtonGradient}
             >
-              <LinearGradient
-                colors={['rgba(0, 0, 0, 0.72)', 'rgba(0, 0, 0, 0.52)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.playButtonGradient}
-              >
-                {isPlaying ? (
-                  <Pause size={isSmallScreen || compactMode ? 32 : isMediumScreen ? 38 : 44} color={colors.text} fill={colors.text} />
-                ) : (
-                  <View style={{ marginLeft: isSmallScreen || compactMode ? 4 : 5 }}>
-                    <Play size={isSmallScreen || compactMode ? 32 : isMediumScreen ? 38 : 44} color={colors.text} fill={colors.text} />
-                  </View>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
+              {isPlaying ? (
+                <Pause size={ultraCompactMode ? 24 : compactMode ? 28 : 34} color={colors.text} fill={colors.text} />
+              ) : (
+                <View style={{ marginLeft: ultraCompactMode ? 2 : 3 }}>
+                  <Play size={ultraCompactMode ? 24 : compactMode ? 28 : 34} color={colors.text} fill={colors.text} />
+                </View>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+
           <View style={[styles.liveIndicator, {
-            paddingHorizontal: isSmallScreen || compactMode ? 14 : 18,
-            paddingVertical: isSmallScreen || compactMode ? 6 : 8,
-            marginBottom: ultraCompactMode ? 6 : isSmallScreen || compactMode ? 8 : 12,
+            paddingHorizontal: ultraCompactMode ? 10 : compactMode ? 12 : 14,
+            paddingVertical: ultraCompactMode ? 4 : compactMode ? 5 : 6,
+            marginTop: ultraCompactMode ? 8 : compactMode ? 10 : 12,
           }]}>
             <View style={styles.liveDot} />
             <Text style={[styles.liveText, {
-              fontSize: isSmallScreen || compactMode ? 11 : 13,
+              fontSize: ultraCompactMode ? 9 : compactMode ? 10 : 11,
             }]}>LIVE</Text>
-            <Volume2 size={14} color={colors.textSecondary} />
+            <Volume2 size={ultraCompactMode ? 11 : 12} color={colors.textSecondary} />
           </View>
-          <View
-            style={[
-              styles.streamSelector,
-              {
-                marginBottom: ultraCompactMode ? 2 : isSmallScreen || compactMode ? 4 : 10,
-              },
-            ]}
-          >
-            <View style={{
-              flexDirection: 'row',
-              gap: isSmallScreen || compactMode ? 8 : 12,
-            }}>
+
+          <View style={[styles.streamSelector, {
+            marginTop: ultraCompactMode ? 8 : compactMode ? 10 : 12,
+          }]}>
+            <View style={styles.streamButtonsRow}>
               <TouchableOpacity
                 style={[
                   styles.streamButton,
                   {
-                    paddingHorizontal: isSmallScreen || compactMode ? 18 : 32,
-                    paddingVertical: isSmallScreen || compactMode ? 10 : 14,
+                    paddingHorizontal: ultraCompactMode ? 12 : compactMode ? 16 : 22,
+                    paddingVertical: ultraCompactMode ? 6 : compactMode ? 8 : 10,
                   },
                   currentStream === 'version1' && styles.streamButtonActive,
                 ]}
@@ -329,9 +305,7 @@ export default function PlayerScreen() {
                 <Text
                   style={[
                     styles.streamButtonText,
-                    {
-                      fontSize: isSmallScreen || compactMode ? 13 : 15,
-                    },
+                    { fontSize: ultraCompactMode ? 11 : compactMode ? 12 : 13 },
                     currentStream === 'version1' && styles.streamButtonTextActive,
                   ]}
                 >
@@ -342,8 +316,8 @@ export default function PlayerScreen() {
                 style={[
                   styles.streamButton,
                   {
-                    paddingHorizontal: isSmallScreen || compactMode ? 18 : 32,
-                    paddingVertical: isSmallScreen || compactMode ? 10 : 14,
+                    paddingHorizontal: ultraCompactMode ? 12 : compactMode ? 16 : 22,
+                    paddingVertical: ultraCompactMode ? 6 : compactMode ? 8 : 10,
                   },
                   currentStream === 'version2' && styles.streamButtonActive,
                 ]}
@@ -353,9 +327,7 @@ export default function PlayerScreen() {
                 <Text
                   style={[
                     styles.streamButtonText,
-                    {
-                      fontSize: isSmallScreen || compactMode ? 13 : 15,
-                    },
+                    { fontSize: ultraCompactMode ? 11 : compactMode ? 12 : 13 },
                     currentStream === 'version2' && styles.streamButtonTextActive,
                   ]}
                 >
@@ -366,7 +338,7 @@ export default function PlayerScreen() {
           </View>
 
           {error && (
-            <View style={[styles.errorContainer, { marginTop: isSmallScreen || compactMode ? 6 : 8 }]}>
+            <View style={[styles.errorContainer, { marginTop: 8 }]}>
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
@@ -383,17 +355,22 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
   },
   mainContent: {
-    flex: 1,
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 4,
+    justifyContent: 'center',
+  },
+  logoContainer: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   bottomSection: {
     alignItems: 'center',
-    paddingBottom: 4,
+    justifyContent: 'flex-start',
+  },
+  streamButtonsRow: {
+    flexDirection: 'row',
     gap: 8,
   },
   outerCircle: {
@@ -422,7 +399,7 @@ const styles = StyleSheet.create({
   },
   nowPlaying: {
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
   },
   nowPlayingLabel: {
     color: colors.textSecondary,
@@ -431,15 +408,12 @@ const styles = StyleSheet.create({
   songTitle: {
     fontWeight: '700' as const,
     color: colors.text,
-    marginBottom: 4,
+    marginBottom: 2,
     textAlign: 'center',
   },
   artist: {
     color: colors.textSecondary,
     textAlign: 'center',
-  },
-  controls: {
-    alignItems: 'center',
   },
   playButton: {
     overflow: 'hidden',
@@ -463,16 +437,16 @@ const styles = StyleSheet.create({
   liveIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    borderRadius: 20,
-    borderWidth: 2,
+    borderRadius: 16,
+    borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: colors.red,
   },
   liveText: {
@@ -481,27 +455,25 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   errorContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     backgroundColor: colors.error + '20',
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: colors.error,
   },
   errorText: {
-    fontSize: 14,
+    fontSize: 12,
     color: colors.error,
     textAlign: 'center',
   },
   streamSelector: {
     alignItems: 'center',
-    paddingHorizontal: 20,
-    width: '100%',
   },
   streamButton: {
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    borderRadius: 20,
-    borderWidth: 2,
+    borderRadius: 16,
+    borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   streamButtonActive: {
