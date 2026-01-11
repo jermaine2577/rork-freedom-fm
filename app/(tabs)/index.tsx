@@ -55,7 +55,6 @@ export default function PlayerScreen() {
   const availableHeight = Math.max(0, height - topPad - bottomPad);
 
   const contentHorizontalPadding = ultraCompactMode ? 14 : compactMode ? 16 : 20;
-  const contentGap = ultraCompactMode ? 4 : compactMode ? 6 : 8;
 
   const visualizerSize = clamp(
     Math.min(width * 0.38, availableHeight * (ultraCompactMode ? 0.19 : compactMode ? 0.215 : 0.235)),
@@ -139,238 +138,239 @@ export default function PlayerScreen() {
             paddingTop: topPad,
             paddingBottom: bottomPad,
             paddingHorizontal: contentHorizontalPadding,
-            gap: contentGap,
           },
         ]}
       >
-        <View style={{ width: '100%', alignItems: 'center', justifyContent: 'center' }}>
-          <Image
-            testID="radio-logo"
-            source={logoFailed ? require('../../assets/images/icon.png') : { uri: RADIO_LOGO_URI }}
-            onError={(e) => {
-              console.log('[Radio] Logo failed to render', { nativeEvent: e?.nativeEvent });
-              setLogoFailed(true);
-            }}
+        <View style={styles.mainContent}>
+          <View style={{ width: '100%', alignItems: 'center', justifyContent: 'center' }}>
+            <Image
+              testID="radio-logo"
+              source={logoFailed ? require('../../assets/images/icon.png') : { uri: RADIO_LOGO_URI }}
+              onError={(e) => {
+                console.log('[Radio] Logo failed to render', { nativeEvent: e?.nativeEvent });
+                setLogoFailed(true);
+              }}
+              style={{
+                width: logoWidth,
+                height: logoHeight,
+              }}
+              resizeMode="contain"
+            />
+          </View>
+          <View
             style={{
-              width: logoWidth,
-              height: logoHeight,
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: visualizerSize,
+              width: visualizerSize,
+              marginTop: logoToCircleSpacing,
             }}
-            resizeMode="contain"
-          />
+          >
+            
+            <Animated.View
+              style={[
+                styles.outerCircle,
+                {
+                  width: visualizerSize * 0.95,
+                  height: visualizerSize * 0.95,
+                  borderRadius: visualizerSize * 0.475,
+                  transform: [{ scale: pulseAnim }, { rotate }],
+                },
+              ]}
+            >
+              <View style={[styles.middleCircle, {
+                width: visualizerSize * 0.73,
+                height: visualizerSize * 0.73,
+                borderRadius: visualizerSize * 0.365,
+              }]}>
+                <View style={[styles.innerCircle, {
+                  width: visualizerSize * 0.51,
+                  height: visualizerSize * 0.51,
+                  borderRadius: visualizerSize * 0.255,
+                  borderWidth: isSmallScreen ? 2 : 3,
+                }]}>
+                  <Radio size={isSmallScreen ? 45 : isMediumScreen ? 52 : 60} color={colors.text} strokeWidth={1.5} />
+                </View>
+              </View>
+            </Animated.View>
+
+            {isPlaying && (
+              <>
+                <Animated.View
+                  style={[
+                    styles.waveRing,
+                    {
+                      width: visualizerSize * 0.95,
+                      height: visualizerSize * 0.95,
+                      borderRadius: visualizerSize * 0.475,
+                      borderWidth: isSmallScreen ? 2 : 3,
+                      transform: [{ scale: pulseAnim }],
+                      opacity: pulseAnim.interpolate({
+                        inputRange: [1, 1.15],
+                        outputRange: [0.3, 0],
+                      }),
+                    },
+                  ]}
+                />
+                <Animated.View
+                  style={[
+                    styles.waveRing,
+                    {
+                      width: visualizerSize * 1.1,
+                      height: visualizerSize * 1.1,
+                      borderRadius: visualizerSize * 0.55,
+                      borderWidth: isSmallScreen ? 2 : 3,
+                      transform: [
+                        {
+                          scale: pulseAnim.interpolate({
+                            inputRange: [1, 1.15],
+                            outputRange: [1.2, 1.35],
+                          }),
+                        },
+                      ],
+                      opacity: pulseAnim.interpolate({
+                        inputRange: [1, 1.15],
+                        outputRange: [0.2, 0],
+                      }),
+                    },
+                  ]}
+                />
+              </>
+            )}
+          </View>
+
+          <View style={[styles.nowPlaying, {
+            marginTop: ultraCompactMode ? 2 : isSmallScreen || compactMode ? 4 : 10,
+            marginBottom: ultraCompactMode ? 0 : isSmallScreen || compactMode ? 2 : 6,
+          }]}>
+            <Text style={[styles.nowPlayingLabel, {
+              fontSize: isSmallScreen || compactMode ? 9 : 11,
+              marginBottom: isSmallScreen || compactMode ? 2 : 4,
+            }]}>NOW PLAYING</Text>
+            <Text style={[styles.songTitle, {
+              fontSize: isSmallScreen || compactMode ? 18 : isMediumScreen ? 20 : 22,
+            }]}>Live Radio Stream</Text>
+            <Text style={[styles.artist, {
+              fontSize: isSmallScreen || compactMode ? 12 : 14,
+            }]}>World Class Radio At Its Very Best!</Text>
+          </View>
+
+          <View style={[styles.controls, {
+            marginVertical: ultraCompactMode ? 0 : isSmallScreen || compactMode ? 2 : 8,
+          }]}>
+            <TouchableOpacity
+              style={[
+                styles.playButton,
+                {
+                  width: ultraCompactMode ? 64 : isSmallScreen || compactMode ? 68 : isMediumScreen ? 80 : 90,
+                  height: ultraCompactMode ? 64 : isSmallScreen || compactMode ? 68 : isMediumScreen ? 80 : 90,
+                  borderRadius: ultraCompactMode ? 32 : isSmallScreen || compactMode ? 34 : isMediumScreen ? 40 : 45,
+                  borderWidth: ultraCompactMode ? 3 : isSmallScreen || compactMode ? 3 : 4,
+                },
+                isLoading && styles.playButtonLoading,
+              ]}
+              onPress={handlePlayPause}
+              disabled={isLoading}
+            >
+              <LinearGradient
+                colors={['rgba(0, 0, 0, 0.72)', 'rgba(0, 0, 0, 0.52)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.playButtonGradient}
+              >
+                {isPlaying ? (
+                  <Pause size={isSmallScreen || compactMode ? 32 : isMediumScreen ? 38 : 44} color={colors.text} fill={colors.text} />
+                ) : (
+                  <View style={{ marginLeft: isSmallScreen || compactMode ? 4 : 5 }}>
+                    <Play size={isSmallScreen || compactMode ? 32 : isMediumScreen ? 38 : 44} color={colors.text} fill={colors.text} />
+                  </View>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+
+          <View style={[styles.liveIndicator, {
+            paddingHorizontal: isSmallScreen || compactMode ? 14 : 18,
+            paddingVertical: isSmallScreen || compactMode ? 6 : 8,
+          }]}>
+            <View style={styles.liveDot} />
+            <Text style={[styles.liveText, {
+              fontSize: isSmallScreen || compactMode ? 11 : 13,
+            }]}>LIVE</Text>
+            <Volume2 size={14} color={colors.textSecondary} />
+          </View>
         </View>
-        <View
-          style={{
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: visualizerSize,
-            width: visualizerSize,
-            marginTop: logoToCircleSpacing,
-          }}
-        >
-          
-          <Animated.View
+
+        <View style={styles.bottomSection}>
+          <View
             style={[
-              styles.outerCircle,
+              styles.streamSelector,
               {
-                width: visualizerSize * 0.95,
-                height: visualizerSize * 0.95,
-                borderRadius: visualizerSize * 0.475,
-                transform: [{ scale: pulseAnim }, { rotate }],
+                marginBottom: ultraCompactMode ? 2 : isSmallScreen || compactMode ? 4 : 10,
               },
             ]}
           >
-            <View style={[styles.middleCircle, {
-              width: visualizerSize * 0.73,
-              height: visualizerSize * 0.73,
-              borderRadius: visualizerSize * 0.365,
-            }]}>
-              <View style={[styles.innerCircle, {
-                width: visualizerSize * 0.51,
-                height: visualizerSize * 0.51,
-                borderRadius: visualizerSize * 0.255,
-                borderWidth: isSmallScreen ? 2 : 3,
-              }]}>
-                <Radio size={isSmallScreen ? 45 : isMediumScreen ? 52 : 60} color={colors.text} strokeWidth={1.5} />
-              </View>
+            <View style={{
+              flexDirection: 'row',
+              gap: isSmallScreen || compactMode ? 8 : 12,
+            }}>
+              <TouchableOpacity
+                style={[
+                  styles.streamButton,
+                  {
+                    paddingHorizontal: isSmallScreen || compactMode ? 18 : 32,
+                    paddingVertical: isSmallScreen || compactMode ? 10 : 14,
+                  },
+                  currentStream === 'version1' && styles.streamButtonActive,
+                ]}
+                onPress={() => switchStream('version1')}
+                disabled={isLoading}
+              >
+                <Text
+                  style={[
+                    styles.streamButtonText,
+                    {
+                      fontSize: isSmallScreen || compactMode ? 13 : 15,
+                    },
+                    currentStream === 'version1' && styles.streamButtonTextActive,
+                  ]}
+                >
+                  Stream 1
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.streamButton,
+                  {
+                    paddingHorizontal: isSmallScreen || compactMode ? 18 : 32,
+                    paddingVertical: isSmallScreen || compactMode ? 10 : 14,
+                  },
+                  currentStream === 'version2' && styles.streamButtonActive,
+                ]}
+                onPress={() => switchStream('version2')}
+                disabled={isLoading}
+              >
+                <Text
+                  style={[
+                    styles.streamButtonText,
+                    {
+                      fontSize: isSmallScreen || compactMode ? 13 : 15,
+                    },
+                    currentStream === 'version2' && styles.streamButtonTextActive,
+                  ]}
+                >
+                  Stream 2
+                </Text>
+              </TouchableOpacity>
             </View>
-          </Animated.View>
+          </View>
 
-          {isPlaying && (
-            <>
-              <Animated.View
-                style={[
-                  styles.waveRing,
-                  {
-                    width: visualizerSize * 0.95,
-                    height: visualizerSize * 0.95,
-                    borderRadius: visualizerSize * 0.475,
-                    borderWidth: isSmallScreen ? 2 : 3,
-                    transform: [{ scale: pulseAnim }],
-                    opacity: pulseAnim.interpolate({
-                      inputRange: [1, 1.15],
-                      outputRange: [0.3, 0],
-                    }),
-                  },
-                ]}
-              />
-              <Animated.View
-                style={[
-                  styles.waveRing,
-                  {
-                    width: visualizerSize * 1.1,
-                    height: visualizerSize * 1.1,
-                    borderRadius: visualizerSize * 0.55,
-                    borderWidth: isSmallScreen ? 2 : 3,
-                    transform: [
-                      {
-                        scale: pulseAnim.interpolate({
-                          inputRange: [1, 1.15],
-                          outputRange: [1.2, 1.35],
-                        }),
-                      },
-                    ],
-                    opacity: pulseAnim.interpolate({
-                      inputRange: [1, 1.15],
-                      outputRange: [0.2, 0],
-                    }),
-                  },
-                ]}
-              />
-            </>
+          {error && (
+            <View style={[styles.errorContainer, { marginTop: isSmallScreen || compactMode ? 6 : 8 }]}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
           )}
         </View>
-
-        <View style={[styles.nowPlaying, {
-          marginTop: ultraCompactMode ? 2 : isSmallScreen || compactMode ? 4 : 10,
-          marginBottom: ultraCompactMode ? 0 : isSmallScreen || compactMode ? 2 : 6,
-        }]}>
-          <Text style={[styles.nowPlayingLabel, {
-            fontSize: isSmallScreen || compactMode ? 9 : 11,
-            marginBottom: isSmallScreen || compactMode ? 2 : 4,
-          }]}>NOW PLAYING</Text>
-          <Text style={[styles.songTitle, {
-            fontSize: isSmallScreen || compactMode ? 18 : isMediumScreen ? 20 : 22,
-          }]}>Live Radio Stream</Text>
-          <Text style={[styles.artist, {
-            fontSize: isSmallScreen || compactMode ? 12 : 14,
-          }]}>World Class Radio At Its Very Best!</Text>
-        </View>
-
-        <View style={[styles.controls, {
-          marginVertical: ultraCompactMode ? 0 : isSmallScreen || compactMode ? 2 : 8,
-        }]}>
-          <TouchableOpacity
-            style={[
-              styles.playButton,
-              {
-                width: ultraCompactMode ? 64 : isSmallScreen || compactMode ? 68 : isMediumScreen ? 80 : 90,
-                height: ultraCompactMode ? 64 : isSmallScreen || compactMode ? 68 : isMediumScreen ? 80 : 90,
-                borderRadius: ultraCompactMode ? 32 : isSmallScreen || compactMode ? 34 : isMediumScreen ? 40 : 45,
-                borderWidth: ultraCompactMode ? 3 : isSmallScreen || compactMode ? 3 : 4,
-              },
-              isLoading && styles.playButtonLoading,
-            ]}
-            onPress={handlePlayPause}
-            disabled={isLoading}
-          >
-            <LinearGradient
-              colors={['rgba(0, 0, 0, 0.72)', 'rgba(0, 0, 0, 0.52)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.playButtonGradient}
-            >
-              {isPlaying ? (
-                <Pause size={isSmallScreen || compactMode ? 32 : isMediumScreen ? 38 : 44} color={colors.text} fill={colors.text} />
-              ) : (
-                <View style={{ marginLeft: isSmallScreen || compactMode ? 4 : 5 }}>
-                  <Play size={isSmallScreen || compactMode ? 32 : isMediumScreen ? 38 : 44} color={colors.text} fill={colors.text} />
-                </View>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-
-        <View style={[styles.liveIndicator, {
-          paddingHorizontal: isSmallScreen || compactMode ? 14 : 18,
-          paddingVertical: isSmallScreen || compactMode ? 6 : 8,
-        }]}>
-          <View style={styles.liveDot} />
-          <Text style={[styles.liveText, {
-            fontSize: isSmallScreen || compactMode ? 11 : 13,
-          }]}>LIVE</Text>
-          <Volume2 size={14} color={colors.textSecondary} />
-        </View>
-
-        <View
-          style={[
-            styles.streamSelector,
-            {
-              marginTop: ultraCompactMode ? 4 : isSmallScreen || compactMode ? 6 : 14,
-              marginBottom: ultraCompactMode ? 2 : isSmallScreen || compactMode ? 4 : 10,
-              paddingBottom: ultraCompactMode ? 2 : 4,
-            },
-          ]}
-        >
-          <View style={{
-            flexDirection: 'row',
-            gap: isSmallScreen || compactMode ? 8 : 12,
-          }}>
-            <TouchableOpacity
-              style={[
-                styles.streamButton,
-                {
-                  paddingHorizontal: isSmallScreen || compactMode ? 18 : 32,
-                  paddingVertical: isSmallScreen || compactMode ? 10 : 14,
-                },
-                currentStream === 'version1' && styles.streamButtonActive,
-              ]}
-              onPress={() => switchStream('version1')}
-              disabled={isLoading}
-            >
-              <Text
-                style={[
-                  styles.streamButtonText,
-                  {
-                    fontSize: isSmallScreen || compactMode ? 13 : 15,
-                  },
-                  currentStream === 'version1' && styles.streamButtonTextActive,
-                ]}
-              >
-                Stream 1
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.streamButton,
-                {
-                  paddingHorizontal: isSmallScreen || compactMode ? 18 : 32,
-                  paddingVertical: isSmallScreen || compactMode ? 10 : 14,
-                },
-                currentStream === 'version2' && styles.streamButtonActive,
-              ]}
-              onPress={() => switchStream('version2')}
-              disabled={isLoading}
-            >
-              <Text
-                style={[
-                  styles.streamButtonText,
-                  {
-                    fontSize: isSmallScreen || compactMode ? 13 : 15,
-                  },
-                  currentStream === 'version2' && styles.streamButtonTextActive,
-                ]}
-              >
-                Stream 2
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {error && (
-          <View style={[styles.errorContainer, { marginTop: isSmallScreen || compactMode ? 6 : 8 }]}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        )}
       </View>
     </LinearGradient>
   );
@@ -382,10 +382,18 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    gap: 8,
+  },
+  mainContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  bottomSection: {
+    alignItems: 'center',
+    paddingBottom: 8,
   },
   outerCircle: {
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
