@@ -289,9 +289,13 @@ export default function PlayerScreen() {
             </TouchableOpacity>
           </View>
 
+        </View>
+
+        <View style={styles.bottomSection}>
           <View style={[styles.liveIndicator, {
             paddingHorizontal: isSmallScreen || compactMode ? 14 : 18,
             paddingVertical: isSmallScreen || compactMode ? 6 : 8,
+            marginBottom: ultraCompactMode ? 8 : isSmallScreen || compactMode ? 10 : 14,
           }]}>
             <View style={styles.liveDot} />
             <Text style={[styles.liveText, {
@@ -299,9 +303,6 @@ export default function PlayerScreen() {
             }]}>LIVE</Text>
             <Volume2 size={14} color={colors.textSecondary} />
           </View>
-        </View>
-
-        <View style={styles.bottomSection}>
           <View
             style={[
               styles.streamSelector,
