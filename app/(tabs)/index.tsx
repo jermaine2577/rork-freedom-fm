@@ -256,7 +256,8 @@ export default function PlayerScreen() {
           </View>
 
           <View style={[styles.controls, {
-            marginVertical: ultraCompactMode ? 0 : isSmallScreen || compactMode ? 2 : 8,
+            marginTop: ultraCompactMode ? 4 : isSmallScreen || compactMode ? 6 : 10,
+            marginBottom: ultraCompactMode ? 16 : isSmallScreen || compactMode ? 20 : 28,
           }]}>
             <TouchableOpacity
               style={[
@@ -295,7 +296,7 @@ export default function PlayerScreen() {
           <View style={[styles.liveIndicator, {
             paddingHorizontal: isSmallScreen || compactMode ? 14 : 18,
             paddingVertical: isSmallScreen || compactMode ? 6 : 8,
-            marginBottom: ultraCompactMode ? 8 : isSmallScreen || compactMode ? 10 : 14,
+            marginBottom: ultraCompactMode ? 6 : isSmallScreen || compactMode ? 8 : 12,
           }]}>
             <View style={styles.liveDot} />
             <Text style={[styles.liveText, {
@@ -389,12 +390,12 @@ const styles = StyleSheet.create({
   mainContent: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
+    justifyContent: 'flex-start',
+    gap: 4,
   },
   bottomSection: {
     alignItems: 'center',
-    paddingBottom: 8,
+    paddingBottom: 4,
   },
   outerCircle: {
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
