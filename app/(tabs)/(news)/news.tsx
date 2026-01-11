@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -198,6 +198,7 @@ const SkeletonCard = () => {
 export default function NewsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const hasInitialFetched = useRef(false);
   
   const { data: articles, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['wordpressNews'],
@@ -209,7 +210,21 @@ export default function NewsScreen() {
     refetchOnWindowFocus: true,
     refetchInterval: 60000,
     refetchIntervalInBackground: false,
+    networkMode: 'always',
   });
+
+  // Force refetch on Android after initial mount to ensure fresh data
+  useEffect(() => {
+    if (Platform.OS === 'android' && !hasInitialFetched.current) {
+      hasInitialFetched.current = true;
+      // Small delay to let the component mount, then force a fresh fetch
+      const timer = setTimeout(() => {
+        console.log('[NEWS] Android: Forcing initial refetch for fresh data');
+        refetch();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [refetch]);
 
   const [refreshing, setRefreshing] = useState(false);
 
