@@ -255,9 +255,11 @@ export default function PlayerScreen() {
             }]}>World Class Radio At Its Very Best!</Text>
           </View>
 
+        </View>
+
+        <View style={styles.bottomSection}>
           <View style={[styles.controls, {
-            marginTop: ultraCompactMode ? 4 : isSmallScreen || compactMode ? 6 : 10,
-            marginBottom: ultraCompactMode ? 16 : isSmallScreen || compactMode ? 20 : 28,
+            marginBottom: ultraCompactMode ? 12 : isSmallScreen || compactMode ? 16 : 24,
           }]}>
             <TouchableOpacity
               style={[
@@ -289,10 +291,6 @@ export default function PlayerScreen() {
               </LinearGradient>
             </TouchableOpacity>
           </View>
-
-        </View>
-
-        <View style={styles.bottomSection}>
           <View style={[styles.liveIndicator, {
             paddingHorizontal: isSmallScreen || compactMode ? 14 : 18,
             paddingVertical: isSmallScreen || compactMode ? 6 : 8,
@@ -396,6 +394,7 @@ const styles = StyleSheet.create({
   bottomSection: {
     alignItems: 'center',
     paddingBottom: 4,
+    gap: 8,
   },
   outerCircle: {
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
