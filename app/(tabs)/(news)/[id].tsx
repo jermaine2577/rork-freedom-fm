@@ -84,19 +84,52 @@ interface WordPressPost {
 }
 
 const decodeHtmlEntities = (text: string): string => {
-  return text
+  if (!text) return '';
+  
+  let decoded = text
+    // Handle double-encoded entities first
+    .replace(/&amp;amp;/g, '&amp;')
+    .replace(/&amp;#/g, '&#')
     .replace(/&#038;/g, '&')
+    // Standard HTML entities
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#039;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    // Smart quotes and dashes
     .replace(/&#8217;/g, "'")
+    .replace(/&#8216;/g, "'")
     .replace(/&#8220;/g, '"')
     .replace(/&#8221;/g, '"')
     .replace(/&#8211;/g, '–')
     .replace(/&#8212;/g, '—')
-    .replace(/&nbsp;/g, ' ');
+    .replace(/&#8230;/g, '…')
+    .replace(/&hellip;/g, '…')
+    .replace(/&ndash;/g, '–')
+    .replace(/&mdash;/g, '—')
+    .replace(/&lsquo;/g, "'")
+    .replace(/&rsquo;/g, "'")
+    .replace(/&ldquo;/g, '"')
+    .replace(/&rdquo;/g, '"')
+    .replace(/&nbsp;/g, ' ')
+    // Handle numeric entities
+    .replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)))
+    .replace(/&#x([a-fA-F0-9]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  
+  // Run again to catch any double-encoded entities
+  if (decoded.includes('&')) {
+    decoded = decoded
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#039;/g, "'");
+  }
+  
+  return decoded;
 };
 
 const fetchArticle = async (id: string): Promise<NewsArticle> => {
@@ -170,17 +203,21 @@ const fetchArticle = async (id: string): Promise<NewsArticle> => {
       throw new Error('Unable to parse article from server - invalid JSON format');
     }
 
+    const rawTitle = post.title?.rendered || '';
+    const rawExcerpt = post.excerpt?.rendered || '';
+    const rawCategory = post._embedded?.['wp:term']?.[0]?.[0]?.name || 'News';
+    
     return {
       id: post.id.toString(),
-      title: decodeHtmlEntities(post.title.rendered.replace(/<[^>]*>/g, '')),
-      excerpt: decodeHtmlEntities(post.excerpt.rendered.replace(/<[^>]*>/g, '').trim()),
-      content: post.content.rendered,
+      title: decodeHtmlEntities(rawTitle.replace(/<[^>]*>/g, '').trim()),
+      excerpt: decodeHtmlEntities(rawExcerpt.replace(/<[^>]*>/g, '').trim()),
+      content: post.content?.rendered || '',
       imageUrl:
         post._embedded?.['wp:featuredmedia']?.[0]?.source_url ||
         'https://via.placeholder.com/400x200',
-      category: post._embedded?.['wp:term']?.[0]?.[0]?.name || 'News',
-      date: post.date,
-      link: post.link,
+      category: decodeHtmlEntities(rawCategory),
+      date: post.date || new Date().toISOString(),
+      link: post.link || '',
     };
   } catch (error: any) {
     console.error('Error fetching article:', error);
@@ -206,7 +243,9 @@ const fetchArticle = async (id: string): Promise<NewsArticle> => {
 };
 
 const cleanHtmlContent = (html: string): string => {
-  return html
+  if (!html) return '';
+  
+  let cleaned = html
     .replace(/<p>/g, '\n')
     .replace(/<\/p>/g, '\n')
     .replace(/<br\s*\/?>/g, '\n')
@@ -214,19 +253,17 @@ const cleanHtmlContent = (html: string): string => {
     .replace(/<\/h[1-6]>/g, '\n\n')
     .replace(/<li>/g, '\n• ')
     .replace(/<\/li>/g, '')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#8217;/g, "'")
-    .replace(/&#8220;/g, '"')
-    .replace(/&#8221;/g, '"')
-    .replace(/&#8211;/g, '–')
-    .replace(/&#8212;/g, '—')
+    .replace(/<[^>]*>/g, '');
+  
+  // Apply HTML entity decoding
+  cleaned = decodeHtmlEntities(cleaned);
+  
+  // Clean up extra whitespace
+  cleaned = cleaned
     .replace(/\n\s*\n\s*\n/g, '\n\n')
     .trim();
+  
+  return cleaned;
 };
 
 export default function ArticleDetailScreen() {

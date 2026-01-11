@@ -14,16 +14,18 @@ const loadAudioModule = (): boolean => {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const ExpoAV = require('expo-av');
-    if (ExpoAV && ExpoAV.Audio) {
+    if (ExpoAV && ExpoAV.Audio && ExpoAV.Audio.Sound) {
       Audio = ExpoAV.Audio;
       InterruptionModeAndroid = ExpoAV.InterruptionModeAndroid;
       InterruptionModeIOS = ExpoAV.InterruptionModeIOS;
       audioModuleLoaded = true;
+      console.log('[Radio] Audio module loaded successfully');
       return true;
     }
+    console.warn('[Radio] Audio module structure invalid');
     return false;
   } catch (error) {
-    console.warn('expo-av not available:', error);
+    console.warn('[Radio] expo-av not available:', error);
     return false;
   }
 };
@@ -150,28 +152,41 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   }, []);
 
   const cleanupSound = useCallback(async () => {
-    if (!soundRef.current) return;
+    if (!soundRef.current) {
+      console.log('[Radio] No sound to cleanup');
+      return;
+    }
     
     try {
       const sound = soundRef.current;
       soundRef.current = null;
       
+      console.log('[Radio] Starting sound cleanup...');
+      
       try {
-        const status = await sound.getStatusAsync();
-        if (status && status.isLoaded) {
-          await sound.stopAsync().catch(() => {});
-          await sound.unloadAsync().catch(() => {});
+        if (typeof sound.getStatusAsync === 'function') {
+          const status = await sound.getStatusAsync();
+          if (status && status.isLoaded) {
+            if (typeof sound.stopAsync === 'function') {
+              await sound.stopAsync().catch((e: any) => console.warn('[Radio] stopAsync error:', e?.message));
+            }
+            if (typeof sound.unloadAsync === 'function') {
+              await sound.unloadAsync().catch((e: any) => console.warn('[Radio] unloadAsync error:', e?.message));
+            }
+          }
         }
       } catch {
         try {
-          await sound.unloadAsync();
-        } catch (unloadErr) {
-          console.warn('Final cleanup error:', unloadErr);
+          if (typeof sound.unloadAsync === 'function') {
+            await sound.unloadAsync();
+          }
+        } catch (unloadErr: any) {
+          console.warn('[Radio] Final cleanup error:', unloadErr?.message);
         }
       }
-      console.log('Sound cleanup completed');
-    } catch (e) {
-      console.warn('Error during sound cleanup:', e);
+      console.log('[Radio] Sound cleanup completed');
+    } catch (e: any) {
+      console.warn('[Radio] Error during sound cleanup:', e?.message);
       soundRef.current = null;
     }
   }, []);
@@ -183,8 +198,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       return;
     }
     
+    console.log('[Radio] Play requested, platform:', Platform.OS);
+    
     const moduleLoaded = loadAudioModule();
     if (!moduleLoaded || !Audio) {
+      console.error('[Radio] Audio module not loaded');
       setError('Audio module not available. Please restart the app.');
       setIsLoading(false);
       return;
@@ -196,6 +214,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       
       const audioSetupSuccess = await setupAudio();
       if (!audioSetupSuccess) {
+        console.error('[Radio] Audio setup failed');
         setError('Failed to initialize audio. Please restart the app.');
         setIsLoading(false);
         return;
@@ -204,20 +223,33 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       const streamToUse = streamVersion || currentStream;
       const streamUrl = STREAM_URLS[streamToUse];
       
-      console.log('Play requested...');
-      console.log('Stream URL:', streamUrl);
-      console.log('Stream Version:', streamToUse);
+      console.log('[Radio] Play requested...');
+      console.log('[Radio] Stream URL:', streamUrl);
+      console.log('[Radio] Stream Version:', streamToUse);
       
       await cleanupSound();
       
-      console.log('Creating new audio stream...');
+      // Small delay for Android to ensure cleanup is complete
+      if (Platform.OS === 'android') {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      console.log('[Radio] Creating new audio stream...');
       
       let newSound: any = null;
       
       try {
-        if (!Audio || !Audio.Sound || typeof Audio.Sound.createAsync !== 'function') {
+        if (!Audio || !Audio.Sound) {
           throw new Error('Audio.Sound not properly initialized');
         }
+        
+        // Verify createAsync exists
+        if (typeof Audio.Sound.createAsync !== 'function') {
+          console.error('[Radio] createAsync is not a function, Audio.Sound:', Audio.Sound);
+          throw new Error('Audio.Sound.createAsync not available');
+        }
+        
+        console.log('[Radio] Calling Audio.Sound.createAsync...');
         
         const result = await Audio.Sound.createAsync(
           { 
@@ -232,13 +264,15 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           onPlaybackStatusUpdate
         );
         
+        console.log('[Radio] createAsync completed, result:', !!result, 'sound:', !!result?.sound);
+        
         if (!result || !result.sound) {
           throw new Error('Failed to create sound object');
         }
         
         newSound = result.sound;
       } catch (createError: any) {
-        console.error('Error creating audio:', createError);
+        console.error('[Radio] Error creating audio:', createError?.message || createError);
         setError('Unable to load stream. Please check your connection and try again.');
         setIsLoading(false);
         return;
@@ -246,17 +280,19 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       
       soundRef.current = newSound;
       setCurrentStream(streamToUse);
-      console.log('New sound created successfully');
+      console.log('[Radio] New sound created successfully');
       
       try {
         if (newSound && typeof newSound.playAsync === 'function') {
+          console.log('[Radio] Calling playAsync...');
           await newSound.playAsync();
-          console.log('Playback started successfully');
+          console.log('[Radio] Playback started successfully');
         } else {
+          console.error('[Radio] playAsync not available, newSound:', !!newSound);
           throw new Error('playAsync not available on sound object');
         }
       } catch (playError: any) {
-        console.error('Error starting playback:', playError);
+        console.error('[Radio] Error starting playback:', playError?.message || playError);
         setError('Unable to start playback. Please try again.');
         await cleanupSound();
         setIsLoading(false);
@@ -266,27 +302,28 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       try {
         await updateNowPlaying(true);
       } catch (nowPlayingError) {
-        console.warn('Error updating now playing:', nowPlayingError);
+        console.warn('[Radio] Error updating now playing:', nowPlayingError);
       }
       
       try {
         if (newSound && typeof newSound.getStatusAsync === 'function') {
           const status = await newSound.getStatusAsync();
-          console.log('Sound status after creation:', {
+          console.log('[Radio] Sound status after creation:', {
             isLoaded: status?.isLoaded,
             isPlaying: status?.isLoaded && status?.isPlaying,
             volume: status?.isLoaded && status?.volume,
           });
         }
       } catch (statusError) {
-        console.warn('Error getting status:', statusError);
+        console.warn('[Radio] Error getting status:', statusError);
       }
       
     } catch (error: any) {
-      console.error('Error playing stream:', error);
-      console.error('Error details:', {
+      console.error('[Radio] Error playing stream:', error?.message || error);
+      console.error('[Radio] Error details:', {
         message: error?.message,
         code: error?.code,
+        name: error?.name,
       });
       setError('Unable to play stream. Please try again.');
       isPlayingRef.current = false;

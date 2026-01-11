@@ -40,18 +40,51 @@ const WORDPRESS_URL = 'https://freedomfm1065.com/wp-json/wp/v2/posts?_embed&per_
 const USE_MOCK_DATA = false;
 
 const decodeHtmlEntities = (text: string): string => {
-  return text
+  if (!text) return '';
+  
+  let decoded = text
+    // Handle double-encoded entities first (e.g., &amp;amp; -> &amp; -> &)
+    .replace(/&amp;amp;/g, '&amp;')
+    .replace(/&amp;#/g, '&#')
+    // Standard HTML entities
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#039;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    // Smart quotes and dashes
     .replace(/&#8217;/g, "'")
+    .replace(/&#8216;/g, "'")
     .replace(/&#8220;/g, '"')
     .replace(/&#8221;/g, '"')
     .replace(/&#8211;/g, '–')
     .replace(/&#8212;/g, '—')
-    .replace(/&nbsp;/g, ' ');
+    .replace(/&#8230;/g, '…')
+    .replace(/&hellip;/g, '…')
+    .replace(/&ndash;/g, '–')
+    .replace(/&mdash;/g, '—')
+    .replace(/&lsquo;/g, "'")
+    .replace(/&rsquo;/g, "'")
+    .replace(/&ldquo;/g, '"')
+    .replace(/&rdquo;/g, '"')
+    .replace(/&nbsp;/g, ' ')
+    // Handle numeric entities
+    .replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)))
+    .replace(/&#x([a-fA-F0-9]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  
+  // Run again to catch any double-encoded entities
+  if (decoded.includes('&')) {
+    decoded = decoded
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#039;/g, "'");
+  }
+  
+  return decoded;
 };
 
 const getMockData = async (): Promise<NewsArticle[]> => {
@@ -138,16 +171,22 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
     
     console.log('[NEWS] Successfully fetched', posts.length, 'posts');
     
-    return posts.map((post) => ({
-      id: post.id.toString(),
-      title: decodeHtmlEntities(post.title.rendered.replace(/<[^>]*>/g, '')),
-      excerpt: decodeHtmlEntities(post.excerpt.rendered.replace(/<[^>]*>/g, '').trim()),
-      content: post.content.rendered,
-      imageUrl: post._embedded?.['wp:featuredmedia']?.[0]?.source_url || 'https://via.placeholder.com/400x200',
-      category: post._embedded?.['wp:term']?.[0]?.[0]?.name || 'News',
-      date: post.date,
-      link: post.link,
-    }));
+    return posts.map((post) => {
+      const rawTitle = post.title?.rendered || '';
+      const rawExcerpt = post.excerpt?.rendered || '';
+      const rawCategory = post._embedded?.['wp:term']?.[0]?.[0]?.name || 'News';
+      
+      return {
+        id: post.id.toString(),
+        title: decodeHtmlEntities(rawTitle.replace(/<[^>]*>/g, '').trim()),
+        excerpt: decodeHtmlEntities(rawExcerpt.replace(/<[^>]*>/g, '').trim()),
+        content: post.content?.rendered || '',
+        imageUrl: post._embedded?.['wp:featuredmedia']?.[0]?.source_url || 'https://via.placeholder.com/400x200',
+        category: decodeHtmlEntities(rawCategory),
+        date: post.date || new Date().toISOString(),
+        link: post.link || '',
+      };
+    });
   } catch (error: any) {
     if (timeoutId) {
       clearTimeout(timeoutId);
@@ -221,10 +260,23 @@ export default function NewsScreen() {
       const timer = setTimeout(() => {
         console.log('[NEWS] Android: Forcing initial refetch for fresh data');
         refetch();
-      }, 100);
+      }, 300);
       return () => clearTimeout(timer);
     }
   }, [refetch]);
+
+  // Additional refetch when screen comes into focus for Android
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      const focusTimer = setTimeout(() => {
+        if (articles && articles.length === 0) {
+          console.log('[NEWS] Android: No articles, forcing refetch');
+          refetch();
+        }
+      }, 500);
+      return () => clearTimeout(focusTimer);
+    }
+  }, [articles, refetch]);
 
   const [refreshing, setRefreshing] = useState(false);
 
