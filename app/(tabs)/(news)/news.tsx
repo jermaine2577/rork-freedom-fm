@@ -42,46 +42,59 @@ const USE_MOCK_DATA = false;
 const decodeHtmlEntities = (text: string): string => {
   if (!text) return '';
   
-  let decoded = text
-    // Handle double-encoded entities first (e.g., &amp;amp; -> &amp; -> &)
-    .replace(/&amp;amp;/g, '&amp;')
-    .replace(/&amp;#/g, '&#')
-    // Standard HTML entities
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
-    .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'")
-    // Smart quotes and dashes
-    .replace(/&#8217;/g, "'")
-    .replace(/&#8216;/g, "'")
-    .replace(/&#8220;/g, '"')
-    .replace(/&#8221;/g, '"')
-    .replace(/&#8211;/g, '–')
-    .replace(/&#8212;/g, '—')
-    .replace(/&#8230;/g, '…')
-    .replace(/&hellip;/g, '…')
-    .replace(/&ndash;/g, '–')
-    .replace(/&mdash;/g, '—')
-    .replace(/&lsquo;/g, "'")
-    .replace(/&rsquo;/g, "'")
-    .replace(/&ldquo;/g, '"')
-    .replace(/&rdquo;/g, '"')
-    .replace(/&nbsp;/g, ' ')
-    // Handle numeric entities
-    .replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)))
-    .replace(/&#x([a-fA-F0-9]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
-  
-  // Run again to catch any double-encoded entities
-  if (decoded.includes('&')) {
-    decoded = decoded
+  const decodeOnce = (str: string): string => {
+    return str
+      // Handle triple and double-encoded ampersands first
+      .replace(/&amp;amp;amp;/g, '&')
+      .replace(/&amp;amp;/g, '&')
+      .replace(/&amp;#/g, '&#')
+      // WordPress specific encodings
+      .replace(/&#038;/g, '&')
+      .replace(/&#38;/g, '&')
+      // Standard HTML entities
       .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"')
-      .replace(/&#039;/g, "'");
+      .replace(/&#039;/g, "'")
+      .replace(/&#39;/g, "'")
+      .replace(/&apos;/g, "'")
+      // Smart quotes and dashes
+      .replace(/&#8217;/g, "'")
+      .replace(/&#8216;/g, "'")
+      .replace(/&#8220;/g, '"')
+      .replace(/&#8221;/g, '"')
+      .replace(/&#8211;/g, '–')
+      .replace(/&#8212;/g, '—')
+      .replace(/&#8230;/g, '…')
+      .replace(/&hellip;/g, '…')
+      .replace(/&ndash;/g, '–')
+      .replace(/&mdash;/g, '—')
+      .replace(/&lsquo;/g, "'")
+      .replace(/&rsquo;/g, "'")
+      .replace(/&ldquo;/g, '"')
+      .replace(/&rdquo;/g, '"')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&copy;/g, '©')
+      .replace(/&reg;/g, '®')
+      .replace(/&trade;/g, '™')
+      .replace(/&bull;/g, '•')
+      .replace(/&middot;/g, '·')
+      // Handle numeric entities
+      .replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)))
+      .replace(/&#x([a-fA-F0-9]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  };
+  
+  // Run multiple passes to catch multi-encoded entities
+  let decoded = text;
+  let previous = '';
+  let iterations = 0;
+  const maxIterations = 5;
+  
+  while (decoded !== previous && iterations < maxIterations) {
+    previous = decoded;
+    decoded = decodeOnce(decoded);
+    iterations++;
   }
   
   return decoded;
