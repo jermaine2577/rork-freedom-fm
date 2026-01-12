@@ -87,53 +87,110 @@ const decodeHtmlEntities = (text: string): string => {
   if (!text) return '';
   
   const decodeOnce = (str: string): string => {
-    return str
-      // Handle triple and double-encoded ampersands first
-      .replace(/&amp;amp;amp;/g, '&')
-      .replace(/&amp;amp;/g, '&')
-      .replace(/&amp;#/g, '&#')
-      // WordPress specific encodings
-      .replace(/&#038;/g, '&')
-      .replace(/&#38;/g, '&')
-      // Standard HTML entities
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#039;/g, "'")
-      .replace(/&#39;/g, "'")
-      .replace(/&apos;/g, "'")
-      // Smart quotes and dashes
-      .replace(/&#8217;/g, "'")
-      .replace(/&#8216;/g, "'")
-      .replace(/&#8220;/g, '"')
-      .replace(/&#8221;/g, '"')
-      .replace(/&#8211;/g, '–')
-      .replace(/&#8212;/g, '—')
-      .replace(/&#8230;/g, '…')
-      .replace(/&hellip;/g, '…')
-      .replace(/&ndash;/g, '–')
-      .replace(/&mdash;/g, '—')
-      .replace(/&lsquo;/g, "'")
-      .replace(/&rsquo;/g, "'")
-      .replace(/&ldquo;/g, '"')
-      .replace(/&rdquo;/g, '"')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&copy;/g, '©')
-      .replace(/&reg;/g, '®')
-      .replace(/&trade;/g, '™')
-      .replace(/&bull;/g, '•')
-      .replace(/&middot;/g, '·')
-      // Handle numeric entities
-      .replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)))
-      .replace(/&#x([a-fA-F0-9]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+    let result = str;
+    
+    // Handle URL-encoded ampersand first
+    result = result.replace(/%26/g, '&');
+    result = result.replace(/%23/g, '#');
+    
+    // Handle quadruple, triple and double-encoded ampersands
+    result = result.replace(/&amp;amp;amp;amp;/gi, '&');
+    result = result.replace(/&amp;amp;amp;/gi, '&');
+    result = result.replace(/&amp;amp;/gi, '&');
+    
+    // Handle double-encoded entities (e.g., &amp;nbsp; &amp;quot;)
+    result = result.replace(/&amp;nbsp;/gi, ' ');
+    result = result.replace(/&amp;quot;/gi, '"');
+    result = result.replace(/&amp;apos;/gi, "'");
+    result = result.replace(/&amp;lt;/gi, '<');
+    result = result.replace(/&amp;gt;/gi, '>');
+    result = result.replace(/&amp;#(\d+);/gi, '&#$1;');
+    result = result.replace(/&amp;#x([a-fA-F0-9]+);/gi, '&#x$1;');
+    
+    // WordPress specific encodings
+    result = result.replace(/&#038;/g, '&');
+    result = result.replace(/&#38;/g, '&');
+    result = result.replace(/&#0?38;/g, '&');
+    
+    // Standard HTML entities (case insensitive)
+    result = result.replace(/&amp;/gi, '&');
+    result = result.replace(/&lt;/gi, '<');
+    result = result.replace(/&gt;/gi, '>');
+    result = result.replace(/&quot;/gi, '"');
+    result = result.replace(/&#0?39;/g, "'");
+    result = result.replace(/&#039;/g, "'");
+    result = result.replace(/&apos;/gi, "'");
+    
+    // Smart quotes and typography
+    result = result.replace(/&#8217;/g, "'");
+    result = result.replace(/&#8216;/g, "'");
+    result = result.replace(/&#8220;/g, '"');
+    result = result.replace(/&#8221;/g, '"');
+    result = result.replace(/&#8211;/g, '–');
+    result = result.replace(/&#8212;/g, '—');
+    result = result.replace(/&#8230;/g, '…');
+    result = result.replace(/&#8218;/g, ',');
+    result = result.replace(/&#8222;/g, '„');
+    result = result.replace(/&#8242;/g, "'");
+    result = result.replace(/&#8243;/g, '"');
+    
+    // Named entities
+    result = result.replace(/&hellip;/gi, '…');
+    result = result.replace(/&ndash;/gi, '–');
+    result = result.replace(/&mdash;/gi, '—');
+    result = result.replace(/&lsquo;/gi, "'");
+    result = result.replace(/&rsquo;/gi, "'");
+    result = result.replace(/&ldquo;/gi, '"');
+    result = result.replace(/&rdquo;/gi, '"');
+    result = result.replace(/&nbsp;/gi, ' ');
+    result = result.replace(/&copy;/gi, '©');
+    result = result.replace(/&reg;/gi, '®');
+    result = result.replace(/&trade;/gi, '™');
+    result = result.replace(/&bull;/gi, '•');
+    result = result.replace(/&middot;/gi, '·');
+    result = result.replace(/&deg;/gi, '°');
+    result = result.replace(/&pound;/gi, '£');
+    result = result.replace(/&euro;/gi, '€');
+    result = result.replace(/&cent;/gi, '¢');
+    result = result.replace(/&yen;/gi, '¥');
+    result = result.replace(/&sect;/gi, '§');
+    result = result.replace(/&para;/gi, '¶');
+    result = result.replace(/&frac12;/gi, '½');
+    result = result.replace(/&frac14;/gi, '¼');
+    result = result.replace(/&frac34;/gi, '¾');
+    result = result.replace(/&times;/gi, '×');
+    result = result.replace(/&divide;/gi, '÷');
+    result = result.replace(/&plusmn;/gi, '±');
+    
+    // Handle numeric entities (decimal)
+    result = result.replace(/&#(\d+);/g, (_, num) => {
+      const code = parseInt(num, 10);
+      if (code > 0 && code < 65536) {
+        return String.fromCharCode(code);
+      }
+      return _;
+    });
+    
+    // Handle numeric entities (hex)
+    result = result.replace(/&#x([a-fA-F0-9]+);/gi, (_, hex) => {
+      const code = parseInt(hex, 16);
+      if (code > 0 && code < 65536) {
+        return String.fromCharCode(code);
+      }
+      return _;
+    });
+    
+    // Clean up any remaining artifacts
+    result = result.replace(/\u00A0/g, ' '); // Non-breaking space unicode
+    
+    return result;
   };
   
   // Run multiple passes to catch multi-encoded entities
   let decoded = text;
   let previous = '';
   let iterations = 0;
-  const maxIterations = 5;
+  const maxIterations = 8;
   
   while (decoded !== previous && iterations < maxIterations) {
     previous = decoded;
