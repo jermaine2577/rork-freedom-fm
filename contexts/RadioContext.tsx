@@ -32,10 +32,10 @@ const loadAudioModule = (): boolean => {
 
 const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/mobile.mp3';
 
-const STREAM_TIMEOUT = 15000;
-const BUFFER_TIMEOUT = 10000;
+const STREAM_TIMEOUT = 20000;
+const BUFFER_TIMEOUT = 15000;
 const MAX_RETRY_ATTEMPTS = 3;
-const HEALTH_CHECK_INTERVAL = 5000;
+const HEALTH_CHECK_INTERVAL = 15000;
 
 export const [RadioProvider, useRadio] = createContextHook(() => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -72,7 +72,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         allowsRecordingIOS: false,
         playsInSilentModeIOS: true,
         staysActiveInBackground: true,
-        shouldDuckAndroid: true,
+        shouldDuckAndroid: false,
         playThroughEarpieceAndroid: false,
       };
       
@@ -125,17 +125,13 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   }, []);
 
   const onPlaybackStatusUpdate = useCallback((status: any) => {
-    console.log('Playback status update:', {
-      isLoaded: status.isLoaded,
-      isPlaying: status.isPlaying,
-      isBuffering: status.isBuffering,
-      positionMillis: status.positionMillis,
-      error: status.error,
-    });
+    if (!status) return;
     
     if (status.isLoaded) {
       if (status.isPlaying) {
-        console.log('Audio is actively playing');
+        if (!isPlayingRef.current) {
+          console.log('[Radio] Audio started playing');
+        }
         isPlayingRef.current = true;
         setIsPlaying(true);
         setIsLoading(false);
@@ -144,20 +140,18 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         retryCountRef.current = 0;
         lastPlaybackTimeRef.current = Date.now();
       } else if (status.isBuffering) {
-        console.log('Audio is buffering...');
-        setIsLoading(true);
-        
-        clearBufferTimeout();
-        bufferTimeoutRef.current = setTimeout(() => {
-          console.log('[Radio] Buffer timeout - stream may be stuck');
-          if (isPlayingRef.current && !isRecoveringRef.current) {
-            console.log('[Radio] Attempting auto-recovery...');
-            isRecoveringRef.current = true;
-            setError('Stream buffering... Reconnecting...');
-          }
-        }, BUFFER_TIMEOUT);
+        if (!bufferTimeoutRef.current) {
+          console.log('[Radio] Audio is buffering...');
+          bufferTimeoutRef.current = setTimeout(() => {
+            console.log('[Radio] Buffer timeout - stream may be stuck');
+            if (isPlayingRef.current && !isRecoveringRef.current) {
+              console.log('[Radio] Attempting auto-recovery...');
+              isRecoveringRef.current = true;
+              setError('Stream buffering... Reconnecting...');
+            }
+          }, BUFFER_TIMEOUT);
+        }
       } else {
-        console.log('Audio loaded but not playing');
         if (!isSwitchingRef.current && !isRecoveringRef.current) {
           isPlayingRef.current = false;
           setIsPlaying(false);
@@ -166,7 +160,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         clearBufferTimeout();
       }
     } else if (status.error) {
-      console.error('Playback error:', status.error);
+      console.error('[Radio] Playback error:', status.error);
       setError('Playback error: ' + status.error);
       isPlayingRef.current = false;
       setIsPlaying(false);
@@ -273,18 +267,26 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         
         console.log('[Radio] Calling Audio.Sound.createAsync');
         
-        const createSoundPromise = Audio.Sound.createAsync(
-          { 
-            uri: STREAM_URL,
-          },
-          { 
+        const initialStatus: any = { 
             shouldPlay: false,
             volume: volume,
             isLooping: false,
-            progressUpdateIntervalMillis: 1000,
-          },
-          onPlaybackStatusUpdate
-        );
+            progressUpdateIntervalMillis: 5000,
+            rate: 1.0,
+            shouldCorrectPitch: false,
+          };
+          
+          if (Platform.OS === 'android') {
+            initialStatus.androidImplementation = 'MediaPlayer';
+          }
+          
+          const createSoundPromise = Audio.Sound.createAsync(
+            { 
+              uri: STREAM_URL,
+            },
+            initialStatus,
+            onPlaybackStatusUpdate
+          );
         
         const timeoutPromise = new Promise<null>((_, reject) => {
           setTimeout(() => {
@@ -372,21 +374,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           const status = await soundRef.current.getStatusAsync();
           const timeSinceLastPlayback = Date.now() - lastPlaybackTimeRef.current;
           
-          console.log('[Radio] Health check:', {
-            isLoaded: status?.isLoaded,
-            isPlaying: status?.isPlaying,
-            isBuffering: status?.isBuffering,
-            timeSinceLastPlayback,
-          });
-          
-          if (status?.isLoaded && !status?.isPlaying && !status?.isBuffering && isPlayingRef.current) {
+          if (status?.isLoaded && !status?.isPlaying && !status?.isBuffering && isPlayingRef.current && timeSinceLastPlayback > 20000) {
             console.log('[Radio] Stream appears stuck, attempting recovery...');
             if (retryCountRef.current < MAX_RETRY_ATTEMPTS) {
               retryCountRef.current++;
               isRecoveringRef.current = true;
               setError('Stream interrupted. Reconnecting...');
               await cleanupSound();
-              await new Promise(resolve => setTimeout(resolve, 500));
+              await new Promise(resolve => setTimeout(resolve, 1000));
               isRecoveringRef.current = false;
               play();
             } else {
