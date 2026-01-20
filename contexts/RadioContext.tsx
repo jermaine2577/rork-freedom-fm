@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
-import { Platform } from 'react-native';
+import { Platform, AppState, AppStateStatus } from 'react-native';
 
 let Audio: any = null;
 let InterruptionModeAndroid: any = null;
@@ -110,6 +110,74 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       if (soundRef.current) {
         soundRef.current.unloadAsync().catch((err: any) => console.error('Error unloading sound:', err));
       }
+    };
+  }, []);
+
+  // Sync playback state when app returns from background
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      console.log('[Radio] AppState changed to:', nextAppState);
+      
+      if (nextAppState === 'active') {
+        // App came back to foreground, check actual playback status
+        if (soundRef.current) {
+          try {
+            const status = await soundRef.current.getStatusAsync();
+            console.log('[Radio] Syncing state after app return:', {
+              isLoaded: status?.isLoaded,
+              isPlaying: status?.isPlaying,
+              currentIsPlaying: isPlayingRef.current,
+            });
+            
+            if (status && status.isLoaded) {
+              if (status.isPlaying) {
+                // Audio is still playing, ensure UI reflects this
+                if (!isPlayingRef.current) {
+                  console.log('[Radio] Audio playing but state was wrong, fixing...');
+                  isPlayingRef.current = true;
+                  setIsPlaying(true);
+                }
+                setIsLoading(false);
+                setError(null);
+              } else {
+                // Audio stopped while in background
+                console.log('[Radio] Audio stopped while in background');
+                isPlayingRef.current = false;
+                setIsPlaying(false);
+                setIsLoading(false);
+              }
+            } else {
+              // Sound was unloaded while in background
+              console.log('[Radio] Sound was unloaded while in background');
+              soundRef.current = null;
+              isPlayingRef.current = false;
+              setIsPlaying(false);
+              setIsLoading(false);
+            }
+          } catch (err) {
+            console.warn('[Radio] Error checking status on app return:', err);
+            // If we can't get status, assume sound is gone
+            soundRef.current = null;
+            isPlayingRef.current = false;
+            setIsPlaying(false);
+            setIsLoading(false);
+          }
+        } else if (isPlayingRef.current) {
+          // No sound object but state says playing - fix it
+          console.log('[Radio] No sound but state was playing, resetting...');
+          isPlayingRef.current = false;
+          setIsPlaying(false);
+          setIsLoading(false);
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    
+    return () => {
+      subscription.remove();
     };
   }, []);
 
