@@ -35,15 +35,15 @@ const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/
 const STREAM_TIMEOUT = 15000;
 
 export const [RadioProvider, useRadio] = createContextHook(() => {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [volume, setVolume] = useState(1.0);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [volume, setVolume] = useState<number>(1.0);
   const [error, setError] = useState<string | null>(null);
   
   const soundRef = useRef<any>(null);
-  const audioSetupRef = useRef(false);
-  const isPlayingRef = useRef(false);
-  const isSwitchingRef = useRef(false);
+  const audioSetupRef = useRef<boolean>(false);
+  const isPlayingRef = useRef<boolean>(false);
+  const isSwitchingRef = useRef<boolean>(false);
 
   const setupAudio = useCallback(async (): Promise<boolean> => {
     if (Platform.OS === 'web') {
@@ -382,8 +382,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       console.error('Error changing volume:', error);
     }
   }, []);
-
-  
 
   useEffect(() => {
     return () => {

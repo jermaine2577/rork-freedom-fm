@@ -307,6 +307,7 @@ const SkeletonCard = () => {
 export default function NewsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [refreshing, setRefreshing] = useState(false);
   const hasInitialFetched = useRef(false);
   
   const { data: articles, isLoading, error, refetch, isFetching } = useQuery({
@@ -347,8 +348,6 @@ export default function NewsScreen() {
       return () => clearTimeout(focusTimer);
     }
   }, [articles, refetch]);
-
-  const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
