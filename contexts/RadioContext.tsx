@@ -33,6 +33,9 @@ const loadAudioModule = (): boolean => {
 const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/mobile.mp3';
 
 const STREAM_TIMEOUT = 15000;
+const BUFFER_TIMEOUT = 10000;
+const MAX_RETRY_ATTEMPTS = 3;
+const HEALTH_CHECK_INTERVAL = 5000;
 
 export const [RadioProvider, useRadio] = createContextHook(() => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -44,6 +47,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   const audioSetupRef = useRef<boolean>(false);
   const isPlayingRef = useRef<boolean>(false);
   const isSwitchingRef = useRef<boolean>(false);
+  const bufferTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const healthCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const retryCountRef = useRef<number>(0);
+  const lastPlaybackTimeRef = useRef<number>(0);
+  const isRecoveringRef = useRef<boolean>(false);
 
   const setupAudio = useCallback(async (): Promise<boolean> => {
     if (Platform.OS === 'web') {
@@ -102,12 +110,26 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     }
   }, []);
 
+  const clearBufferTimeout = useCallback(() => {
+    if (bufferTimeoutRef.current) {
+      clearTimeout(bufferTimeoutRef.current);
+      bufferTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearHealthCheck = useCallback(() => {
+    if (healthCheckRef.current) {
+      clearInterval(healthCheckRef.current);
+      healthCheckRef.current = null;
+    }
+  }, []);
+
   const onPlaybackStatusUpdate = useCallback((status: any) => {
     console.log('Playback status update:', {
       isLoaded: status.isLoaded,
       isPlaying: status.isPlaying,
       isBuffering: status.isBuffering,
-      volume: status.volume,
+      positionMillis: status.positionMillis,
       error: status.error,
     });
     
@@ -118,16 +140,30 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         setIsPlaying(true);
         setIsLoading(false);
         setError(null);
+        clearBufferTimeout();
+        retryCountRef.current = 0;
+        lastPlaybackTimeRef.current = Date.now();
       } else if (status.isBuffering) {
         console.log('Audio is buffering...');
         setIsLoading(true);
+        
+        clearBufferTimeout();
+        bufferTimeoutRef.current = setTimeout(() => {
+          console.log('[Radio] Buffer timeout - stream may be stuck');
+          if (isPlayingRef.current && !isRecoveringRef.current) {
+            console.log('[Radio] Attempting auto-recovery...');
+            isRecoveringRef.current = true;
+            setError('Stream buffering... Reconnecting...');
+          }
+        }, BUFFER_TIMEOUT);
       } else {
         console.log('Audio loaded but not playing');
-        if (!isSwitchingRef.current) {
+        if (!isSwitchingRef.current && !isRecoveringRef.current) {
           isPlayingRef.current = false;
           setIsPlaying(false);
         }
         setIsLoading(false);
+        clearBufferTimeout();
       }
     } else if (status.error) {
       console.error('Playback error:', status.error);
@@ -135,10 +171,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       isPlayingRef.current = false;
       setIsPlaying(false);
       setIsLoading(false);
+      clearBufferTimeout();
     }
-  }, []);
+  }, [clearBufferTimeout]);
 
   const cleanupSound = useCallback(async () => {
+    clearBufferTimeout();
+    clearHealthCheck();
+    
     if (!soundRef.current) {
       console.log('[Radio] No sound to cleanup');
       return;
@@ -176,7 +216,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       console.warn('[Radio] Error during sound cleanup:', e?.message);
       soundRef.current = null;
     }
-  }, []);
+  }, [clearBufferTimeout, clearHealthCheck]);
 
   const play = useCallback(async () => {
     if (Platform.OS === 'web') {
@@ -321,6 +361,58 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         console.warn('[Radio] Error getting status:', statusError);
       }
       
+      clearHealthCheck();
+      healthCheckRef.current = setInterval(async () => {
+        if (!soundRef.current || !isPlayingRef.current) {
+          clearHealthCheck();
+          return;
+        }
+        
+        try {
+          const status = await soundRef.current.getStatusAsync();
+          const timeSinceLastPlayback = Date.now() - lastPlaybackTimeRef.current;
+          
+          console.log('[Radio] Health check:', {
+            isLoaded: status?.isLoaded,
+            isPlaying: status?.isPlaying,
+            isBuffering: status?.isBuffering,
+            timeSinceLastPlayback,
+          });
+          
+          if (status?.isLoaded && !status?.isPlaying && !status?.isBuffering && isPlayingRef.current) {
+            console.log('[Radio] Stream appears stuck, attempting recovery...');
+            if (retryCountRef.current < MAX_RETRY_ATTEMPTS) {
+              retryCountRef.current++;
+              isRecoveringRef.current = true;
+              setError('Stream interrupted. Reconnecting...');
+              await cleanupSound();
+              await new Promise(resolve => setTimeout(resolve, 500));
+              isRecoveringRef.current = false;
+              play();
+            } else {
+              console.log('[Radio] Max retry attempts reached');
+              setError('Stream unavailable. Please try again later.');
+              isPlayingRef.current = false;
+              setIsPlaying(false);
+              setIsLoading(false);
+              retryCountRef.current = 0;
+            }
+          } else if (status?.isPlaying) {
+            lastPlaybackTimeRef.current = Date.now();
+            retryCountRef.current = 0;
+            if (isRecoveringRef.current) {
+              isRecoveringRef.current = false;
+              setError(null);
+            }
+          }
+        } catch (healthErr) {
+          console.warn('[Radio] Health check error:', healthErr);
+        }
+      }, HEALTH_CHECK_INTERVAL);
+      
+      retryCountRef.current = 0;
+      isRecoveringRef.current = false;
+      
     } catch (error: any) {
       console.error('[Radio] Error playing stream:', error?.message || error);
       console.error('[Radio] Error details:', {
@@ -334,7 +426,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       await cleanupSound();
       setIsLoading(false);
     }
-  }, [setupAudio, onPlaybackStatusUpdate, volume, updateNowPlaying, cleanupSound]);
+  }, [setupAudio, onPlaybackStatusUpdate, volume, updateNowPlaying, cleanupSound, clearHealthCheck]);
 
   const pause = useCallback(async () => {
     try {
@@ -385,11 +477,13 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
   useEffect(() => {
     return () => {
+      clearBufferTimeout();
+      clearHealthCheck();
       if (soundRef.current) {
         soundRef.current.unloadAsync().catch((err: any) => console.error('Error unloading sound:', err));
       }
     };
-  }, []);
+  }, [clearBufferTimeout, clearHealthCheck]);
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
