@@ -39,11 +39,13 @@ const HEALTH_CHECK_INTERVAL = 10000;
 const STALE_CHECK_THRESHOLD = 30000;
 
 export const [RadioProvider, useRadio] = createContextHook(() => {
+  // All useState hooks first - MUST be in fixed order
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [volume, setVolume] = useState<number>(1.0);
   const [error, setError] = useState<string | null>(null);
   
+  // All useRef hooks - MUST be in fixed order
   const soundRef = useRef<any>(null);
   const audioSetupRef = useRef<boolean>(false);
   const isPlayingRef = useRef<boolean>(false);
@@ -55,7 +57,9 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   const isRecoveringRef = useRef<boolean>(false);
   const playFnRef = useRef<(() => Promise<void>) | undefined>(undefined);
   const cleanupFnRef = useRef<(() => Promise<void>) | undefined>(undefined);
+  const mountedRef = useRef<boolean>(true);
 
+  // All useCallback hooks - MUST be in fixed order
   const setupAudio = useCallback(async (): Promise<boolean> => {
     if (Platform.OS === 'web') {
       console.log('Audio not supported on web');
@@ -90,8 +94,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       audioSetupRef.current = true;
       console.log('Audio setup completed successfully');
       return true;
-    } catch (error) {
-      console.error('Error setting up audio:', error);
+    } catch (err) {
+      console.error('Error setting up audio:', err);
       audioSetupRef.current = false;
       return false;
     }
@@ -128,15 +132,17 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   }, []);
 
   const onPlaybackStatusUpdate = useCallback((status: any) => {
-    if (!status) return;
+    if (!status || !mountedRef.current) return;
     
     if (status.didJustFinish) {
       console.log('[Radio] Stream ended, attempting to reconnect...');
-      if (isPlayingRef.current && !isRecoveringRef.current) {
+      if (isPlayingRef.current && !isRecoveringRef.current && mountedRef.current) {
         isRecoveringRef.current = true;
         setTimeout(() => {
-          isRecoveringRef.current = false;
-          playFnRef.current?.();
+          if (mountedRef.current) {
+            isRecoveringRef.current = false;
+            playFnRef.current?.();
+          }
         }, 1000);
       }
       return;
@@ -148,31 +154,37 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           console.log('[Radio] Audio started playing');
         }
         isPlayingRef.current = true;
-        setIsPlaying(true);
-        setIsLoading(false);
-        setError(null);
+        if (mountedRef.current) {
+          setIsPlaying(true);
+          setIsLoading(false);
+          setError(null);
+        }
         clearBufferTimeout();
         retryCountRef.current = 0;
         lastPlaybackTimeRef.current = Date.now();
       } else if (status.isBuffering) {
-        setIsLoading(true);
+        if (mountedRef.current) {
+          setIsLoading(true);
+        }
         if (!bufferTimeoutRef.current) {
           console.log('[Radio] Audio is buffering...');
           bufferTimeoutRef.current = setTimeout(async () => {
             console.log('[Radio] Buffer timeout - attempting recovery...');
-            if (isPlayingRef.current && !isRecoveringRef.current) {
+            if (isPlayingRef.current && !isRecoveringRef.current && mountedRef.current) {
               console.log('[Radio] Attempting auto-recovery from buffer timeout...');
               isRecoveringRef.current = true;
               setError('Reconnecting...');
               await cleanupFnRef.current?.();
               await new Promise(resolve => setTimeout(resolve, 500));
-              isRecoveringRef.current = false;
-              playFnRef.current?.();
+              if (mountedRef.current) {
+                isRecoveringRef.current = false;
+                playFnRef.current?.();
+              }
             }
           }, BUFFER_TIMEOUT);
         }
       } else {
-        if (!isSwitchingRef.current && !isRecoveringRef.current) {
+        if (!isSwitchingRef.current && !isRecoveringRef.current && mountedRef.current) {
           isPlayingRef.current = false;
           setIsPlaying(false);
           setIsLoading(false);
@@ -181,10 +193,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       }
     } else if (status.error) {
       console.error('[Radio] Playback error:', status.error);
-      setError('Playback error: ' + status.error);
-      isPlayingRef.current = false;
-      setIsPlaying(false);
-      setIsLoading(false);
+      if (mountedRef.current) {
+        setError('Playback error: ' + status.error);
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+        setIsLoading(false);
+      }
       clearBufferTimeout();
     }
   }, [clearBufferTimeout]);
@@ -387,7 +401,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       
       clearHealthCheck();
       healthCheckRef.current = setInterval(async () => {
-        if (!soundRef.current || !isPlayingRef.current) {
+        if (!soundRef.current || !isPlayingRef.current || !mountedRef.current) {
           clearHealthCheck();
           return;
         }
@@ -398,15 +412,17 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           
           if (status?.isLoaded && !status?.isPlaying && !status?.isBuffering && isPlayingRef.current && timeSinceLastPlayback > STALE_CHECK_THRESHOLD) {
             console.log('[Radio] Stream appears stuck, attempting recovery...');
-            if (retryCountRef.current < MAX_RETRY_ATTEMPTS) {
+            if (retryCountRef.current < MAX_RETRY_ATTEMPTS && mountedRef.current) {
               retryCountRef.current++;
               isRecoveringRef.current = true;
               setError('Stream interrupted. Reconnecting...');
               await cleanupSound();
               await new Promise(resolve => setTimeout(resolve, 1000));
-              isRecoveringRef.current = false;
-              play();
-            } else {
+              if (mountedRef.current) {
+                isRecoveringRef.current = false;
+                playFnRef.current?.();
+              }
+            } else if (mountedRef.current) {
               console.log('[Radio] Max retry attempts reached');
               setError('Stream unavailable. Please try again later.');
               isPlayingRef.current = false;
@@ -414,7 +430,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
               setIsLoading(false);
               retryCountRef.current = 0;
             }
-          } else if (status?.isPlaying) {
+          } else if (status?.isPlaying && mountedRef.current) {
             lastPlaybackTimeRef.current = Date.now();
             retryCountRef.current = 0;
             if (isRecoveringRef.current) {
@@ -430,57 +446,75 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       retryCountRef.current = 0;
       isRecoveringRef.current = false;
       
-    } catch (error: any) {
-      console.error('[Radio] Error playing stream:', error?.message || error);
+    } catch (err: any) {
+      console.error('[Radio] Error playing stream:', err?.message || err);
       console.error('[Radio] Error details:', {
-        message: error?.message,
-        code: error?.code,
-        name: error?.name,
+        message: err?.message,
+        code: err?.code,
+        name: err?.name,
       });
-      setError('Unable to play stream. Please try again.');
-      isPlayingRef.current = false;
-      setIsPlaying(false);
+      if (mountedRef.current) {
+        setError('Unable to play stream. Please try again.');
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+        setIsLoading(false);
+      }
       await cleanupSound();
-      setIsLoading(false);
     }
   }, [setupAudio, onPlaybackStatusUpdate, volume, updateNowPlaying, cleanupSound, clearHealthCheck]);
 
+  // All useEffect hooks - MUST be in fixed order
   useEffect(() => {
+    mountedRef.current = true;
     playFnRef.current = play;
     cleanupFnRef.current = cleanupSound;
+    
+    return () => {
+      mountedRef.current = false;
+    };
   }, [play, cleanupSound]);
 
   const pause = useCallback(async () => {
     try {
       isPlayingRef.current = false;
-      setIsPlaying(false);
-      setError(null);
+      if (mountedRef.current) {
+        setIsPlaying(false);
+        setError(null);
+      }
       await cleanupSound();
-    } catch (error) {
-      console.error('Error pausing stream:', error);
+    } catch (err) {
+      console.error('Error pausing stream:', err);
       soundRef.current = null;
       isPlayingRef.current = false;
-      setIsPlaying(false);
+      if (mountedRef.current) {
+        setIsPlaying(false);
+      }
     }
   }, [cleanupSound]);
 
   const stop = useCallback(async () => {
     try {
       isPlayingRef.current = false;
-      setIsPlaying(false);
-      setError(null);
+      if (mountedRef.current) {
+        setIsPlaying(false);
+        setError(null);
+      }
       await cleanupSound();
-    } catch (error) {
-      console.error('Error stopping stream:', error);
+    } catch (err) {
+      console.error('Error stopping stream:', err);
       soundRef.current = null;
       isPlayingRef.current = false;
-      setIsPlaying(false);
+      if (mountedRef.current) {
+        setIsPlaying(false);
+      }
     }
   }, [cleanupSound]);
 
   const changeVolume = useCallback(async (newVolume: number) => {
     try {
-      setVolume(newVolume);
+      if (mountedRef.current) {
+        setVolume(newVolume);
+      }
       if (soundRef.current && typeof soundRef.current.getStatusAsync === 'function') {
         try {
           const status = await soundRef.current.getStatusAsync();
@@ -492,8 +526,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           console.warn('Could not set volume:', volumeError);
         }
       }
-    } catch (error) {
-      console.error('Error changing volume:', error);
+    } catch (err) {
+      console.error('Error changing volume:', err);
     }
   }, []);
 
@@ -511,6 +545,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     if (Platform.OS === 'web') return;
 
     const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      if (!mountedRef.current) return;
+      
       console.log('[Radio] AppState changed to:', nextAppState);
       
       if (nextAppState === 'active') {
@@ -522,6 +558,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
               isPlaying: status?.isPlaying,
               currentIsPlaying: isPlayingRef.current,
             });
+            
+            if (!mountedRef.current) return;
             
             if (status && status.isLoaded) {
               if (status.isPlaying) {
@@ -547,12 +585,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             }
           } catch (err) {
             console.warn('[Radio] Error checking status on app return:', err);
-            soundRef.current = null;
-            isPlayingRef.current = false;
-            setIsPlaying(false);
-            setIsLoading(false);
+            if (mountedRef.current) {
+              soundRef.current = null;
+              isPlayingRef.current = false;
+              setIsPlaying(false);
+              setIsLoading(false);
+            }
           }
-        } else if (isPlayingRef.current) {
+        } else if (isPlayingRef.current && mountedRef.current) {
           console.log('[Radio] No sound but state was playing, resetting...');
           isPlayingRef.current = false;
           setIsPlaying(false);
