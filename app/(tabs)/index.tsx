@@ -17,7 +17,7 @@ import colors from '@/constants/colors';
 const RADIO_LOGO_URI = 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/b3vamp0ku602q6ojiaqvd';
 
 export default function PlayerScreen() {
-  const { isPlaying, isLoading, error, play, pause, currentStream, switchStream } = useRadio();
+  const { isPlaying, isLoading, error, play, pause } = useRadio();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
@@ -286,56 +286,7 @@ export default function PlayerScreen() {
             <Volume2 size={ultraCompactMode ? 11 : 12} color={colors.textSecondary} />
           </View>
 
-          <View style={[styles.streamSelector, {
-            marginTop: ultraCompactMode ? 8 : compactMode ? 10 : 12,
-          }]}>
-            <View style={styles.streamButtonsRow}>
-              <TouchableOpacity
-                style={[
-                  styles.streamButton,
-                  {
-                    paddingHorizontal: ultraCompactMode ? 12 : compactMode ? 16 : 22,
-                    paddingVertical: ultraCompactMode ? 6 : compactMode ? 8 : 10,
-                  },
-                  currentStream === 'version1' && styles.streamButtonActive,
-                ]}
-                onPress={() => switchStream('version1')}
-                disabled={isLoading}
-              >
-                <Text
-                  style={[
-                    styles.streamButtonText,
-                    { fontSize: ultraCompactMode ? 11 : compactMode ? 12 : 13 },
-                    currentStream === 'version1' && styles.streamButtonTextActive,
-                  ]}
-                >
-                  Stream 1
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.streamButton,
-                  {
-                    paddingHorizontal: ultraCompactMode ? 12 : compactMode ? 16 : 22,
-                    paddingVertical: ultraCompactMode ? 6 : compactMode ? 8 : 10,
-                  },
-                  currentStream === 'version2' && styles.streamButtonActive,
-                ]}
-                onPress={() => switchStream('version2')}
-                disabled={isLoading}
-              >
-                <Text
-                  style={[
-                    styles.streamButtonText,
-                    { fontSize: ultraCompactMode ? 11 : compactMode ? 12 : 13 },
-                    currentStream === 'version2' && styles.streamButtonTextActive,
-                  ]}
-                >
-                  Stream 2
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          
 
           {error && (
             <View style={[styles.errorContainer, { marginTop: 8 }]}>
@@ -369,10 +320,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-start',
   },
-  streamButtonsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
+  
   outerCircle: {
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
     alignItems: 'center',
@@ -467,24 +415,5 @@ const styles = StyleSheet.create({
     color: colors.error,
     textAlign: 'center',
   },
-  streamSelector: {
-    alignItems: 'center',
-  },
-  streamButton: {
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  streamButtonActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderColor: colors.text,
-  },
-  streamButtonText: {
-    fontWeight: '600' as const,
-    color: colors.textSecondary,
-  },
-  streamButtonTextActive: {
-    color: colors.text,
-  },
+  
 });

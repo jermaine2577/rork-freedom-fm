@@ -30,21 +30,16 @@ const loadAudioModule = (): boolean => {
   }
 };
 
-const STREAM_URLS = {
-  version1: 'https://media.slactech.com:8012/stream',
-  version2: 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/mobile.mp3',
-} as const;
+const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/mobile.mp3';
 
 const STREAM_TIMEOUT = 15000;
-
-type StreamVersion = keyof typeof STREAM_URLS;
 
 export const [RadioProvider, useRadio] = createContextHook(() => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [volume, setVolume] = useState(1.0);
   const [error, setError] = useState<string | null>(null);
-  const [currentStream, setCurrentStream] = useState<StreamVersion>('version1');
+  
   const soundRef = useRef<any>(null);
   const audioSetupRef = useRef(false);
   const isPlayingRef = useRef(false);
@@ -183,7 +178,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     }
   }, []);
 
-  const play = useCallback(async (streamVersion?: StreamVersion) => {
+  const play = useCallback(async () => {
     if (Platform.OS === 'web') {
       setError('Audio playback is not supported on web. Please use the mobile app.');
       setIsLoading(false);
@@ -212,12 +207,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         return;
       }
       
-      const streamToUse = streamVersion || currentStream;
-      const streamUrl = STREAM_URLS[streamToUse];
-      
       console.log('[Radio] Play requested...');
-      console.log('[Radio] Stream URL:', streamUrl);
-      console.log('[Radio] Stream Version:', streamToUse);
+      console.log('[Radio] Stream URL:', STREAM_URL);
       
       await cleanupSound();
       
@@ -240,11 +231,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           throw new Error('Audio.Sound.createAsync not available');
         }
         
-        console.log('[Radio] Calling Audio.Sound.createAsync for stream:', streamToUse);
+        console.log('[Radio] Calling Audio.Sound.createAsync');
         
         const createSoundPromise = Audio.Sound.createAsync(
           { 
-            uri: streamUrl,
+            uri: STREAM_URL,
           },
           { 
             shouldPlay: false,
@@ -273,15 +264,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       } catch (createError: any) {
         console.error('[Radio] Error creating audio:', createError?.message || createError);
         const errorMsg = createError?.message?.includes('timed out')
-          ? `Stream ${streamToUse === 'version2' ? '2' : '1'} connection timed out. Please try again or switch to another stream.`
-          : `Unable to load Stream ${streamToUse === 'version2' ? '2' : '1'}. Please check your connection or try the other stream.`;
+          ? 'Stream connection timed out. Please try again.'
+          : 'Unable to load stream. Please check your connection.';
         setError(errorMsg);
         setIsLoading(false);
         return;
       }
       
       soundRef.current = newSound;
-      setCurrentStream(streamToUse);
       console.log('[Radio] New sound created successfully');
       
       try {
@@ -304,8 +294,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       } catch (playError: any) {
         console.error('[Radio] Error starting playback:', playError?.message || playError);
         const errorMsg = playError?.message?.includes('timed out')
-          ? `Stream ${streamToUse === 'version2' ? '2' : '1'} failed to start. Please try again or switch streams.`
-          : `Unable to start Stream ${streamToUse === 'version2' ? '2' : '1'}. Please try again.`;
+          ? 'Stream failed to start. Please try again.'
+          : 'Unable to start stream. Please try again.';
         setError(errorMsg);
         await cleanupSound();
         setIsLoading(false);
@@ -344,7 +334,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       await cleanupSound();
       setIsLoading(false);
     }
-  }, [setupAudio, onPlaybackStatusUpdate, currentStream, volume, updateNowPlaying, cleanupSound]);
+  }, [setupAudio, onPlaybackStatusUpdate, volume, updateNowPlaying, cleanupSound]);
 
   const pause = useCallback(async () => {
     try {
@@ -393,43 +383,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     }
   }, []);
 
-  const switchStream = useCallback(async (streamVersion: StreamVersion) => {
-    if (isSwitchingRef.current) {
-      console.log('Already switching, ignoring request');
-      return;
-    }
-    
-    try {
-      isSwitchingRef.current = true;
-      console.log('[Radio] Switching to stream:', streamVersion);
-      const wasPlaying = isPlayingRef.current;
-      
-      setIsLoading(true);
-      setError(null);
-      
-      isPlayingRef.current = false;
-      setIsPlaying(false);
-      
-      await cleanupSound();
-      
-      setCurrentStream(streamVersion);
-      
-      if (wasPlaying) {
-        await new Promise(resolve => setTimeout(resolve, 200));
-        await play(streamVersion);
-      } else {
-        setIsLoading(false);
-      }
-    } catch (error: any) {
-      console.error('[Radio] Error switching stream:', error?.message || error);
-      setError(`Failed to switch to Stream ${streamVersion === 'version2' ? '2' : '1'}. Please try again.`);
-      isPlayingRef.current = false;
-      setIsPlaying(false);
-      setIsLoading(false);
-    } finally {
-      isSwitchingRef.current = false;
-    }
-  }, [play, cleanupSound]);
+  
 
   useEffect(() => {
     return () => {
@@ -506,13 +460,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       isLoading,
       volume,
       error,
-      currentStream,
       play,
       pause,
       stop,
       changeVolume,
-      switchStream,
     }),
-    [isPlaying, isLoading, volume, error, currentStream, play, pause, stop, changeVolume, switchStream]
+    [isPlaying, isLoading, volume, error, play, pause, stop, changeVolume]
   );
 });
