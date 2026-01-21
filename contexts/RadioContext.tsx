@@ -550,7 +550,22 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       }, HEALTH_CHECK_INTERVAL);
       
       if (Platform.OS === 'android') {
-        clearAllTimers();
+        if (refs.current.androidKeepAlive) {
+          clearInterval(refs.current.androidKeepAlive);
+          refs.current.androidKeepAlive = null;
+        }
+        if (refs.current.androidWatchdog) {
+          clearInterval(refs.current.androidWatchdog);
+          refs.current.androidWatchdog = null;
+        }
+        if (refs.current.androidAudioRefresh) {
+          clearInterval(refs.current.androidAudioRefresh);
+          refs.current.androidAudioRefresh = null;
+        }
+        if (refs.current.androidStreamPing) {
+          clearInterval(refs.current.androidStreamPing);
+          refs.current.androidStreamPing = null;
+        }
         
         refs.current.lastDataReceived = Date.now();
         
