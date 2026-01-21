@@ -33,17 +33,13 @@ const loadAudioModule = (): boolean => {
 const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/mobile.mp3';
 
 const STREAM_TIMEOUT = 30000;
-const BUFFER_TIMEOUT = 30000;
-const BACKGROUND_BUFFER_TIMEOUT = 60000;
-const MAX_RETRY_ATTEMPTS = 10;
-const HEALTH_CHECK_INTERVAL = 5000;
-const STALE_CHECK_THRESHOLD = 30000;
-const ANDROID_KEEPALIVE_INTERVAL = 15000;
-const ANDROID_WATCHDOG_INTERVAL = 45000;
-const ANDROID_AUDIO_REFRESH_INTERVAL = 60000;
-const ANDROID_STREAM_PING_INTERVAL = 120000;
-const ANDROID_DATA_TIMEOUT = 180000;
-const ANDROID_BACKGROUND_CHECK_INTERVAL = 30000;
+const BUFFER_TIMEOUT = 45000;
+const BACKGROUND_BUFFER_TIMEOUT = 120000;
+const MAX_RETRY_ATTEMPTS = 15;
+const HEALTH_CHECK_INTERVAL = 10000;
+const STALE_CHECK_THRESHOLD = 60000;
+const ANDROID_KEEPALIVE_INTERVAL = 10000;
+const ANDROID_BACKGROUND_CHECK_INTERVAL = 20000;
 
 interface RadioRefs {
   mounted: boolean;
@@ -55,8 +51,6 @@ interface RadioRefs {
   healthCheck: ReturnType<typeof setInterval> | null;
   androidKeepAlive: ReturnType<typeof setInterval> | null;
   androidWatchdog: ReturnType<typeof setInterval> | null;
-  androidAudioRefresh: ReturnType<typeof setInterval> | null;
-  androidStreamPing: ReturnType<typeof setInterval> | null;
   androidBackgroundCheck: ReturnType<typeof setInterval> | null;
   lastKnownPosition: number;
   watchdogPosition: number;
@@ -89,8 +83,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     healthCheck: null,
     androidKeepAlive: null,
     androidWatchdog: null,
-    androidAudioRefresh: null,
-    androidStreamPing: null,
     androidBackgroundCheck: null,
     lastKnownPosition: 0,
     watchdogPosition: 0,
@@ -188,14 +180,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       refs.current.androidWatchdog = null;
     }
     refs.current.watchdogCheckCount = 0;
-    if (refs.current.androidAudioRefresh) {
-      clearInterval(refs.current.androidAudioRefresh);
-      refs.current.androidAudioRefresh = null;
-    }
-    if (refs.current.androidStreamPing) {
-      clearInterval(refs.current.androidStreamPing);
-      refs.current.androidStreamPing = null;
-    }
     if (refs.current.androidBackgroundCheck) {
       clearInterval(refs.current.androidBackgroundCheck);
       refs.current.androidBackgroundCheck = null;
@@ -411,9 +395,9 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             overrideFileExtensionAndroid: 'mp3',
           };
           
-          // Use MediaPlayer on Android for better streaming/background support
+          // Use SimpleExoPlayer on Android for better live streaming support
           if (Platform.OS === 'android') {
-            sourceConfig.androidImplementation = 'MediaPlayer';
+            sourceConfig.androidImplementation = 'SimpleExoPlayer';
           }
           
           const createSoundPromise = Audio.Sound.createAsync(
@@ -599,14 +583,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           clearInterval(refs.current.androidWatchdog);
           refs.current.androidWatchdog = null;
         }
-        if (refs.current.androidAudioRefresh) {
-          clearInterval(refs.current.androidAudioRefresh);
-          refs.current.androidAudioRefresh = null;
-        }
-        if (refs.current.androidStreamPing) {
-          clearInterval(refs.current.androidStreamPing);
-          refs.current.androidStreamPing = null;
-        }
         if (refs.current.androidBackgroundCheck) {
           clearInterval(refs.current.androidBackgroundCheck);
           refs.current.androidBackgroundCheck = null;
@@ -614,19 +590,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         
         refs.current.lastDataReceived = Date.now();
         
-        refs.current.androidAudioRefresh = setInterval(async () => {
-          if (!refs.current.sound || !refs.current.isPlaying || !refs.current.mounted) {
-            return;
-          }
-          
-          try {
-            console.log('[Radio] Android audio refresh - re-applying audio mode');
-            await configureAudioMode();
-          } catch (refreshErr) {
-            console.warn('[Radio] Android audio refresh error:', refreshErr);
-          }
-        }, ANDROID_AUDIO_REFRESH_INTERVAL);
-        
+        // Unified Android keep-alive - handles both foreground and background
         refs.current.androidKeepAlive = setInterval(async () => {
           if (!refs.current.sound || !refs.current.isPlaying || !refs.current.mounted) {
             return;
@@ -634,157 +598,96 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           
           try {
             const status = await refs.current.sound.getStatusAsync();
-            const currentPosition = status?.positionMillis || 0;
-            const timeSinceData = Date.now() - refs.current.lastDataReceived;
             const isBackground = refs.current.isInBackground;
             
             console.log('[Radio] Android keep-alive:', {
               isPlaying: status?.isPlaying,
               isBuffering: status?.isBuffering,
-              position: currentPosition,
+              position: status?.positionMillis || 0,
               background: isBackground,
-              timeSinceData: Math.round(timeSinceData / 1000) + 's',
             });
             
             if (status?.isLoaded) {
-              if (status?.isPlaying) {
+              if (status?.isPlaying || status?.isBuffering) {
+                // Stream is active - update last data time
                 refs.current.lastDataReceived = Date.now();
-                refs.current.lastKnownPosition = currentPosition;
                 refs.current.positionStuckCount = 0;
-              } else if (status?.isBuffering) {
-                refs.current.lastDataReceived = Date.now();
-                console.log('[Radio] Android keep-alive: buffering, allowing time...');
-              } else if (!status?.isPlaying && !status?.isBuffering && refs.current.isPlaying && !refs.current.isRecovering) {
-                console.log('[Radio] Android keep-alive: stream stopped, attempting restart...');
+              } else if (refs.current.isPlaying && !refs.current.isRecovering) {
+                // Stream stopped but should be playing - try to restart
+                console.log('[Radio] Android: Stream stopped, attempting restart...');
                 
                 try {
                   await configureAudioMode();
                   await refs.current.sound.playAsync();
                   
-                  await new Promise(resolve => setTimeout(resolve, 3000));
+                  // Wait and check if it worked
+                  await new Promise(resolve => setTimeout(resolve, 2000));
                   const newStatus = await refs.current.sound.getStatusAsync();
                   
-                  if (!newStatus?.isPlaying && !newStatus?.isBuffering && refs.current.mounted) {
-                    console.log('[Radio] Android keep-alive: restart failed, full reconnect...');
+                  if (newStatus?.isPlaying || newStatus?.isBuffering) {
+                    console.log('[Radio] Android: Restart successful');
+                    refs.current.lastDataReceived = Date.now();
+                  } else if (refs.current.mounted && !refs.current.isRecovering) {
+                    console.log('[Radio] Android: Restart failed, full reconnect...');
                     refs.current.isRecovering = true;
                     await cleanupSound();
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await new Promise(resolve => setTimeout(resolve, 500));
                     if (refs.current.mounted) {
                       refs.current.isRecovering = false;
                       refs.current.playFn?.();
                     }
                   }
                 } catch (playErr) {
-                  console.warn('[Radio] Android keep-alive play error:', playErr);
+                  console.warn('[Radio] Android restart error:', playErr);
+                  if (refs.current.mounted && !refs.current.isRecovering) {
+                    refs.current.isRecovering = true;
+                    await cleanupSound();
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    if (refs.current.mounted) {
+                      refs.current.isRecovering = false;
+                      refs.current.playFn?.();
+                    }
+                  }
                 }
+              }
+            } else if (refs.current.isPlaying && !refs.current.isRecovering) {
+              // Sound unloaded - full reconnect
+              console.log('[Radio] Android: Sound unloaded, reconnecting...');
+              refs.current.isRecovering = true;
+              await cleanupSound();
+              await new Promise(resolve => setTimeout(resolve, 500));
+              if (refs.current.mounted) {
+                refs.current.isRecovering = false;
+                refs.current.playFn?.();
               }
             }
           } catch (keepAliveErr) {
             console.warn('[Radio] Android keep-alive error:', keepAliveErr);
+            // On error, try full reconnect if we should be playing
+            if (refs.current.isPlaying && !refs.current.isRecovering && refs.current.mounted) {
+              refs.current.isRecovering = true;
+              await cleanupSound();
+              await new Promise(resolve => setTimeout(resolve, 500));
+              if (refs.current.mounted) {
+                refs.current.isRecovering = false;
+                refs.current.playFn?.();
+              }
+            }
           }
         }, ANDROID_KEEPALIVE_INTERVAL);
         
-        refs.current.androidWatchdog = setInterval(async () => {
-          if (!refs.current.sound || !refs.current.isPlaying || !refs.current.mounted) {
-            return;
-          }
-          
-          try {
-            const status = await refs.current.sound.getStatusAsync();
-            const timeSinceData = Date.now() - refs.current.lastDataReceived;
-            
-            console.log('[Radio] Android watchdog:', {
-              isLoaded: status?.isLoaded,
-              isPlaying: status?.isPlaying,
-              isBuffering: status?.isBuffering,
-              timeSinceData: Math.round(timeSinceData / 1000) + 's',
-            });
-            
-            if (!status?.isLoaded && refs.current.isPlaying && !refs.current.isRecovering) {
-              console.log('[Radio] Android watchdog: sound unloaded, reconnecting...');
-              refs.current.isRecovering = true;
-              await cleanupSound();
-              await new Promise(resolve => setTimeout(resolve, 1000));
-              if (refs.current.mounted) {
-                refs.current.isRecovering = false;
-                refs.current.playFn?.();
-              }
-            } else if (status?.isLoaded && !status?.isPlaying && !status?.isBuffering && refs.current.isPlaying && !refs.current.isRecovering && timeSinceData > STALE_CHECK_THRESHOLD) {
-              console.log('[Radio] Android watchdog: stream stale, reconnecting...');
-              refs.current.isRecovering = true;
-              await cleanupSound();
-              await new Promise(resolve => setTimeout(resolve, 1000));
-              if (refs.current.mounted) {
-                refs.current.isRecovering = false;
-                refs.current.playFn?.();
-              }
-            }
-          } catch (watchdogErr) {
-            console.warn('[Radio] Android watchdog error:', watchdogErr);
-          }
-        }, ANDROID_WATCHDOG_INTERVAL);
-        
-        refs.current.androidStreamPing = setInterval(async () => {
-          if (!refs.current.sound || !refs.current.isPlaying || !refs.current.mounted) {
-            return;
-          }
-          
-          const timeSinceData = Date.now() - refs.current.lastDataReceived;
-          console.log('[Radio] Android stream ping - time since data:', Math.round(timeSinceData / 1000) + 's');
-          
-          if (timeSinceData > ANDROID_DATA_TIMEOUT && !refs.current.isRecovering) {
-            console.log('[Radio] Android stream ping: No data for too long, reconnecting...');
-            refs.current.isRecovering = true;
-            setError('Stream timeout. Reconnecting...');
-            await cleanupSound();
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            if (refs.current.mounted) {
-              refs.current.isRecovering = false;
-              refs.current.playFn?.();
-            }
-            return;
-          }
-          
-          try {
-            await configureAudioMode();
-          } catch (pingErr) {
-            console.warn('[Radio] Android stream ping error:', pingErr);
-          }
-        }, ANDROID_STREAM_PING_INTERVAL);
-        
+        // Periodic audio mode refresh for Android background
         refs.current.androidBackgroundCheck = setInterval(async () => {
-          if (!refs.current.sound || !refs.current.isPlaying || !refs.current.mounted || !refs.current.isInBackground) {
+          if (!refs.current.sound || !refs.current.isPlaying || !refs.current.mounted) {
             return;
           }
           
           try {
-            const status = await refs.current.sound.getStatusAsync();
-            console.log('[Radio] Android background check:', {
-              isLoaded: status?.isLoaded,
-              isPlaying: status?.isPlaying,
-              isBuffering: status?.isBuffering,
-            });
-            
-            if (status?.isLoaded) {
-              if (status?.isPlaying || status?.isBuffering) {
-                refs.current.lastDataReceived = Date.now();
-              } else if (!refs.current.isRecovering) {
-                console.log('[Radio] Android background: stream stopped, restarting...');
-                await configureAudioMode();
-                await refs.current.sound.playAsync();
-              }
-            } else if (!refs.current.isRecovering) {
-              console.log('[Radio] Android background: stream unloaded, reconnecting...');
-              refs.current.isRecovering = true;
-              await cleanupSound();
-              await new Promise(resolve => setTimeout(resolve, 1000));
-              if (refs.current.mounted) {
-                refs.current.isRecovering = false;
-                refs.current.playFn?.();
-              }
-            }
-          } catch (bgErr) {
-            console.warn('[Radio] Android background check error:', bgErr);
+            // Re-apply audio mode periodically to maintain background playback
+            await configureAudioMode();
+            console.log('[Radio] Android: Audio mode refreshed');
+          } catch (refreshErr) {
+            console.warn('[Radio] Android audio mode refresh error:', refreshErr);
           }
         }, ANDROID_BACKGROUND_CHECK_INTERVAL);
       }
