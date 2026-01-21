@@ -38,10 +38,11 @@ const BACKGROUND_BUFFER_TIMEOUT = 180000; // 3 minutes for background buffering
 const MAX_RETRY_ATTEMPTS = 30; // More retries for long sessions
 const HEALTH_CHECK_INTERVAL = 30000; // Check every 30s instead of 10s
 const STALE_CHECK_THRESHOLD = 120000; // 2 minutes before considering stale
-const ANDROID_KEEPALIVE_INTERVAL = 30000; // Check every 30s for stability
-const ANDROID_BACKGROUND_CHECK_INTERVAL = 60000; // Refresh audio mode every minute
+const ANDROID_KEEPALIVE_INTERVAL = 15000; // Check every 15s for better responsiveness
+const ANDROID_BACKGROUND_CHECK_INTERVAL = 30000; // Refresh audio mode every 30s for foreground-like behavior
 const ANDROID_LONG_SESSION_THRESHOLD = 300000; // 5 minutes = long session
-const ANDROID_LONG_SESSION_CHECK_INTERVAL = 60000; // Check every minute in long sessions
+const ANDROID_LONG_SESSION_CHECK_INTERVAL = 30000; // Check every 30s in long sessions
+const ANDROID_FOREGROUND_PING_INTERVAL = 10000; // Ping audio every 10s to keep it alive
 
 interface RadioRefs {
   mounted: boolean;
@@ -56,6 +57,7 @@ interface RadioRefs {
   androidWatchdog: ReturnType<typeof setInterval> | null;
   androidBackgroundCheck: ReturnType<typeof setInterval> | null;
   androidLongSessionCheck: ReturnType<typeof setInterval> | null;
+  androidForegroundPing: ReturnType<typeof setInterval> | null;
   lastKnownPosition: number;
   watchdogPosition: number;
   watchdogCheckCount: number;
@@ -71,6 +73,7 @@ interface RadioRefs {
   backgroundBufferRetries: number;
   sessionStartTime: number;
   isLongSession: boolean;
+  audioFocusCount: number;
 }
 
 export const [RadioProvider, useRadio] = createContextHook(() => {
@@ -92,6 +95,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     androidWatchdog: null,
     androidBackgroundCheck: null,
     androidLongSessionCheck: null,
+    androidForegroundPing: null,
     lastKnownPosition: 0,
     watchdogPosition: 0,
     watchdogCheckCount: 0,
@@ -107,18 +111,21 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     backgroundBufferRetries: 0,
     sessionStartTime: 0,
     isLongSession: false,
+    audioFocusCount: 0,
   });
 
-  const configureAudioMode = useCallback(async (): Promise<boolean> => {
+  const configureAudioMode = useCallback(async (forceRefresh: boolean = false): Promise<boolean> => {
     const moduleLoaded = loadAudioModule();
     if (!moduleLoaded || !Audio) return false;
     
     try {
+      // Android foreground service-like audio configuration
+      // These settings help keep audio playing even when app is in background
       const audioModeConfig: any = {
         allowsRecordingIOS: false,
         playsInSilentModeIOS: true,
-        staysActiveInBackground: true,
-        shouldDuckAndroid: false,
+        staysActiveInBackground: true, // Critical for background playback
+        shouldDuckAndroid: false, // Don't lower volume for other apps
         playThroughEarpieceAndroid: false,
       };
       
@@ -126,16 +133,23 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         audioModeConfig.interruptionModeIOS = InterruptionModeIOS.DoNotMix;
       }
       if (InterruptionModeAndroid) {
+        // DoNotMix keeps our audio as priority
         audioModeConfig.interruptionModeAndroid = InterruptionModeAndroid.DoNotMix;
       }
       
       await Audio.setAudioModeAsync(audioModeConfig);
+      
+      if (Platform.OS === 'android') {
+        refs.current.audioFocusCount++;
+        console.log('[Radio] Android audio mode configured (focus count:', refs.current.audioFocusCount, ')', forceRefresh ? '(forced)' : '');
+      }
+      
       return true;
     } catch (err) {
       console.warn('[Radio] Error configuring audio mode:', err);
       return false;
     }
-  }, []);
+  }, [refs]);
 
   const setupAudio = useCallback(async (): Promise<boolean> => {
     if (Platform.OS === 'web') {
@@ -198,6 +212,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     if (refs.current.androidLongSessionCheck) {
       clearInterval(refs.current.androidLongSessionCheck);
       refs.current.androidLongSessionCheck = null;
+    }
+    if (refs.current.androidForegroundPing) {
+      clearInterval(refs.current.androidForegroundPing);
+      refs.current.androidForegroundPing = null;
     }
     refs.current.isLongSession = false;
     refs.current.sessionStartTime = 0;
@@ -870,6 +888,43 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             }
           }
         }, ANDROID_LONG_SESSION_CHECK_INTERVAL);
+        
+        // Android foreground ping - keeps audio session alive by periodically checking/refreshing
+        // This simulates foreground service behavior by maintaining active audio focus
+        refs.current.androidForegroundPing = setInterval(async () => {
+          if (!refs.current.sound || !refs.current.isPlaying || !refs.current.mounted) {
+            return;
+          }
+          
+          try {
+            const status = await refs.current.sound.getStatusAsync();
+            
+            if (status?.isLoaded) {
+              // Touch the audio session to keep it alive
+              if (status?.isPlaying) {
+                // Audio is playing - just log silently in background
+                if (!refs.current.isInBackground) {
+                  console.log('[Radio] Android foreground ping: active');
+                }
+              } else if (status?.isBuffering) {
+                // Buffering is okay, just wait
+                console.log('[Radio] Android foreground ping: buffering');
+              } else if (refs.current.isPlaying && !refs.current.isRecovering) {
+                // Should be playing but isn't - wake it up
+                console.log('[Radio] Android foreground ping: waking up audio...');
+                await configureAudioMode(true);
+                await refs.current.sound.playAsync();
+              }
+              
+              // Update progress interval to keep audio session aware
+              if (typeof refs.current.sound.setProgressUpdateIntervalAsync === 'function') {
+                await refs.current.sound.setProgressUpdateIntervalAsync(1000);
+              }
+            }
+          } catch (pingErr) {
+            console.warn('[Radio] Android foreground ping error:', pingErr);
+          }
+        }, ANDROID_FOREGROUND_PING_INTERVAL);
       }
       
       refs.current.retryCount = 0;
