@@ -33,13 +33,15 @@ const loadAudioModule = (): boolean => {
 const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/mobile.mp3';
 
 const STREAM_TIMEOUT = 30000;
-const BUFFER_TIMEOUT = 45000;
-const BACKGROUND_BUFFER_TIMEOUT = 120000;
-const MAX_RETRY_ATTEMPTS = 15;
-const HEALTH_CHECK_INTERVAL = 10000;
-const STALE_CHECK_THRESHOLD = 60000;
-const ANDROID_KEEPALIVE_INTERVAL = 10000;
-const ANDROID_BACKGROUND_CHECK_INTERVAL = 20000;
+const BUFFER_TIMEOUT = 60000;
+const BACKGROUND_BUFFER_TIMEOUT = 180000; // 3 minutes for background buffering
+const MAX_RETRY_ATTEMPTS = 30; // More retries for long sessions
+const HEALTH_CHECK_INTERVAL = 30000; // Check every 30s instead of 10s
+const STALE_CHECK_THRESHOLD = 120000; // 2 minutes before considering stale
+const ANDROID_KEEPALIVE_INTERVAL = 30000; // Check every 30s for stability
+const ANDROID_BACKGROUND_CHECK_INTERVAL = 60000; // Refresh audio mode every minute
+const ANDROID_LONG_SESSION_THRESHOLD = 300000; // 5 minutes = long session
+const ANDROID_LONG_SESSION_CHECK_INTERVAL = 60000; // Check every minute in long sessions
 
 interface RadioRefs {
   mounted: boolean;
@@ -53,6 +55,7 @@ interface RadioRefs {
   androidKeepAlive: ReturnType<typeof setInterval> | null;
   androidWatchdog: ReturnType<typeof setInterval> | null;
   androidBackgroundCheck: ReturnType<typeof setInterval> | null;
+  androidLongSessionCheck: ReturnType<typeof setInterval> | null;
   lastKnownPosition: number;
   watchdogPosition: number;
   watchdogCheckCount: number;
@@ -66,6 +69,8 @@ interface RadioRefs {
   lastDataReceived: number;
   isInBackground: boolean;
   backgroundBufferRetries: number;
+  sessionStartTime: number;
+  isLongSession: boolean;
 }
 
 export const [RadioProvider, useRadio] = createContextHook(() => {
@@ -86,6 +91,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     androidKeepAlive: null,
     androidWatchdog: null,
     androidBackgroundCheck: null,
+    androidLongSessionCheck: null,
     lastKnownPosition: 0,
     watchdogPosition: 0,
     watchdogCheckCount: 0,
@@ -99,6 +105,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     lastDataReceived: Date.now(),
     isInBackground: false,
     backgroundBufferRetries: 0,
+    sessionStartTime: 0,
+    isLongSession: false,
   });
 
   const configureAudioMode = useCallback(async (): Promise<boolean> => {
@@ -187,6 +195,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       clearInterval(refs.current.androidBackgroundCheck);
       refs.current.androidBackgroundCheck = null;
     }
+    if (refs.current.androidLongSessionCheck) {
+      clearInterval(refs.current.androidLongSessionCheck);
+      refs.current.androidLongSessionCheck = null;
+    }
+    refs.current.isLongSession = false;
+    refs.current.sessionStartTime = 0;
   }, [refs]);
 
   const onPlaybackStatusUpdate = useCallback((status: any) => {
@@ -559,6 +573,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       
       refs.current.sound = newSound;
       refs.current.lastDataReceived = Date.now();
+      refs.current.sessionStartTime = Date.now();
+      refs.current.isLongSession = false;
       console.log('[Radio] New sound created successfully');
       
       console.log('[Radio] Stream created with shouldPlay: true, waiting for playback confirmation...');
@@ -636,8 +652,9 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
               refs.current.positionStuckCount++;
               console.log('[Radio] Position stuck count:', refs.current.positionStuckCount, 'at position:', currentPosition);
               
-              // Increase threshold for live streams - require 5 consecutive stuck checks
-              if (refs.current.positionStuckCount >= 5) {
+              // Increase threshold for live streams - require more checks for long sessions
+              const stuckThreshold = refs.current.isLongSession ? 10 : 6;
+              if (refs.current.positionStuckCount >= stuckThreshold) {
                 console.log('[Radio] Stream position stuck, forcing recovery...');
                 refs.current.positionStuckCount = 0;
                 if (refs.current.retryCount < MAX_RETRY_ATTEMPTS && refs.current.mounted) {
@@ -816,6 +833,43 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             console.warn('[Radio] Android audio mode refresh error:', refreshErr);
           }
         }, ANDROID_BACKGROUND_CHECK_INTERVAL);
+        
+        // Long session monitor - detects 2+ hour sessions and adjusts behavior
+        refs.current.androidLongSessionCheck = setInterval(async () => {
+          if (!refs.current.sound || !refs.current.isPlaying || !refs.current.mounted) {
+            return;
+          }
+          
+          const sessionDuration = Date.now() - refs.current.sessionStartTime;
+          
+          // Mark as long session after 5 minutes of continuous playback
+          if (sessionDuration > ANDROID_LONG_SESSION_THRESHOLD && !refs.current.isLongSession) {
+            refs.current.isLongSession = true;
+            console.log('[Radio] Android: Entering long session mode after', Math.round(sessionDuration / 60000), 'minutes');
+          }
+          
+          // Log session duration periodically for long sessions
+          if (refs.current.isLongSession) {
+            const hours = Math.floor(sessionDuration / 3600000);
+            const minutes = Math.floor((sessionDuration % 3600000) / 60000);
+            console.log('[Radio] Android long session:', hours, 'h', minutes, 'm - stream stable');
+            
+            // Refresh audio mode more gently in long sessions
+            try {
+              const status = await refs.current.sound.getStatusAsync();
+              if (status?.isLoaded && (status?.isPlaying || status?.isBuffering)) {
+                refs.current.lastDataReceived = Date.now();
+                // Only refresh audio mode if needed, not every check
+                if (sessionDuration % 300000 < ANDROID_LONG_SESSION_CHECK_INTERVAL) {
+                  await configureAudioMode();
+                  console.log('[Radio] Android long session: Audio mode maintained');
+                }
+              }
+            } catch (err) {
+              console.warn('[Radio] Android long session check error:', err);
+            }
+          }
+        }, ANDROID_LONG_SESSION_CHECK_INTERVAL);
       }
       
       refs.current.retryCount = 0;
