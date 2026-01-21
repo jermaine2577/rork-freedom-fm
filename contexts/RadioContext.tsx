@@ -491,11 +491,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           const currentPosition = status?.positionMillis || 0;
           
           if (status?.isLoaded && status?.isPlaying) {
-            if (currentPosition === refs.current.lastPosition && currentPosition > 0) {
+            // For live streams, position might stay low while buffering - this is normal
+            // Only consider stuck if NOT buffering and position hasn't moved
+            if (!status?.isBuffering && currentPosition === refs.current.lastPosition && currentPosition > 0) {
               refs.current.positionStuckCount++;
               console.log('[Radio] Position stuck count:', refs.current.positionStuckCount, 'at position:', currentPosition);
               
-              if (refs.current.positionStuckCount >= 3) {
+              // Increase threshold for live streams - require 5 consecutive stuck checks
+              if (refs.current.positionStuckCount >= 5) {
                 console.log('[Radio] Stream position stuck, forcing recovery...');
                 refs.current.positionStuckCount = 0;
                 if (refs.current.retryCount < MAX_RETRY_ATTEMPTS && refs.current.mounted) {
@@ -512,7 +515,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
                 return;
               }
             } else {
-              refs.current.positionStuckCount = 0;
+              // Reset stuck count - either position changed, buffering, or position is 0
+              if (currentPosition !== refs.current.lastPosition || status?.isBuffering) {
+                refs.current.positionStuckCount = 0;
+              }
               refs.current.lastPosition = currentPosition;
               refs.current.lastDataReceived = Date.now();
             }
@@ -523,6 +529,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
               refs.current.isRecovering = false;
               setError(null);
             }
+          } else if (status?.isLoaded && status?.isBuffering) {
+            // Buffering is normal for live streams, just update data timestamp
+            refs.current.lastDataReceived = Date.now();
+            refs.current.positionStuckCount = 0;
           } else if (status?.isLoaded && !status?.isPlaying && !status?.isBuffering && refs.current.isPlaying && timeSinceLastPlayback > STALE_CHECK_THRESHOLD) {
             console.log('[Radio] Stream appears stuck, attempting recovery...');
             if (refs.current.retryCount < MAX_RETRY_ATTEMPTS && refs.current.mounted) {
@@ -605,12 +615,15 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             });
             
             if (status?.isLoaded) {
-              if (status?.isPlaying) {
+              if (status?.isPlaying || status?.isBuffering) {
+                // Stream is active - either playing or buffering
+                refs.current.lastDataReceived = Date.now();
+                
                 if (currentPosition > refs.current.lastKnownPosition) {
                   refs.current.lastKnownPosition = currentPosition;
-                  refs.current.lastDataReceived = Date.now();
-                } else if (currentPosition === refs.current.lastKnownPosition && currentPosition > 0) {
-                  console.log('[Radio] Android keep-alive: position not advancing, triggering full reconnect...');
+                } else if (!status?.isBuffering && currentPosition === refs.current.lastKnownPosition && currentPosition > 0 && timeSinceData > 30000) {
+                  // Only reconnect if NOT buffering, position stuck, AND no data for 30+ seconds
+                  console.log('[Radio] Android keep-alive: position stuck for 30s without buffering, reconnecting...');
                   if (!refs.current.isRecovering && refs.current.mounted) {
                     refs.current.isRecovering = true;
                     setError('Reconnecting stream...');
