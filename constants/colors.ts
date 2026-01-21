@@ -6,6 +6,7 @@ const colors = {
   yellow: '#FEDD00',
   red: '#D52B1E',
   orange: '#FF8C00',
+  gold: '#FFC107',
   gradientStart: '#078930',
   gradientMiddle: '#FEDD00',
   gradientEnd: '#D52B1E',
