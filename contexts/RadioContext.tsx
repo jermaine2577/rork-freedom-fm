@@ -838,26 +838,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     }
   }, [setupAudio, configureAudioMode, onPlaybackStatusUpdate, volume, updateNowPlaying, cleanupSound, playWeb, refs]);
 
-  useEffect(() => {
-    refs.current.playFn = play;
-    refs.current.cleanupFn = cleanupSound;
-  }, [play, cleanupSound]);
-
-  useEffect(() => {
-    if (Platform.OS === 'web') return;
-    setupAudio().catch((e) => {
-      console.warn('[Radio] Initial audio setup failed:', e);
-    });
-  }, [setupAudio]);
-  
-  useEffect(() => {
-    const currentRefs = refs.current;
-    currentRefs.mounted = true;
-    return () => {
-      currentRefs.mounted = false;
-    };
-  }, []);
-
   const pause = useCallback(async () => {
     try {
       refs.current.isPlaying = false;
@@ -921,6 +901,26 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       console.error('Error changing volume:', err);
     }
   }, [refs]);
+
+  useEffect(() => {
+    refs.current.playFn = play;
+    refs.current.cleanupFn = cleanupSound;
+  }, [play, cleanupSound]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    setupAudio().catch((e) => {
+      console.warn('[Radio] Initial audio setup failed:', e);
+    });
+  }, [setupAudio]);
+  
+  useEffect(() => {
+    const currentRefs = refs.current;
+    currentRefs.mounted = true;
+    return () => {
+      currentRefs.mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const currentRefs = refs.current;
