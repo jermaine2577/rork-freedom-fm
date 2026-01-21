@@ -8,10 +8,11 @@ import {
   Dimensions,
   Image,
   Platform,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play, Pause, Volume2, Radio } from 'lucide-react-native';
+import { Play, Pause, Volume2, Radio, Info, X } from 'lucide-react-native';
 import { useRadio } from '@/contexts/RadioContext';
 import colors from '@/constants/colors';
 
@@ -30,6 +31,7 @@ export default function PlayerScreen() {
   });
 
   const [logoFailed, setLogoFailed] = useState<boolean>(false);
+  const [showBatteryTip, setShowBatteryTip] = useState<boolean>(false);
   
 
   useEffect(() => {
@@ -298,8 +300,79 @@ export default function PlayerScreen() {
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
+
+          {Platform.OS === 'android' && (
+            <TouchableOpacity
+              style={styles.batteryTipButton}
+              onPress={() => setShowBatteryTip(true)}
+              activeOpacity={0.7}
+            >
+              <Info size={12} color={colors.textSecondary} />
+              <Text style={styles.batteryTipText}>Stream keeps stopping?</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
+
+      <Modal
+        visible={showBatteryTip}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowBatteryTip(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <TouchableOpacity
+              style={styles.modalClose}
+              onPress={() => setShowBatteryTip(false)}
+            >
+              <X size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+            
+            <Text style={styles.modalTitle}>Battery Optimization</Text>
+            <Text style={styles.modalSubtitle}>
+              To keep streaming without interruption:
+            </Text>
+            
+            <View style={styles.stepsList}>
+              <View style={styles.stepItem}>
+                <View style={styles.stepNumber}>
+                  <Text style={styles.stepNumberText}>1</Text>
+                </View>
+                <Text style={styles.stepText}>Tap and hold the Freedom FM app icon</Text>
+              </View>
+              
+              <View style={styles.stepItem}>
+                <View style={styles.stepNumber}>
+                  <Text style={styles.stepNumberText}>2</Text>
+                </View>
+                <Text style={styles.stepText}>Go to App Info</Text>
+              </View>
+              
+              <View style={styles.stepItem}>
+                <View style={styles.stepNumber}>
+                  <Text style={styles.stepNumberText}>3</Text>
+                </View>
+                <Text style={styles.stepText}>Go to Battery / Battery Usage</Text>
+              </View>
+              
+              <View style={styles.stepItem}>
+                <View style={styles.stepNumber}>
+                  <Text style={styles.stepNumberText}>4</Text>
+                </View>
+                <Text style={styles.stepText}>Tap on Unrestricted</Text>
+              </View>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => setShowBatteryTip(false)}
+            >
+              <Text style={styles.modalButtonText}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -420,5 +493,92 @@ const styles = StyleSheet.create({
     color: colors.error,
     textAlign: 'center',
   },
-  
+  batteryTipButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 12,
+  },
+  batteryTipText: {
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  modalClose: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    padding: 4,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  stepsList: {
+    gap: 14,
+    marginBottom: 24,
+  },
+  stepItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  stepNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepNumberText: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: colors.text,
+  },
+  stepText: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 20,
+  },
+  modalButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: colors.text,
+  },
 });
