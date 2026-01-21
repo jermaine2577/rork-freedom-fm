@@ -743,6 +743,54 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       
       console.log('[Radio] AppState changed to:', nextAppState);
       
+      if (Platform.OS === 'android' && (nextAppState === 'background' || nextAppState === 'inactive')) {
+        console.log('[Radio] Android entering background/inactive, ensuring audio continues...');
+        
+        try {
+          const moduleLoaded = loadAudioModule();
+          if (moduleLoaded && Audio) {
+            const audioModeConfig: any = {
+              allowsRecordingIOS: false,
+              playsInSilentModeIOS: true,
+              staysActiveInBackground: true,
+              shouldDuckAndroid: false,
+              playThroughEarpieceAndroid: false,
+            };
+            
+            if (InterruptionModeIOS) {
+              audioModeConfig.interruptionModeIOS = InterruptionModeIOS.DoNotMix;
+            }
+            if (InterruptionModeAndroid) {
+              audioModeConfig.interruptionModeAndroid = InterruptionModeAndroid.DoNotMix;
+            }
+            
+            await Audio.setAudioModeAsync(audioModeConfig);
+            console.log('[Radio] Android background audio mode re-configured');
+          }
+        } catch (bgErr) {
+          console.warn('[Radio] Error configuring background audio:', bgErr);
+        }
+        
+        if (soundRef.current && isPlayingRef.current) {
+          try {
+            const status = await soundRef.current.getStatusAsync();
+            console.log('[Radio] Android background status check:', {
+              isLoaded: status?.isLoaded,
+              isPlaying: status?.isPlaying,
+            });
+            
+            if (status?.isLoaded && !status?.isPlaying) {
+              console.log('[Radio] Android: Audio paused in background, restarting...');
+              await soundRef.current.playAsync();
+            }
+          } catch (statusErr) {
+            console.warn('[Radio] Error checking status in background:', statusErr);
+          }
+        }
+        
+        return;
+      }
+      
       if (nextAppState === 'active') {
         if (Platform.OS === 'android') {
           try {
