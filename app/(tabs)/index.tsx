@@ -7,14 +7,17 @@ import {
   Animated,
   Dimensions,
   Image,
+  Platform,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play, Pause, Volume2, Radio } from 'lucide-react-native';
+import { Play, Pause, Volume2, Radio, Globe } from 'lucide-react-native';
 import { useRadio } from '@/contexts/RadioContext';
 import colors from '@/constants/colors';
 
 const RADIO_LOGO_URI = 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/b3vamp0ku602q6ojiaqvd';
+const BROWSER_STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/mobile.mp3';
 
 export default function PlayerScreen() {
   const { isPlaying, isLoading, error, play, pause } = useRadio();
@@ -101,6 +104,12 @@ export default function PlayerScreen() {
     } else {
       play();
     }
+  };
+
+  const handleOpenInBrowser = () => {
+    Linking.openURL(BROWSER_STREAM_URL).catch((err) => {
+      console.error('[Radio] Failed to open browser:', err);
+    });
   };
 
   const logoHeight = clamp(
@@ -286,7 +295,22 @@ export default function PlayerScreen() {
             <Volume2 size={ultraCompactMode ? 11 : 12} color={colors.textSecondary} />
           </View>
 
-          
+          {Platform.OS === 'android' && (
+            <TouchableOpacity
+              style={[styles.browserButton, {
+                marginTop: ultraCompactMode ? 10 : compactMode ? 12 : 14,
+                paddingHorizontal: ultraCompactMode ? 12 : compactMode ? 14 : 16,
+                paddingVertical: ultraCompactMode ? 8 : compactMode ? 10 : 12,
+              }]}
+              onPress={handleOpenInBrowser}
+              activeOpacity={0.7}
+            >
+              <Globe size={ultraCompactMode ? 14 : 16} color={colors.text} />
+              <Text style={[styles.browserButtonText, {
+                fontSize: ultraCompactMode ? 11 : compactMode ? 12 : 13,
+              }]}>Listen in Browser</Text>
+            </TouchableOpacity>
+          )}
 
           {error && (
             <View style={[styles.errorContainer, { marginTop: 8 }]}>
@@ -415,5 +439,17 @@ const styles = StyleSheet.create({
     color: colors.error,
     textAlign: 'center',
   },
-  
+  browserButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  browserButtonText: {
+    color: colors.text,
+    fontWeight: '500' as const,
+  },
 });
