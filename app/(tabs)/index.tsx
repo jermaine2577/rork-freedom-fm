@@ -296,12 +296,22 @@ export default function PlayerScreen() {
             }]}>
               <View style={styles.disclaimerHeader}>
                 <Info size={14} color={colors.gold} />
-                <Text style={styles.disclaimerTitle}>For uninterrupted streaming:</Text>
+                <Text style={styles.disclaimerTitle}>Stream keeps stopping?</Text>
               </View>
+              <Text style={styles.disclaimerSubtitle}>Disable battery optimization for uninterrupted playback:</Text>
               <View style={styles.disclaimerSteps}>
-                <Text style={styles.disclaimerStep}>1. Go to Settings → Apps → Freedom FM</Text>
-                <Text style={styles.disclaimerStep}>2. Tap "Battery" or "Battery usage"</Text>
-                <Text style={styles.disclaimerStep}>3. Select "Unrestricted" or "No restrictions"</Text>
+                <View style={styles.stepRow}>
+                  <View style={styles.stepNumber}><Text style={styles.stepNumberText}>1</Text></View>
+                  <Text style={styles.disclaimerStep}>Open <Text style={styles.stepHighlight}>Settings</Text> → <Text style={styles.stepHighlight}>Apps</Text> → <Text style={styles.stepHighlight}>Freedom FM</Text></Text>
+                </View>
+                <View style={styles.stepRow}>
+                  <View style={styles.stepNumber}><Text style={styles.stepNumberText}>2</Text></View>
+                  <Text style={styles.disclaimerStep}>Tap <Text style={styles.stepHighlight}>Battery</Text> or <Text style={styles.stepHighlight}>Battery usage</Text></Text>
+                </View>
+                <View style={styles.stepRow}>
+                  <View style={styles.stepNumber}><Text style={styles.stepNumberText}>3</Text></View>
+                  <Text style={styles.disclaimerStep}>Select <Text style={styles.stepHighlight}>Unrestricted</Text></Text>
+                </View>
               </View>
             </View>
           )}
@@ -434,31 +444,60 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   batteryDisclaimer: {
-    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 193, 7, 0.3)',
-    maxWidth: 300,
+    borderColor: 'rgba(255, 193, 7, 0.35)',
+    maxWidth: 320,
   },
   disclaimerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   disclaimerTitle: {
     color: colors.gold,
-    fontSize: 11,
-    fontWeight: '600' as const,
+    fontSize: 12,
+    fontWeight: '700' as const,
+  },
+  disclaimerSubtitle: {
+    color: colors.textSecondary,
+    fontSize: 10,
+    marginBottom: 8,
+    opacity: 0.9,
   },
   disclaimerSteps: {
-    gap: 2,
+    gap: 6,
+  },
+  stepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stepNumber: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(255, 193, 7, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepNumberText: {
+    color: colors.gold,
+    fontSize: 10,
+    fontWeight: '700' as const,
   },
   disclaimerStep: {
     color: colors.textSecondary,
     fontSize: 10,
     lineHeight: 14,
+    flex: 1,
+  },
+  stepHighlight: {
+    color: colors.text,
+    fontWeight: '600' as const,
   },
 });
