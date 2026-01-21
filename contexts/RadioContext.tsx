@@ -37,17 +37,16 @@ const BUFFER_TIMEOUT = 25000;
 const MAX_RETRY_ATTEMPTS = 5;
 const HEALTH_CHECK_INTERVAL = 3000;
 const STALE_CHECK_THRESHOLD = 10000;
-const ANDROID_KEEPALIVE_INTERVAL = 10000;
-const ANDROID_WATCHDOG_INTERVAL = 60000;
+const ANDROID_KEEPALIVE_INTERVAL = 5000;
+const ANDROID_WATCHDOG_INTERVAL = 30000;
+const ANDROID_AUDIO_REFRESH_INTERVAL = 45000;
 
 export const [RadioProvider, useRadio] = createContextHook(() => {
-  // All useState hooks first - MUST be in fixed order
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [volume, setVolume] = useState<number>(1.0);
   const [error, setError] = useState<string | null>(null);
   
-  // All useRef hooks - MUST be in fixed order
   const soundRef = useRef<any>(null);
   const audioSetupRef = useRef<boolean>(false);
   const isPlayingRef = useRef<boolean>(false);
@@ -56,6 +55,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   const healthCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const androidKeepAliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const androidWatchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const androidAudioRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastKnownPositionRef = useRef<number>(0);
   const watchdogPositionRef = useRef<number>(0);
   const watchdogCheckCountRef = useRef<number>(0);
@@ -68,20 +68,9 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   const cleanupFnRef = useRef<(() => Promise<void>) | undefined>(undefined);
   const mountedRef = useRef<boolean>(true);
 
-  // All useCallback hooks - MUST be in fixed order
-  const setupAudio = useCallback(async (): Promise<boolean> => {
-    if (Platform.OS === 'web') {
-      console.log('Audio not supported on web');
-      return false;
-    }
-    
-    if (audioSetupRef.current) return true;
-    
+  const configureAudioMode = useCallback(async (): Promise<boolean> => {
     const moduleLoaded = loadAudioModule();
-    if (!moduleLoaded || !Audio) {
-      console.warn('Audio module not available');
-      return false;
-    }
+    if (!moduleLoaded || !Audio) return false;
     
     try {
       const audioModeConfig: any = {
@@ -100,15 +89,31 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       }
       
       await Audio.setAudioModeAsync(audioModeConfig);
-      audioSetupRef.current = true;
-      console.log('Audio setup completed successfully');
       return true;
     } catch (err) {
-      console.error('Error setting up audio:', err);
-      audioSetupRef.current = false;
+      console.warn('[Radio] Error configuring audio mode:', err);
       return false;
     }
   }, []);
+
+  const setupAudio = useCallback(async (): Promise<boolean> => {
+    if (Platform.OS === 'web') {
+      console.log('Audio not supported on web');
+      return false;
+    }
+    
+    if (audioSetupRef.current) return true;
+    
+    const success = await configureAudioMode();
+    if (success) {
+      audioSetupRef.current = true;
+      console.log('Audio setup completed successfully');
+    } else {
+      console.error('Audio setup failed');
+      audioSetupRef.current = false;
+    }
+    return success;
+  }, [configureAudioMode]);
 
   const updateNowPlaying = useCallback(async (isPlayingParam: boolean) => {
     if (Platform.OS === 'web') return;
@@ -153,6 +158,13 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       androidWatchdogRef.current = null;
     }
     watchdogCheckCountRef.current = 0;
+  }, []);
+
+  const clearAndroidAudioRefresh = useCallback(() => {
+    if (androidAudioRefreshRef.current) {
+      clearInterval(androidAudioRefreshRef.current);
+      androidAudioRefreshRef.current = null;
+    }
   }, []);
 
   const onPlaybackStatusUpdate = useCallback((status: any) => {
@@ -232,6 +244,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     clearHealthCheck();
     clearAndroidKeepAlive();
     clearAndroidWatchdog();
+    clearAndroidAudioRefresh();
     positionStuckCountRef.current = 0;
     lastPositionRef.current = 0;
     lastKnownPositionRef.current = 0;
@@ -275,7 +288,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       console.warn('[Radio] Error during sound cleanup:', e?.message);
       soundRef.current = null;
     }
-  }, [clearBufferTimeout, clearHealthCheck, clearAndroidKeepAlive, clearAndroidWatchdog]);
+  }, [clearBufferTimeout, clearHealthCheck, clearAndroidKeepAlive, clearAndroidWatchdog, clearAndroidAudioRefresh]);
 
   const play = useCallback(async () => {
     if (Platform.OS === 'web') {
@@ -311,7 +324,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       
       await cleanupSound();
       
-      // Small delay for Android to ensure cleanup is complete
       if (Platform.OS === 'android') {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
@@ -503,6 +515,20 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       if (Platform.OS === 'android') {
         clearAndroidKeepAlive();
         clearAndroidWatchdog();
+        clearAndroidAudioRefresh();
+        
+        androidAudioRefreshRef.current = setInterval(async () => {
+          if (!soundRef.current || !isPlayingRef.current || !mountedRef.current) {
+            return;
+          }
+          
+          try {
+            console.log('[Radio] Android audio refresh - re-applying audio mode');
+            await configureAudioMode();
+          } catch (refreshErr) {
+            console.warn('[Radio] Android audio refresh error:', refreshErr);
+          }
+        }, ANDROID_AUDIO_REFRESH_INTERVAL);
         
         androidKeepAliveRef.current = setInterval(async () => {
           if (!soundRef.current || !isPlayingRef.current || !mountedRef.current) {
@@ -537,6 +563,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
                 console.log('[Radio] Android keep-alive: stream stopped unexpectedly, restarting...');
                 
                 try {
+                  await configureAudioMode();
                   await soundRef.current.playAsync();
                   console.log('[Radio] Android keep-alive: playAsync called');
                   
@@ -653,9 +680,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       }
       await cleanupSound();
     }
-  }, [setupAudio, onPlaybackStatusUpdate, volume, updateNowPlaying, cleanupSound, clearHealthCheck, clearAndroidKeepAlive, clearAndroidWatchdog]);
+  }, [setupAudio, configureAudioMode, onPlaybackStatusUpdate, volume, updateNowPlaying, cleanupSound, clearHealthCheck, clearAndroidKeepAlive, clearAndroidWatchdog, clearAndroidAudioRefresh]);
 
-  // All useEffect hooks - MUST be in fixed order
   useEffect(() => {
     mountedRef.current = true;
     playFnRef.current = play;
@@ -729,11 +755,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       clearHealthCheck();
       clearAndroidKeepAlive();
       clearAndroidWatchdog();
+      clearAndroidAudioRefresh();
       if (soundRef.current) {
         soundRef.current.unloadAsync().catch((err: any) => console.error('Error unloading sound:', err));
       }
     };
-  }, [clearBufferTimeout, clearHealthCheck, clearAndroidKeepAlive, clearAndroidWatchdog]);
+  }, [clearBufferTimeout, clearHealthCheck, clearAndroidKeepAlive, clearAndroidWatchdog, clearAndroidAudioRefresh]);
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
@@ -747,26 +774,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         console.log('[Radio] Android entering background/inactive, ensuring audio continues...');
         
         try {
-          const moduleLoaded = loadAudioModule();
-          if (moduleLoaded && Audio) {
-            const audioModeConfig: any = {
-              allowsRecordingIOS: false,
-              playsInSilentModeIOS: true,
-              staysActiveInBackground: true,
-              shouldDuckAndroid: false,
-              playThroughEarpieceAndroid: false,
-            };
-            
-            if (InterruptionModeIOS) {
-              audioModeConfig.interruptionModeIOS = InterruptionModeIOS.DoNotMix;
-            }
-            if (InterruptionModeAndroid) {
-              audioModeConfig.interruptionModeAndroid = InterruptionModeAndroid.DoNotMix;
-            }
-            
-            await Audio.setAudioModeAsync(audioModeConfig);
-            console.log('[Radio] Android background audio mode re-configured');
-          }
+          await configureAudioMode();
+          console.log('[Radio] Android background audio mode re-configured');
         } catch (bgErr) {
           console.warn('[Radio] Error configuring background audio:', bgErr);
         }
@@ -777,14 +786,38 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             console.log('[Radio] Android background status check:', {
               isLoaded: status?.isLoaded,
               isPlaying: status?.isPlaying,
+              positionMillis: status?.positionMillis,
             });
             
             if (status?.isLoaded && !status?.isPlaying) {
               console.log('[Radio] Android: Audio paused in background, restarting...');
               await soundRef.current.playAsync();
+              
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              const newStatus = await soundRef.current.getStatusAsync();
+              if (!newStatus?.isPlaying && mountedRef.current && !isRecoveringRef.current) {
+                console.log('[Radio] Android: playAsync in background failed, triggering recovery...');
+                isRecoveringRef.current = true;
+                await cleanupSound();
+                await new Promise(resolve => setTimeout(resolve, 500));
+                if (mountedRef.current) {
+                  isRecoveringRef.current = false;
+                  playFnRef.current?.();
+                }
+              }
             }
           } catch (statusErr) {
             console.warn('[Radio] Error checking status in background:', statusErr);
+            if (isPlayingRef.current && !isRecoveringRef.current && mountedRef.current) {
+              console.log('[Radio] Android background error - triggering recovery');
+              isRecoveringRef.current = true;
+              await cleanupSound();
+              await new Promise(resolve => setTimeout(resolve, 500));
+              if (mountedRef.current) {
+                isRecoveringRef.current = false;
+                playFnRef.current?.();
+              }
+            }
           }
         }
         
@@ -825,6 +858,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
                 setIsLoading(true);
                 
                 try {
+                  await configureAudioMode();
                   await soundRef.current.playAsync();
                   console.log('[Radio] Restart playAsync called');
                   
@@ -918,7 +952,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     return () => {
       subscription.remove();
     };
-  }, [setupAudio, cleanupSound]);
+  }, [setupAudio, configureAudioMode, cleanupSound]);
 
   return useMemo(
     () => ({
