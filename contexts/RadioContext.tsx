@@ -35,8 +35,9 @@ const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/
 const STREAM_TIMEOUT = 30000;
 const BUFFER_TIMEOUT = 25000;
 const MAX_RETRY_ATTEMPTS = 5;
-const HEALTH_CHECK_INTERVAL = 10000;
-const STALE_CHECK_THRESHOLD = 30000;
+const HEALTH_CHECK_INTERVAL = 5000;
+const STALE_CHECK_THRESHOLD = 15000;
+const ANDROID_KEEPALIVE_INTERVAL = 30000;
 
 export const [RadioProvider, useRadio] = createContextHook(() => {
   // All useState hooks first - MUST be in fixed order
@@ -52,8 +53,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   const isSwitchingRef = useRef<boolean>(false);
   const bufferTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const healthCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const androidKeepAliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const retryCountRef = useRef<number>(0);
   const lastPlaybackTimeRef = useRef<number>(0);
+  const lastPositionRef = useRef<number>(0);
+  const positionStuckCountRef = useRef<number>(0);
   const isRecoveringRef = useRef<boolean>(false);
   const playFnRef = useRef<(() => Promise<void>) | undefined>(undefined);
   const cleanupFnRef = useRef<(() => Promise<void>) | undefined>(undefined);
@@ -128,6 +132,13 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     if (healthCheckRef.current) {
       clearInterval(healthCheckRef.current);
       healthCheckRef.current = null;
+    }
+  }, []);
+
+  const clearAndroidKeepAlive = useCallback(() => {
+    if (androidKeepAliveRef.current) {
+      clearInterval(androidKeepAliveRef.current);
+      androidKeepAliveRef.current = null;
     }
   }, []);
 
@@ -206,6 +217,9 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   const cleanupSound = useCallback(async () => {
     clearBufferTimeout();
     clearHealthCheck();
+    clearAndroidKeepAlive();
+    positionStuckCountRef.current = 0;
+    lastPositionRef.current = 0;
     
     if (!soundRef.current) {
       console.log('[Radio] No sound to cleanup');
@@ -244,7 +258,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       console.warn('[Radio] Error during sound cleanup:', e?.message);
       soundRef.current = null;
     }
-  }, [clearBufferTimeout, clearHealthCheck]);
+  }, [clearBufferTimeout, clearHealthCheck, clearAndroidKeepAlive]);
 
   const play = useCallback(async () => {
     if (Platform.OS === 'web') {
@@ -409,8 +423,41 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         try {
           const status = await soundRef.current.getStatusAsync();
           const timeSinceLastPlayback = Date.now() - lastPlaybackTimeRef.current;
+          const currentPosition = status?.positionMillis || 0;
           
-          if (status?.isLoaded && !status?.isPlaying && !status?.isBuffering && isPlayingRef.current && timeSinceLastPlayback > STALE_CHECK_THRESHOLD) {
+          if (status?.isLoaded && status?.isPlaying) {
+            if (currentPosition === lastPositionRef.current && currentPosition > 0) {
+              positionStuckCountRef.current++;
+              console.log('[Radio] Position stuck count:', positionStuckCountRef.current, 'at position:', currentPosition);
+              
+              if (positionStuckCountRef.current >= 3) {
+                console.log('[Radio] Stream position stuck, forcing recovery...');
+                positionStuckCountRef.current = 0;
+                if (retryCountRef.current < MAX_RETRY_ATTEMPTS && mountedRef.current) {
+                  retryCountRef.current++;
+                  isRecoveringRef.current = true;
+                  setError('Stream stalled. Reconnecting...');
+                  await cleanupSound();
+                  await new Promise(resolve => setTimeout(resolve, 500));
+                  if (mountedRef.current) {
+                    isRecoveringRef.current = false;
+                    playFnRef.current?.();
+                  }
+                }
+                return;
+              }
+            } else {
+              positionStuckCountRef.current = 0;
+              lastPositionRef.current = currentPosition;
+            }
+            
+            lastPlaybackTimeRef.current = Date.now();
+            retryCountRef.current = 0;
+            if (isRecoveringRef.current) {
+              isRecoveringRef.current = false;
+              setError(null);
+            }
+          } else if (status?.isLoaded && !status?.isPlaying && !status?.isBuffering && isPlayingRef.current && timeSinceLastPlayback > STALE_CHECK_THRESHOLD) {
             console.log('[Radio] Stream appears stuck, attempting recovery...');
             if (retryCountRef.current < MAX_RETRY_ATTEMPTS && mountedRef.current) {
               retryCountRef.current++;
@@ -430,18 +477,52 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
               setIsLoading(false);
               retryCountRef.current = 0;
             }
-          } else if (status?.isPlaying && mountedRef.current) {
-            lastPlaybackTimeRef.current = Date.now();
-            retryCountRef.current = 0;
-            if (isRecoveringRef.current) {
-              isRecoveringRef.current = false;
-              setError(null);
-            }
           }
         } catch (healthErr) {
           console.warn('[Radio] Health check error:', healthErr);
         }
       }, HEALTH_CHECK_INTERVAL);
+      
+      if (Platform.OS === 'android') {
+        clearAndroidKeepAlive();
+        androidKeepAliveRef.current = setInterval(async () => {
+          if (!soundRef.current || !isPlayingRef.current || !mountedRef.current) {
+            clearAndroidKeepAlive();
+            return;
+          }
+          
+          try {
+            const status = await soundRef.current.getStatusAsync();
+            
+            if (status?.isLoaded && !status?.isPlaying && isPlayingRef.current && !isRecoveringRef.current) {
+              console.log('[Radio] Android keep-alive: stream stopped unexpectedly, restarting...');
+              
+              try {
+                await soundRef.current.playAsync();
+                console.log('[Radio] Android keep-alive: playAsync called');
+                
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                const newStatus = await soundRef.current.getStatusAsync();
+                
+                if (!newStatus?.isPlaying && mountedRef.current) {
+                  console.log('[Radio] Android keep-alive: playAsync failed, full restart needed');
+                  isRecoveringRef.current = true;
+                  await cleanupSound();
+                  await new Promise(resolve => setTimeout(resolve, 500));
+                  if (mountedRef.current) {
+                    isRecoveringRef.current = false;
+                    playFnRef.current?.();
+                  }
+                }
+              } catch (playErr) {
+                console.warn('[Radio] Android keep-alive play error:', playErr);
+              }
+            }
+          } catch (keepAliveErr) {
+            console.warn('[Radio] Android keep-alive error:', keepAliveErr);
+          }
+        }, ANDROID_KEEPALIVE_INTERVAL);
+      }
       
       retryCountRef.current = 0;
       isRecoveringRef.current = false;
@@ -461,7 +542,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       }
       await cleanupSound();
     }
-  }, [setupAudio, onPlaybackStatusUpdate, volume, updateNowPlaying, cleanupSound, clearHealthCheck]);
+  }, [setupAudio, onPlaybackStatusUpdate, volume, updateNowPlaying, cleanupSound, clearHealthCheck, clearAndroidKeepAlive]);
 
   // All useEffect hooks - MUST be in fixed order
   useEffect(() => {
@@ -535,11 +616,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     return () => {
       clearBufferTimeout();
       clearHealthCheck();
+      clearAndroidKeepAlive();
       if (soundRef.current) {
         soundRef.current.unloadAsync().catch((err: any) => console.error('Error unloading sound:', err));
       }
     };
-  }, [clearBufferTimeout, clearHealthCheck]);
+  }, [clearBufferTimeout, clearHealthCheck, clearAndroidKeepAlive]);
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
@@ -550,6 +632,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       console.log('[Radio] AppState changed to:', nextAppState);
       
       if (nextAppState === 'active') {
+        if (Platform.OS === 'android') {
+          try {
+            await setupAudio();
+          } catch (setupErr) {
+            console.warn('[Radio] Error re-setting up audio on Android:', setupErr);
+          }
+        }
+        
         if (soundRef.current) {
           try {
             const status = await soundRef.current.getStatusAsync();
@@ -570,6 +660,41 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
                 }
                 setIsLoading(false);
                 setError(null);
+              } else if (isPlayingRef.current && !isRecoveringRef.current) {
+                console.log('[Radio] Audio stopped while in background, attempting restart...');
+                setIsLoading(true);
+                
+                try {
+                  await soundRef.current.playAsync();
+                  console.log('[Radio] Restart playAsync called');
+                  
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  const newStatus = await soundRef.current.getStatusAsync();
+                  
+                  if (newStatus?.isPlaying) {
+                    console.log('[Radio] Restart successful');
+                    setIsLoading(false);
+                    setError(null);
+                  } else {
+                    console.log('[Radio] Restart failed, full reconnect needed');
+                    isRecoveringRef.current = true;
+                    await cleanupSound();
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    if (mountedRef.current) {
+                      isRecoveringRef.current = false;
+                      playFnRef.current?.();
+                    }
+                  }
+                } catch (restartErr) {
+                  console.warn('[Radio] Restart error, full reconnect:', restartErr);
+                  isRecoveringRef.current = true;
+                  await cleanupSound();
+                  await new Promise(resolve => setTimeout(resolve, 500));
+                  if (mountedRef.current) {
+                    isRecoveringRef.current = false;
+                    playFnRef.current?.();
+                  }
+                }
               } else {
                 console.log('[Radio] Audio stopped while in background');
                 isPlayingRef.current = false;
@@ -578,22 +703,49 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
               }
             } else {
               console.log('[Radio] Sound was unloaded while in background');
-              soundRef.current = null;
-              isPlayingRef.current = false;
-              setIsPlaying(false);
-              setIsLoading(false);
+              if (isPlayingRef.current && !isRecoveringRef.current && mountedRef.current) {
+                console.log('[Radio] Was playing, attempting full reconnect...');
+                soundRef.current = null;
+                isRecoveringRef.current = true;
+                await new Promise(resolve => setTimeout(resolve, 500));
+                if (mountedRef.current) {
+                  isRecoveringRef.current = false;
+                  playFnRef.current?.();
+                }
+              } else {
+                soundRef.current = null;
+                isPlayingRef.current = false;
+                setIsPlaying(false);
+                setIsLoading(false);
+              }
             }
           } catch (err) {
             console.warn('[Radio] Error checking status on app return:', err);
-            if (mountedRef.current) {
+            if (isPlayingRef.current && !isRecoveringRef.current && mountedRef.current) {
+              console.log('[Radio] Error but was playing, attempting reconnect...');
+              soundRef.current = null;
+              isRecoveringRef.current = true;
+              await new Promise(resolve => setTimeout(resolve, 500));
+              if (mountedRef.current) {
+                isRecoveringRef.current = false;
+                playFnRef.current?.();
+              }
+            } else if (mountedRef.current) {
               soundRef.current = null;
               isPlayingRef.current = false;
               setIsPlaying(false);
               setIsLoading(false);
             }
           }
-        } else if (isPlayingRef.current && mountedRef.current) {
-          console.log('[Radio] No sound but state was playing, resetting...');
+        } else if (isPlayingRef.current && !isRecoveringRef.current && mountedRef.current) {
+          console.log('[Radio] No sound but state was playing, attempting reconnect...');
+          isRecoveringRef.current = true;
+          await new Promise(resolve => setTimeout(resolve, 500));
+          if (mountedRef.current) {
+            isRecoveringRef.current = false;
+            playFnRef.current?.();
+          }
+        } else if (mountedRef.current) {
           isPlayingRef.current = false;
           setIsPlaying(false);
           setIsLoading(false);
@@ -606,7 +758,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     return () => {
       subscription.remove();
     };
-  }, []);
+  }, [setupAudio, cleanupSound]);
 
   return useMemo(
     () => ({
