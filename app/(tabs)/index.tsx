@@ -8,11 +8,10 @@ import {
   Dimensions,
   Image,
   Platform,
-  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play, Pause, Volume2, Radio, Info, X, ChevronRight } from 'lucide-react-native';
+import { Play, Pause, Volume2, Radio, Info, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useRadio } from '@/contexts/RadioContext';
 import colors from '@/constants/colors';
 
@@ -31,7 +30,8 @@ export default function PlayerScreen() {
   });
 
   const [logoFailed, setLogoFailed] = useState<boolean>(false);
-  const [showBatteryModal, setShowBatteryModal] = useState<boolean>(false);
+  const [batteryExpanded, setBatteryExpanded] = useState<boolean>(false);
+  const batteryAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
@@ -295,94 +295,51 @@ export default function PlayerScreen() {
           </View>
 
           {Platform.OS === 'android' && (
-            <TouchableOpacity
-              style={[styles.batteryHintButton, {
-                marginTop: ultraCompactMode ? 8 : compactMode ? 10 : 12,
-              }]}
-              onPress={() => setShowBatteryModal(true)}
-              activeOpacity={0.7}
-            >
-              <Info size={14} color={colors.gold} />
-              <Text style={styles.batteryHintText}>Stream stopping? Tap here for help</Text>
-              <ChevronRight size={14} color={colors.textSecondary} />
-            </TouchableOpacity>
-          )}
+            <View style={[styles.batteryContainer, { marginTop: ultraCompactMode ? 6 : compactMode ? 8 : 10 }]}>
+              <TouchableOpacity
+                style={styles.batteryHeader}
+                onPress={() => {
+                  const toValue = batteryExpanded ? 0 : 1;
+                  setBatteryExpanded(!batteryExpanded);
+                  Animated.timing(batteryAnim, {
+                    toValue,
+                    duration: 250,
+                    useNativeDriver: false,
+                  }).start();
+                }}
+                activeOpacity={0.7}
+              >
+                <Info size={14} color={colors.gold} />
+                <Text style={styles.batteryHintText}>Stream stopping? Tap for help</Text>
+                {batteryExpanded ? (
+                  <ChevronUp size={14} color={colors.textSecondary} />
+                ) : (
+                  <ChevronDown size={14} color={colors.textSecondary} />
+                )}
+              </TouchableOpacity>
 
-          <Modal
-            visible={showBatteryModal}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setShowBatteryModal(false)}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                <TouchableOpacity
-                  style={styles.modalCloseButton}
-                  onPress={() => setShowBatteryModal(false)}
-                >
-                  <X size={20} color={colors.textSecondary} />
-                </TouchableOpacity>
-
-                <View style={styles.modalHeader}>
-                  <Info size={28} color={colors.gold} />
-                  <Text style={styles.modalTitle}>Keep Stream Playing</Text>
-                </View>
-
-                <Text style={styles.modalDescription}>
-                  To prevent the stream from stopping, disable battery optimization for this app:
-                </Text>
-
-                <View style={styles.stepsContainer}>
-                  <View style={styles.stepItem}>
-                    <View style={styles.stepNumber}>
-                      <Text style={styles.stepNumberText}>1</Text>
-                    </View>
-                    <View style={styles.stepContent}>
-                      <Text style={styles.stepTitle}>Tap and Hold Freedom FM App</Text>
-                      <Text style={styles.stepSubtitle}>On your home screen or app drawer</Text>
-                    </View>
+              {batteryExpanded && (
+                <View style={styles.batteryStepsContainer}>
+                  <View style={styles.batteryStep}>
+                    <View style={styles.stepBadge}><Text style={styles.stepBadgeText}>1</Text></View>
+                    <Text style={styles.stepText}>Tap & hold <Text style={styles.stepHighlight}>Freedom FM</Text> app icon</Text>
                   </View>
-
-                  <View style={styles.stepItem}>
-                    <View style={styles.stepNumber}>
-                      <Text style={styles.stepNumberText}>2</Text>
-                    </View>
-                    <View style={styles.stepContent}>
-                      <Text style={styles.stepTitle}>Go to App Info</Text>
-                      <Text style={styles.stepSubtitle}>Select "App info" from the menu</Text>
-                    </View>
+                  <View style={styles.batteryStep}>
+                    <View style={styles.stepBadge}><Text style={styles.stepBadgeText}>2</Text></View>
+                    <Text style={styles.stepText}>Select <Text style={styles.stepHighlight}>App Info</Text></Text>
                   </View>
-
-                  <View style={styles.stepItem}>
-                    <View style={styles.stepNumber}>
-                      <Text style={styles.stepNumberText}>3</Text>
-                    </View>
-                    <View style={styles.stepContent}>
-                      <Text style={styles.stepTitle}>Go to Battery / Battery Usage</Text>
-                      <Text style={styles.stepSubtitle}>Find battery settings in app info</Text>
-                    </View>
+                  <View style={styles.batteryStep}>
+                    <View style={styles.stepBadge}><Text style={styles.stepBadgeText}>3</Text></View>
+                    <Text style={styles.stepText}>Go to <Text style={styles.stepHighlight}>Battery / Battery Usage</Text></Text>
                   </View>
-
-                  <View style={styles.stepItem}>
-                    <View style={styles.stepNumber}>
-                      <Text style={styles.stepNumberText}>4</Text>
-                    </View>
-                    <View style={styles.stepContent}>
-                      <Text style={styles.stepTitle}>Tap on Unrestricted</Text>
-                      <Text style={styles.stepSubtitle}>This prevents the stream from stopping</Text>
-                    </View>
+                  <View style={styles.batteryStep}>
+                    <View style={styles.stepBadge}><Text style={styles.stepBadgeText}>4</Text></View>
+                    <Text style={styles.stepText}>Tap <Text style={styles.stepHighlight}>Unrestricted</Text> to prevent stopping</Text>
                   </View>
                 </View>
-
-                <TouchableOpacity
-                  style={styles.modalDoneButton}
-                  onPress={() => setShowBatteryModal(false)}
-                >
-                  <Text style={styles.modalDoneText}>Got it!</Text>
-                </TouchableOpacity>
-              </View>
+              )}
             </View>
-          </Modal>
+          )}
 
           {error && (
             <View style={[styles.errorContainer, { marginTop: 8 }]}>
@@ -511,108 +468,59 @@ const styles = StyleSheet.create({
     color: colors.error,
     textAlign: 'center',
   },
-  batteryHintButton: {
+  batteryContainer: {
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 193, 7, 0.3)',
+    overflow: 'hidden',
+  },
+  batteryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 193, 7, 0.35)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   batteryHintText: {
     color: colors.textSecondary,
     fontSize: 11,
     fontWeight: '500' as const,
-  },
-  modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
   },
-  modalContent: {
-    backgroundColor: '#1a1a2e',
-    borderRadius: 20,
-    padding: 24,
-    width: '100%',
-    maxWidth: 340,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 193, 7, 0.25)',
+  batteryStepsContainer: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    paddingTop: 10,
   },
-  modalCloseButton: {
-    position: 'absolute' as const,
-    top: 12,
-    right: 12,
-    padding: 8,
-    zIndex: 1,
-  },
-  modalHeader: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  modalTitle: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '700' as const,
-    marginTop: 12,
-    textAlign: 'center' as const,
-  },
-  modalDescription: {
-    color: colors.textSecondary,
-    fontSize: 13,
-    textAlign: 'center' as const,
-    lineHeight: 20,
-    marginBottom: 20,
-  },
-  stepsContainer: {
-    gap: 16,
-  },
-  stepItem: {
+  batteryStep: {
     flexDirection: 'row' as const,
-    alignItems: 'flex-start',
-    gap: 12,
+    alignItems: 'center',
+    gap: 10,
   },
-  stepNumber: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  stepBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: colors.gold,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepNumberText: {
+  stepBadgeText: {
     color: '#1a1a2e',
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '700' as const,
   },
-  stepContent: {
-    flex: 1,
-  },
-  stepTitle: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '600' as const,
-    marginBottom: 2,
-  },
-  stepSubtitle: {
+  stepText: {
     color: colors.textSecondary,
     fontSize: 12,
-    opacity: 0.8,
+    flex: 1,
   },
-  modalDoneButton: {
-    backgroundColor: colors.gold,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 24,
-  },
-  modalDoneText: {
-    color: '#1a1a2e',
-    fontSize: 16,
-    fontWeight: '700' as const,
+  stepHighlight: {
+    color: colors.text,
+    fontWeight: '600' as const,
   },
 });
