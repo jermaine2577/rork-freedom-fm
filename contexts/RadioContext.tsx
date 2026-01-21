@@ -42,11 +42,14 @@ const ANDROID_WATCHDOG_INTERVAL = 30000;
 const ANDROID_AUDIO_REFRESH_INTERVAL = 45000;
 
 export const [RadioProvider, useRadio] = createContextHook(() => {
+  // All useState hooks first - fixed order
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [volume, setVolume] = useState<number>(1.0);
   const [error, setError] = useState<string | null>(null);
   
+  // All useRef hooks second - fixed order (always call all refs unconditionally)
+  const mountedRef = useRef<boolean>(true);
   const soundRef = useRef<any>(null);
   const audioSetupRef = useRef<boolean>(false);
   const isPlayingRef = useRef<boolean>(false);
@@ -66,7 +69,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   const isRecoveringRef = useRef<boolean>(false);
   const playFnRef = useRef<(() => Promise<void>) | undefined>(undefined);
   const cleanupFnRef = useRef<(() => Promise<void>) | undefined>(undefined);
-  const mountedRef = useRef<boolean>(true);
 
   const configureAudioMode = useCallback(async (): Promise<boolean> => {
     const moduleLoaded = loadAudioModule();
@@ -682,15 +684,19 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     }
   }, [setupAudio, configureAudioMode, onPlaybackStatusUpdate, volume, updateNowPlaying, cleanupSound, clearHealthCheck, clearAndroidKeepAlive, clearAndroidWatchdog, clearAndroidAudioRefresh]);
 
+  // Effect to sync refs with latest function values
   useEffect(() => {
-    mountedRef.current = true;
     playFnRef.current = play;
     cleanupFnRef.current = cleanupSound;
-    
+  }, [play, cleanupSound]);
+  
+  // Cleanup effect for mounted state
+  useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
-  }, [play, cleanupSound]);
+  }, []);
 
   const pause = useCallback(async () => {
     try {
