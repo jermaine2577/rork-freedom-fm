@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play, Pause, Volume2, Radio, Info, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { Play, Pause, Volume2, Radio } from 'lucide-react-native';
 import { useRadio } from '@/contexts/RadioContext';
 import colors from '@/constants/colors';
 
@@ -30,8 +30,7 @@ export default function PlayerScreen() {
   });
 
   const [logoFailed, setLogoFailed] = useState<boolean>(false);
-  const [batteryExpanded, setBatteryExpanded] = useState<boolean>(false);
-  const batteryAnim = useRef(new Animated.Value(0)).current;
+  
 
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
@@ -294,53 +293,6 @@ export default function PlayerScreen() {
             <Volume2 size={ultraCompactMode ? 11 : 12} color={colors.textSecondary} />
           </View>
 
-          {Platform.OS === 'android' && (
-            <View style={[styles.batteryContainer, { marginTop: ultraCompactMode ? 6 : compactMode ? 8 : 10 }]}>
-              <TouchableOpacity
-                style={styles.batteryHeader}
-                onPress={() => {
-                  const toValue = batteryExpanded ? 0 : 1;
-                  setBatteryExpanded(!batteryExpanded);
-                  Animated.timing(batteryAnim, {
-                    toValue,
-                    duration: 250,
-                    useNativeDriver: false,
-                  }).start();
-                }}
-                activeOpacity={0.7}
-              >
-                <Info size={14} color={colors.gold} />
-                <Text style={styles.batteryHintText}>Stream stopping? Tap for help</Text>
-                {batteryExpanded ? (
-                  <ChevronUp size={14} color={colors.textSecondary} />
-                ) : (
-                  <ChevronDown size={14} color={colors.textSecondary} />
-                )}
-              </TouchableOpacity>
-
-              {batteryExpanded && (
-                <View style={styles.batteryStepsContainer}>
-                  <View style={styles.batteryStep}>
-                    <View style={styles.stepBadge}><Text style={styles.stepBadgeText}>1</Text></View>
-                    <Text style={styles.stepText}>Tap & hold <Text style={styles.stepHighlight}>Freedom FM</Text> app icon</Text>
-                  </View>
-                  <View style={styles.batteryStep}>
-                    <View style={styles.stepBadge}><Text style={styles.stepBadgeText}>2</Text></View>
-                    <Text style={styles.stepText}>Select <Text style={styles.stepHighlight}>App Info</Text></Text>
-                  </View>
-                  <View style={styles.batteryStep}>
-                    <View style={styles.stepBadge}><Text style={styles.stepBadgeText}>3</Text></View>
-                    <Text style={styles.stepText}>Go to <Text style={styles.stepHighlight}>Battery / Battery Usage</Text></Text>
-                  </View>
-                  <View style={styles.batteryStep}>
-                    <View style={styles.stepBadge}><Text style={styles.stepBadgeText}>4</Text></View>
-                    <Text style={styles.stepText}>Tap <Text style={styles.stepHighlight}>Unrestricted</Text> to prevent stopping</Text>
-                  </View>
-                </View>
-              )}
-            </View>
-          )}
-
           {error && (
             <View style={[styles.errorContainer, { marginTop: 8 }]}>
               <Text style={styles.errorText}>{error}</Text>
@@ -468,59 +420,5 @@ const styles = StyleSheet.create({
     color: colors.error,
     textAlign: 'center',
   },
-  batteryContainer: {
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 193, 7, 0.3)',
-    overflow: 'hidden',
-  },
-  batteryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  batteryHintText: {
-    color: colors.textSecondary,
-    fontSize: 11,
-    fontWeight: '500' as const,
-    flex: 1,
-  },
-  batteryStepsContainer: {
-    paddingHorizontal: 12,
-    paddingBottom: 12,
-    gap: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
-    paddingTop: 10,
-  },
-  batteryStep: {
-    flexDirection: 'row' as const,
-    alignItems: 'center',
-    gap: 10,
-  },
-  stepBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: colors.gold,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepBadgeText: {
-    color: '#1a1a2e',
-    fontSize: 11,
-    fontWeight: '700' as const,
-  },
-  stepText: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    flex: 1,
-  },
-  stepHighlight: {
-    color: colors.text,
-    fontWeight: '600' as const,
-  },
+  
 });
