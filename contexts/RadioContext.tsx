@@ -802,6 +802,13 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     refs.current.playFn = play;
     refs.current.cleanupFn = cleanupSound;
   }, [play, cleanupSound]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    setupAudio().catch((e) => {
+      console.warn('[Radio] Initial audio setup failed:', e);
+    });
+  }, [setupAudio]);
   
   useEffect(() => {
     const currentRefs = refs.current;
