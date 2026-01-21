@@ -8,6 +8,7 @@ import {
   Dimensions,
   Image,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -53,7 +54,9 @@ export default function PlayerScreen() {
 
   const contentHorizontalPadding = ultraCompactMode ? 12 : compactMode ? 14 : 20;
 
-  const controlsSectionHeight = ultraCompactMode ? 150 : compactMode ? 170 : 200;
+  const controlsSectionHeight = Platform.OS === 'android' 
+    ? (ultraCompactMode ? 220 : compactMode ? 240 : 280)
+    : (ultraCompactMode ? 150 : compactMode ? 170 : 200);
   const mainContentHeight = availableHeight - controlsSectionHeight;
 
   const visualizerSize = clamp(
@@ -291,29 +294,33 @@ export default function PlayerScreen() {
           </View>
 
           {Platform.OS === 'android' && (
-            <View style={[styles.batteryDisclaimer, {
-              marginTop: ultraCompactMode ? 10 : compactMode ? 12 : 14,
-            }]}>
-              <View style={styles.disclaimerHeader}>
-                <Info size={14} color={colors.gold} />
-                <Text style={styles.disclaimerTitle}>Stream keeps stopping?</Text>
+            <ScrollView 
+              style={styles.disclaimerScroll}
+              contentContainerStyle={styles.disclaimerScrollContent}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+            >
+              <View style={[styles.batteryDisclaimer, {
+                marginTop: ultraCompactMode ? 8 : compactMode ? 10 : 12,
+              }]}>
+                <View style={styles.disclaimerHeader}>
+                  <Info size={12} color={colors.gold} />
+                  <Text style={styles.disclaimerTitle}>Stream stopping?</Text>
+                </View>
+                <Text style={styles.disclaimerSubtitle}>Disable battery optimization:</Text>
+                <View style={styles.disclaimerSteps}>
+                  <Text style={styles.disclaimerStep}>
+                    <Text style={styles.stepNumberInline}>1.</Text> <Text style={styles.stepHighlight}>Settings</Text> → <Text style={styles.stepHighlight}>Apps</Text> → <Text style={styles.stepHighlight}>Freedom FM</Text>
+                  </Text>
+                  <Text style={styles.disclaimerStep}>
+                    <Text style={styles.stepNumberInline}>2.</Text> Tap <Text style={styles.stepHighlight}>Battery</Text>
+                  </Text>
+                  <Text style={styles.disclaimerStep}>
+                    <Text style={styles.stepNumberInline}>3.</Text> Select <Text style={styles.stepHighlight}>Unrestricted</Text>
+                  </Text>
+                </View>
               </View>
-              <Text style={styles.disclaimerSubtitle}>Disable battery optimization for uninterrupted playback:</Text>
-              <View style={styles.disclaimerSteps}>
-                <View style={styles.stepRow}>
-                  <View style={styles.stepNumber}><Text style={styles.stepNumberText}>1</Text></View>
-                  <Text style={styles.disclaimerStep}>Open <Text style={styles.stepHighlight}>Settings</Text> → <Text style={styles.stepHighlight}>Apps</Text> → <Text style={styles.stepHighlight}>Freedom FM</Text></Text>
-                </View>
-                <View style={styles.stepRow}>
-                  <View style={styles.stepNumber}><Text style={styles.stepNumberText}>2</Text></View>
-                  <Text style={styles.disclaimerStep}>Tap <Text style={styles.stepHighlight}>Battery</Text> or <Text style={styles.stepHighlight}>Battery usage</Text></Text>
-                </View>
-                <View style={styles.stepRow}>
-                  <View style={styles.stepNumber}><Text style={styles.stepNumberText}>3</Text></View>
-                  <Text style={styles.disclaimerStep}>Select <Text style={styles.stepHighlight}>Unrestricted</Text></Text>
-                </View>
-              </View>
-            </View>
+            </ScrollView>
           )}
 
           {error && (
@@ -443,58 +450,50 @@ const styles = StyleSheet.create({
     color: colors.error,
     textAlign: 'center',
   },
+  disclaimerScroll: {
+    maxHeight: 90,
+    width: '100%',
+  },
+  disclaimerScrollContent: {
+    alignItems: 'center',
+  },
   batteryDisclaimer: {
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderWidth: 1,
     borderColor: 'rgba(255, 193, 7, 0.35)',
-    maxWidth: 320,
+    width: 280,
   },
   disclaimerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
+    gap: 5,
+    marginBottom: 2,
   },
   disclaimerTitle: {
     color: colors.gold,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700' as const,
   },
   disclaimerSubtitle: {
     color: colors.textSecondary,
-    fontSize: 10,
-    marginBottom: 8,
+    fontSize: 9,
+    marginBottom: 4,
     opacity: 0.9,
   },
   disclaimerSteps: {
-    gap: 6,
+    gap: 2,
   },
-  stepRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepNumber: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: 'rgba(255, 193, 7, 0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepNumberText: {
+  stepNumberInline: {
     color: colors.gold,
-    fontSize: 10,
     fontWeight: '700' as const,
   },
   disclaimerStep: {
     color: colors.textSecondary,
-    fontSize: 10,
+    fontSize: 9,
     lineHeight: 14,
-    flex: 1,
   },
   stepHighlight: {
     color: colors.text,
