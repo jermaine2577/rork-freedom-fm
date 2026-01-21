@@ -44,6 +44,7 @@ const ANDROID_BACKGROUND_CHECK_INTERVAL = 20000;
 interface RadioRefs {
   mounted: boolean;
   sound: any;
+  webAudio: HTMLAudioElement | null;
   audioSetup: boolean;
   isPlaying: boolean;
   isSwitching: boolean;
@@ -76,6 +77,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   const refs = useRef<RadioRefs>({
     mounted: true,
     sound: null,
+    webAudio: null,
     audioSetup: false,
     isPlaying: false,
     isSwitching: false,
@@ -129,8 +131,9 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
   const setupAudio = useCallback(async (): Promise<boolean> => {
     if (Platform.OS === 'web') {
-      console.log('Audio not supported on web');
-      return false;
+      console.log('[Radio] Web audio setup - using HTML5 Audio');
+      refs.current.audioSetup = true;
+      return true;
     }
     
     if (refs.current.audioSetup) return true;
@@ -278,6 +281,21 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     }
   }, [refs]);
 
+  const cleanupWebAudio = useCallback(() => {
+    if (refs.current.webAudio) {
+      console.log('[Radio] Cleaning up web audio...');
+      try {
+        refs.current.webAudio.pause();
+        refs.current.webAudio.src = '';
+        refs.current.webAudio.load();
+      } catch (e) {
+        console.warn('[Radio] Web audio cleanup error:', e);
+      }
+      refs.current.webAudio = null;
+      console.log('[Radio] Web audio cleanup completed');
+    }
+  }, [refs]);
+
   const cleanupSound = useCallback(async () => {
     clearAllTimers();
     refs.current.positionStuckCount = 0;
@@ -285,6 +303,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     refs.current.lastKnownPosition = 0;
     refs.current.watchdogPosition = 0;
     refs.current.watchdogCheckCount = 0;
+    
+    if (Platform.OS === 'web') {
+      cleanupWebAudio();
+      return;
+    }
     
     if (!refs.current.sound) {
       console.log('[Radio] No sound to cleanup');
@@ -323,13 +346,116 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       console.warn('[Radio] Error during sound cleanup:', e?.message);
       refs.current.sound = null;
     }
-  }, [clearAllTimers, refs]);
+  }, [clearAllTimers, cleanupWebAudio, refs]);
+
+  const playWeb = useCallback(async () => {
+    console.log('[Radio] Web play requested');
+    
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      cleanupWebAudio();
+      
+      const streamUri = `${STREAM_URL}?t=${Date.now()}`;
+      console.log('[Radio] Creating web audio element for:', streamUri);
+      
+      const audio = new Audio();
+      audio.crossOrigin = 'anonymous';
+      audio.preload = 'none';
+      
+      const playPromise = new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Stream connection timed out'));
+        }, STREAM_TIMEOUT);
+        
+        audio.oncanplay = () => {
+          console.log('[Radio] Web audio can play');
+          clearTimeout(timeout);
+        };
+        
+        audio.onplaying = () => {
+          console.log('[Radio] Web audio playing');
+          clearTimeout(timeout);
+          refs.current.isPlaying = true;
+          refs.current.lastDataReceived = Date.now();
+          if (refs.current.mounted) {
+            setIsPlaying(true);
+            setIsLoading(false);
+            setError(null);
+          }
+          resolve();
+        };
+        
+        audio.onwaiting = () => {
+          console.log('[Radio] Web audio buffering...');
+          if (refs.current.mounted) {
+            setIsLoading(true);
+          }
+        };
+        
+        audio.onerror = (event: Event | string) => {
+          console.error('[Radio] Web audio error:', event);
+          clearTimeout(timeout);
+          const errorMsg = 'Unable to load stream. Please check your connection.';
+          if (refs.current.mounted) {
+            setError(errorMsg);
+            setIsLoading(false);
+            setIsPlaying(false);
+          }
+          refs.current.isPlaying = false;
+          reject(new Error(errorMsg));
+        };
+        
+        audio.onended = () => {
+          console.log('[Radio] Web audio stream ended');
+          if (refs.current.isPlaying && refs.current.mounted && !refs.current.isRecovering) {
+            console.log('[Radio] Attempting to reconnect...');
+            refs.current.isRecovering = true;
+            setTimeout(() => {
+              if (refs.current.mounted) {
+                refs.current.isRecovering = false;
+                refs.current.playFn?.();
+              }
+            }, 1000);
+          }
+        };
+        
+        audio.onpause = () => {
+          console.log('[Radio] Web audio paused');
+          if (!refs.current.isSwitching && !refs.current.isRecovering && refs.current.mounted) {
+            refs.current.isPlaying = false;
+            setIsPlaying(false);
+          }
+        };
+      });
+      
+      audio.src = streamUri;
+      audio.volume = volume;
+      refs.current.webAudio = audio;
+      
+      console.log('[Radio] Starting web audio playback...');
+      await audio.play();
+      await playPromise;
+      
+      console.log('[Radio] Web audio started successfully');
+      refs.current.retryCount = 0;
+      
+    } catch (err: any) {
+      console.error('[Radio] Web audio error:', err?.message || err);
+      if (refs.current.mounted) {
+        setError('Unable to play stream. Please try again.');
+        refs.current.isPlaying = false;
+        setIsPlaying(false);
+        setIsLoading(false);
+      }
+      cleanupWebAudio();
+    }
+  }, [volume, cleanupWebAudio, refs]);
 
   const play = useCallback(async () => {
     if (Platform.OS === 'web') {
-      setError('Audio playback is not supported on web. Please use the mobile app.');
-      setIsLoading(false);
-      return;
+      return playWeb();
     }
     
     console.log('[Radio] Play requested, platform:', Platform.OS);
@@ -710,7 +836,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       }
       await cleanupSound();
     }
-  }, [setupAudio, configureAudioMode, onPlaybackStatusUpdate, volume, updateNowPlaying, cleanupSound, clearAllTimers, refs]);
+  }, [setupAudio, configureAudioMode, onPlaybackStatusUpdate, volume, updateNowPlaying, cleanupSound, playWeb, refs]);
 
   useEffect(() => {
     refs.current.playFn = play;
@@ -773,6 +899,13 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       if (refs.current.mounted) {
         setVolume(newVolume);
       }
+      
+      if (Platform.OS === 'web' && refs.current.webAudio) {
+        refs.current.webAudio.volume = newVolume;
+        console.log('[Radio] Web volume changed to:', newVolume);
+        return;
+      }
+      
       if (refs.current.sound && typeof refs.current.sound.getStatusAsync === 'function') {
         try {
           const status = await refs.current.sound.getStatusAsync();
@@ -793,7 +926,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     const currentRefs = refs.current;
     return () => {
       clearAllTimers();
-      if (currentRefs.sound) {
+      if (Platform.OS === 'web' && currentRefs.webAudio) {
+        currentRefs.webAudio.pause();
+        currentRefs.webAudio.src = '';
+      } else if (currentRefs.sound) {
         currentRefs.sound.unloadAsync().catch((err: any) => console.error('Error unloading sound:', err));
       }
     };
