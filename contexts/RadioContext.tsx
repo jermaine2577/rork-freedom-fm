@@ -34,7 +34,7 @@ const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/
 
 const STREAM_TIMEOUT = 30000;
 const BUFFER_TIMEOUT = 25000;
-const BACKGROUND_BUFFER_TIMEOUT = 8000;
+const BACKGROUND_BUFFER_TIMEOUT = 15000;
 const MAX_RETRY_ATTEMPTS = 5;
 const HEALTH_CHECK_INTERVAL = 3000;
 const STALE_CHECK_THRESHOLD = 10000;
@@ -399,11 +399,18 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           
           const streamUri = `${STREAM_URL}?t=${Date.now()}`;
           
+          const sourceConfig: any = { 
+            uri: streamUri,
+            overrideFileExtensionAndroid: 'mp3',
+          };
+          
+          // Use MediaPlayer on Android for better streaming/background support
+          if (Platform.OS === 'android') {
+            sourceConfig.androidImplementation = 'MediaPlayer';
+          }
+          
           const createSoundPromise = Audio.Sound.createAsync(
-            { 
-              uri: streamUri,
-              overrideFileExtensionAndroid: 'mp3',
-            },
+            sourceConfig,
             initialStatus,
             onPlaybackStatusUpdate
           );
@@ -545,9 +552,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
               setError(null);
             }
           } else if (status?.isLoaded && status?.isBuffering) {
-            // Buffering is normal for live streams, just update data timestamp
+            // Buffering is normal for live streams, especially on Android with MediaPlayer
+            // Don't trigger stuck detection during buffering
             refs.current.lastDataReceived = Date.now();
             refs.current.positionStuckCount = 0;
+            refs.current.lastPlaybackTime = Date.now();
           } else if (status?.isLoaded && !status?.isPlaying && !status?.isBuffering && refs.current.isPlaying && timeSinceLastPlayback > STALE_CHECK_THRESHOLD) {
             console.log('[Radio] Stream appears stuck, attempting recovery...');
             if (refs.current.retryCount < MAX_RETRY_ATTEMPTS && refs.current.mounted) {
@@ -634,11 +643,13 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
                 // Stream is active - either playing or buffering
                 refs.current.lastDataReceived = Date.now();
                 
+                // For live streams with MediaPlayer, position tracking works differently
+                // Focus on whether stream is actually active rather than position changes
                 if (currentPosition > refs.current.lastKnownPosition) {
                   refs.current.lastKnownPosition = currentPosition;
-                } else if (!status?.isBuffering && currentPosition === refs.current.lastKnownPosition && currentPosition > 0 && timeSinceData > 30000) {
-                  // Only reconnect if NOT buffering, position stuck, AND no data for 30+ seconds
-                  console.log('[Radio] Android keep-alive: position stuck for 30s without buffering, reconnecting...');
+                } else if (!status?.isBuffering && timeSinceData > 60000) {
+                  // Only reconnect if NOT buffering AND no data for 60+ seconds
+                  console.log('[Radio] Android keep-alive: no activity for 60s, reconnecting...');
                   if (!refs.current.isRecovering && refs.current.mounted) {
                     refs.current.isRecovering = true;
                     setError('Reconnecting stream...');
@@ -937,20 +948,36 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             if (status?.isLoaded) {
               refs.current.lastDataReceived = Date.now();
               
-              if (status?.isBuffering && refs.current.backgroundBufferRetries < 3) {
-                console.log('[Radio] Android: Audio buffering in background, will attempt recovery soon...');
-                if (!refs.current.bufferTimeout) {
+              if (status?.isBuffering) {
+                // Buffering in background is expected for live streams - don't immediately recover
+                // Let it continue buffering unless it takes too long
+                console.log('[Radio] Android: Audio buffering in background, allowing time to buffer...');
+                refs.current.lastDataReceived = Date.now();
+                
+                if (!refs.current.bufferTimeout && refs.current.backgroundBufferRetries < 3) {
                   refs.current.bufferTimeout = setTimeout(async () => {
                     refs.current.bufferTimeout = null;
-                    if (refs.current.isPlaying && !refs.current.isRecovering && refs.current.mounted && refs.current.isInBackground) {
-                      console.log('[Radio] Android background buffer recovery triggered');
-                      refs.current.isRecovering = true;
-                      refs.current.backgroundBufferRetries++;
-                      await cleanupSound();
-                      await new Promise(resolve => setTimeout(resolve, 200));
-                      if (refs.current.mounted) {
-                        refs.current.isRecovering = false;
-                        refs.current.playFn?.();
+                    
+                    // Check status again before recovery
+                    if (refs.current.sound && refs.current.isPlaying && !refs.current.isRecovering && refs.current.mounted && refs.current.isInBackground) {
+                      try {
+                        const currentStatus = await refs.current.sound.getStatusAsync();
+                        // Only recover if still buffering after timeout
+                        if (currentStatus?.isLoaded && currentStatus?.isBuffering) {
+                          console.log('[Radio] Android background: still buffering after timeout, recovering...');
+                          refs.current.isRecovering = true;
+                          refs.current.backgroundBufferRetries++;
+                          await cleanupSound();
+                          await new Promise(resolve => setTimeout(resolve, 500));
+                          if (refs.current.mounted) {
+                            refs.current.isRecovering = false;
+                            refs.current.playFn?.();
+                          }
+                        } else if (currentStatus?.isLoaded && currentStatus?.isPlaying) {
+                          console.log('[Radio] Android background: now playing, no recovery needed');
+                        }
+                      } catch (checkErr) {
+                        console.warn('[Radio] Background buffer check error:', checkErr);
                       }
                     }
                   }, BACKGROUND_BUFFER_TIMEOUT);
