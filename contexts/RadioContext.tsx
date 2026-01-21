@@ -34,6 +34,7 @@ const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/
 
 const STREAM_TIMEOUT = 30000;
 const BUFFER_TIMEOUT = 25000;
+const BACKGROUND_BUFFER_TIMEOUT = 8000;
 const MAX_RETRY_ATTEMPTS = 5;
 const HEALTH_CHECK_INTERVAL = 3000;
 const STALE_CHECK_THRESHOLD = 10000;
@@ -66,6 +67,8 @@ interface RadioRefs {
   playFn: (() => Promise<void>) | undefined;
   cleanupFn: (() => Promise<void>) | undefined;
   lastDataReceived: number;
+  isInBackground: boolean;
+  backgroundBufferRetries: number;
 }
 
 export const [RadioProvider, useRadio] = createContextHook(() => {
@@ -97,6 +100,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     playFn: undefined,
     cleanupFn: undefined,
     lastDataReceived: Date.now(),
+    isInBackground: false,
+    backgroundBufferRetries: 0,
   });
 
   const configureAudioMode = useCallback(async (): Promise<boolean> => {
@@ -229,22 +234,32 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         if (refs.current.mounted) {
           setIsLoading(true);
         }
+        
+        const isBackground = refs.current.isInBackground;
+        const timeout = isBackground ? BACKGROUND_BUFFER_TIMEOUT : BUFFER_TIMEOUT;
+        
         if (!refs.current.bufferTimeout) {
-          console.log('[Radio] Audio is buffering...');
+          console.log('[Radio] Audio is buffering...', isBackground ? '(background)' : '(foreground)');
           refs.current.bufferTimeout = setTimeout(async () => {
-            console.log('[Radio] Buffer timeout - attempting recovery...');
+            console.log('[Radio] Buffer timeout - attempting recovery... (background:', isBackground, ')');
             if (refs.current.isPlaying && !refs.current.isRecovering && refs.current.mounted) {
               console.log('[Radio] Attempting auto-recovery from buffer timeout...');
               refs.current.isRecovering = true;
+              
+              if (isBackground) {
+                refs.current.backgroundBufferRetries++;
+                console.log('[Radio] Background buffer retry:', refs.current.backgroundBufferRetries);
+              }
+              
               setError('Reconnecting...');
               await refs.current.cleanupFn?.();
-              await new Promise(resolve => setTimeout(resolve, 500));
+              await new Promise(resolve => setTimeout(resolve, isBackground ? 200 : 500));
               if (refs.current.mounted) {
                 refs.current.isRecovering = false;
                 refs.current.playFn?.();
               }
             }
-          }, BUFFER_TIMEOUT);
+          }, timeout);
         }
       } else {
         if (!refs.current.isSwitching && !refs.current.isRecovering && refs.current.mounted) {
@@ -895,6 +910,13 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       
       if (Platform.OS === 'android' && (nextAppState === 'background' || nextAppState === 'inactive')) {
         console.log('[Radio] Android entering background/inactive, ensuring audio continues...');
+        refs.current.isInBackground = true;
+        refs.current.backgroundBufferRetries = 0;
+        
+        if (refs.current.bufferTimeout) {
+          clearTimeout(refs.current.bufferTimeout);
+          refs.current.bufferTimeout = null;
+        }
         
         try {
           await configureAudioMode();
@@ -915,14 +937,32 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             if (status?.isLoaded) {
               refs.current.lastDataReceived = Date.now();
               
-              if (!status?.isPlaying) {
+              if (status?.isBuffering && refs.current.backgroundBufferRetries < 3) {
+                console.log('[Radio] Android: Audio buffering in background, will attempt recovery soon...');
+                if (!refs.current.bufferTimeout) {
+                  refs.current.bufferTimeout = setTimeout(async () => {
+                    refs.current.bufferTimeout = null;
+                    if (refs.current.isPlaying && !refs.current.isRecovering && refs.current.mounted && refs.current.isInBackground) {
+                      console.log('[Radio] Android background buffer recovery triggered');
+                      refs.current.isRecovering = true;
+                      refs.current.backgroundBufferRetries++;
+                      await cleanupSound();
+                      await new Promise(resolve => setTimeout(resolve, 200));
+                      if (refs.current.mounted) {
+                        refs.current.isRecovering = false;
+                        refs.current.playFn?.();
+                      }
+                    }
+                  }, BACKGROUND_BUFFER_TIMEOUT);
+                }
+              } else if (!status?.isPlaying && !status?.isBuffering) {
                 console.log('[Radio] Android: Audio paused in background, restarting...');
                 await configureAudioMode();
                 await refs.current.sound.playAsync();
                 
                 await new Promise(resolve => setTimeout(resolve, 1500));
                 const newStatus = await refs.current.sound.getStatusAsync();
-                if (!newStatus?.isPlaying && refs.current.mounted && !refs.current.isRecovering) {
+                if (!newStatus?.isPlaying && !newStatus?.isBuffering && refs.current.mounted && !refs.current.isRecovering) {
                   console.log('[Radio] Android: playAsync in background failed, triggering full recovery...');
                   refs.current.isRecovering = true;
                   await cleanupSound();
@@ -953,6 +993,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       }
       
       if (nextAppState === 'active') {
+        refs.current.isInBackground = false;
+        refs.current.backgroundBufferRetries = 0;
+        
+        if (refs.current.bufferTimeout) {
+          clearTimeout(refs.current.bufferTimeout);
+          refs.current.bufferTimeout = null;
+        }
+        
         if (Platform.OS === 'android') {
           try {
             await setupAudio();
