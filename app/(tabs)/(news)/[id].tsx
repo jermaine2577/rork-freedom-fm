@@ -624,7 +624,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    backgroundColor: '#000',
+    backgroundColor: '#121212',
   },
   loadingText: {
     fontSize: 16,
