@@ -36,7 +36,8 @@ interface WordPressPost {
   };
 }
 
-const WORDPRESS_URL = 'https://freedomfm1065.com/wp-json/wp/v2/posts?_embed&per_page=20&orderby=date&order=desc';
+const WORDPRESS_BASE_URL = 'https://freedomfm1065.com/wp-json/wp/v2';
+const WORDPRESS_POSTS_URL = `${WORDPRESS_BASE_URL}/posts?_embed&per_page=20&orderby=date&order=desc`;
 const USE_MOCK_DATA = false;
 const MAX_RETRIES = 3;
 
@@ -186,6 +187,46 @@ const fetchWithRetry = async (url: string, options: RequestInit, retries: number
   throw lastError || new Error('All fetch attempts failed');
 };
 
+const fetchNewsCategoryId = async (headers: Record<string, string>, signal: AbortSignal): Promise<number | null> => {
+  try {
+    console.log('[NEWS] Fetching news category ID...');
+    const categoriesUrl = `${WORDPRESS_BASE_URL}/categories?slug=news&_t=${Date.now()}`;
+    const response = await fetch(categoriesUrl, { method: 'GET', headers, signal });
+    
+    if (response.ok) {
+      const categories = await response.json();
+      if (Array.isArray(categories) && categories.length > 0) {
+        console.log('[NEWS] Found news category ID:', categories[0].id);
+        return categories[0].id;
+      }
+    }
+    
+    // Try alternative category names
+    const altNames = ['news', 'local-news', 'latest-news', 'headlines'];
+    for (const name of altNames) {
+      try {
+        const altUrl = `${WORDPRESS_BASE_URL}/categories?slug=${name}&_t=${Date.now()}`;
+        const altResponse = await fetch(altUrl, { method: 'GET', headers, signal });
+        if (altResponse.ok) {
+          const altCategories = await altResponse.json();
+          if (Array.isArray(altCategories) && altCategories.length > 0) {
+            console.log(`[NEWS] Found category '${name}' with ID:`, altCategories[0].id);
+            return altCategories[0].id;
+          }
+        }
+      } catch (e) {
+        // Continue trying
+      }
+    }
+    
+    console.log('[NEWS] No specific news category found, will fetch all posts');
+    return null;
+  } catch (error) {
+    console.log('[NEWS] Error fetching categories:', error);
+    return null;
+  }
+};
+
 const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
   if (USE_MOCK_DATA) {
     console.log('[NEWS] Using mock data (configured)');
@@ -217,7 +258,19 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
       headers['Expires'] = '0';
     }
     
-    const response = await fetchWithRetry(WORDPRESS_URL + cacheBuster, {
+    // Try to get news category ID first
+    const newsCategoryId = await fetchNewsCategoryId(headers, controller.signal);
+    
+    // Build URL with category filter if we found one
+    let fetchUrl = WORDPRESS_POSTS_URL + cacheBuster;
+    if (newsCategoryId) {
+      fetchUrl = `${WORDPRESS_BASE_URL}/posts?_embed&per_page=20&orderby=date&order=desc&categories=${newsCategoryId}${cacheBuster}`;
+      console.log('[NEWS] Fetching posts from news category:', newsCategoryId);
+    } else {
+      console.log('[NEWS] Fetching all recent posts');
+    }
+    
+    const response = await fetchWithRetry(fetchUrl, {
       method: 'GET',
       headers,
       signal: controller.signal,
