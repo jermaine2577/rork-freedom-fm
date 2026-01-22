@@ -190,19 +190,33 @@ const fetchWithRetry = async (url: string, options: RequestInit, retries: number
 const fetchNewsCategoryId = async (headers: Record<string, string>, signal: AbortSignal): Promise<number | null> => {
   try {
     console.log('[NEWS] Fetching news category ID...');
-    const categoriesUrl = `${WORDPRESS_BASE_URL}/categories?slug=news&_t=${Date.now()}`;
-    const response = await fetch(categoriesUrl, { method: 'GET', headers, signal });
     
-    if (response.ok) {
-      const categories = await response.json();
-      if (Array.isArray(categories) && categories.length > 0) {
-        console.log('[NEWS] Found news category ID:', categories[0].id);
-        return categories[0].id;
+    // First, get all categories to find news-related ones
+    const allCategoriesUrl = `${WORDPRESS_BASE_URL}/categories?per_page=100&_t=${Date.now()}`;
+    const allResponse = await fetch(allCategoriesUrl, { method: 'GET', headers, signal });
+    
+    if (allResponse.ok) {
+      const allCategories = await allResponse.json();
+      console.log('[NEWS] Available categories:', allCategories.map((c: any) => ({ id: c.id, name: c.name, slug: c.slug })));
+      
+      // Look for news-related categories by slug or name
+      const newsKeywords = ['news', 'local-news', 'latest-news', 'headlines', 'local', 'breaking'];
+      for (const keyword of newsKeywords) {
+        const found = allCategories.find((c: any) => 
+          c.slug?.toLowerCase() === keyword || 
+          c.name?.toLowerCase() === keyword ||
+          c.slug?.toLowerCase().includes('news') ||
+          c.name?.toLowerCase().includes('news')
+        );
+        if (found) {
+          console.log(`[NEWS] Found news category: ${found.name} (ID: ${found.id})`);
+          return found.id;
+        }
       }
     }
     
-    // Try alternative category names
-    const altNames = ['news', 'local-news', 'latest-news', 'headlines'];
+    // Try direct slug lookup as fallback
+    const altNames = ['news', 'local-news', 'latest-news', 'headlines', 'local'];
     for (const name of altNames) {
       try {
         const altUrl = `${WORDPRESS_BASE_URL}/categories?slug=${name}&_t=${Date.now()}`;
@@ -264,10 +278,13 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
     // Build URL with category filter if we found one
     let fetchUrl = WORDPRESS_POSTS_URL + cacheBuster;
     if (newsCategoryId) {
-      fetchUrl = `${WORDPRESS_BASE_URL}/posts?_embed&per_page=20&orderby=date&order=desc&categories=${newsCategoryId}${cacheBuster}`;
+      fetchUrl = `${WORDPRESS_BASE_URL}/posts?_embed&per_page=30&orderby=date&order=desc&categories=${newsCategoryId}${cacheBuster}`;
       console.log('[NEWS] Fetching posts from news category:', newsCategoryId);
     } else {
-      console.log('[NEWS] Fetching all recent posts');
+      // Try fetching posts that might be tagged as news or from a news page
+      // Some WordPress sites use custom post types or pages for news
+      fetchUrl = `${WORDPRESS_BASE_URL}/posts?_embed&per_page=30&orderby=date&order=desc${cacheBuster}`;
+      console.log('[NEWS] Fetching all recent posts (no news category found)');
     }
     
     const response = await fetchWithRetry(fetchUrl, {
