@@ -32,21 +32,24 @@ const loadAudioModule = (): boolean => {
 
 const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/mobile.mp3';
 
-const STREAM_TIMEOUT = 60000; // 60s for initial connection
-const BUFFER_TIMEOUT = 300000; // 5 minutes - very patient with buffering
-const BACKGROUND_BUFFER_TIMEOUT = 600000; // 10 minutes for background buffering
-const MAX_RETRY_ATTEMPTS = 200; // Many retries for long sessions
-const HEALTH_CHECK_INTERVAL = 120000; // Check every 2 minutes - less aggressive
-const STALE_CHECK_THRESHOLD = 300000; // 5 minutes before considering stale
-const ANDROID_KEEPALIVE_INTERVAL = 90000; // Check every 90s - much less aggressive
-const ANDROID_BACKGROUND_CHECK_INTERVAL = 180000; // Refresh audio mode every 3 min
-const ANDROID_LONG_SESSION_THRESHOLD = 300000; // 5 minutes = long session
-const ANDROID_LONG_SESSION_CHECK_INTERVAL = 180000; // Check every 3 minutes in long sessions
-const ANDROID_FOREGROUND_PING_INTERVAL = 60000; // Ping audio every 60s - less frequent
-const ANDROID_SOFT_RESTART_WAIT = 3000; // Wait 3s after soft restart
-const ANDROID_MIN_RETRY_DELAY = 1500;
-const ANDROID_MAX_RETRY_DELAY = 10000;
-const ANDROID_BUFFER_DURATION_MS = 30000; // 30s buffer for Android
+// Timeouts - be very patient on Android
+const STREAM_TIMEOUT = 90000; // 90s for initial connection
+const BUFFER_TIMEOUT = 600000; // 10 minutes - very patient with buffering
+const BACKGROUND_BUFFER_TIMEOUT = 900000; // 15 minutes for background buffering
+const MAX_RETRY_ATTEMPTS = 500; // Many retries for long sessions
+const HEALTH_CHECK_INTERVAL = 180000; // Check every 3 minutes - less aggressive
+const STALE_CHECK_THRESHOLD = 600000; // 10 minutes before considering stale
+
+// Android-specific constants - optimized for stable streaming
+const ANDROID_KEEPALIVE_INTERVAL = 180000; // Check every 3 minutes
+const ANDROID_BACKGROUND_CHECK_INTERVAL = 300000; // Refresh audio mode every 5 min
+const ANDROID_LONG_SESSION_THRESHOLD = 600000; // 10 minutes = long session
+const ANDROID_LONG_SESSION_CHECK_INTERVAL = 300000; // Check every 5 minutes in long sessions
+const ANDROID_FOREGROUND_PING_INTERVAL = 120000; // Ping audio every 2 min
+const ANDROID_SOFT_RESTART_WAIT = 5000; // Wait 5s after soft restart
+const ANDROID_MIN_RETRY_DELAY = 3000; // Longer min delay
+const ANDROID_MAX_RETRY_DELAY = 15000; // Longer max delay
+const ANDROID_STABLE_PLAYBACK_THRESHOLD = 30000; // 30s of stable playback
 
 interface RadioRefs {
   mounted: boolean;
@@ -81,6 +84,8 @@ interface RadioRefs {
   consecutiveErrors: number;
   lastSuccessfulPlay: number;
   softRestartAttempts: number;
+  stablePlaybackStart: number;
+  isStablePlayback: boolean;
 }
 
 export const [RadioProvider, useRadio] = createContextHook(() => {
@@ -122,12 +127,18 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     consecutiveErrors: 0,
     lastSuccessfulPlay: Date.now(),
     softRestartAttempts: 0,
+    stablePlaybackStart: 0,
+    isStablePlayback: false,
   });
 
   const getRetryDelay = useCallback(() => {
-    const baseDelay = ANDROID_MIN_RETRY_DELAY;
-    const multiplier = Math.min(refs.current.consecutiveErrors, 5);
-    return Math.min(baseDelay * (1 + multiplier * 0.5), ANDROID_MAX_RETRY_DELAY);
+    const baseDelay = Platform.OS === 'android' ? ANDROID_MIN_RETRY_DELAY : 1500;
+    const maxDelay = Platform.OS === 'android' ? ANDROID_MAX_RETRY_DELAY : 10000;
+    const multiplier = Math.min(refs.current.consecutiveErrors, 8);
+    // Exponential backoff with jitter to prevent thundering herd
+    const exponentialDelay = baseDelay * Math.pow(1.5, multiplier);
+    const jitter = Math.random() * 1000;
+    return Math.min(exponentialDelay + jitter, maxDelay);
   }, []);
 
   const configureAudioMode = useCallback(async (forceRefresh: boolean = false): Promise<boolean> => {
@@ -154,7 +165,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       
       if (Platform.OS === 'android') {
         refs.current.audioFocusCount++;
-        if (forceRefresh || refs.current.audioFocusCount % 10 === 0) {
+        if (forceRefresh || refs.current.audioFocusCount % 20 === 0) {
           console.log('[Radio] Android audio mode configured (focus count:', refs.current.audioFocusCount, ')');
         }
       }
@@ -193,7 +204,9 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       if (refs.current.sound) {
         const status = await refs.current.sound.getStatusAsync();
         if (status.isLoaded) {
-          await refs.current.sound.setProgressUpdateIntervalAsync(1000);
+          await refs.current.sound.setProgressUpdateIntervalAsync(
+            Platform.OS === 'android' ? 10000 : 2000
+          );
         }
       }
       console.log('Now Playing info updated, playing:', isPlayingParam);
@@ -256,14 +269,27 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     
     if (status.isLoaded) {
       if (status.isPlaying) {
+        const now = Date.now();
         if (!refs.current.isPlaying) {
           console.log('[Radio] Audio started playing');
+          refs.current.stablePlaybackStart = now;
+          refs.current.isStablePlayback = false;
         }
         refs.current.isPlaying = true;
-        refs.current.lastDataReceived = Date.now();
-        refs.current.lastSuccessfulPlay = Date.now();
+        refs.current.lastDataReceived = now;
+        refs.current.lastSuccessfulPlay = now;
         refs.current.consecutiveErrors = 0;
         refs.current.softRestartAttempts = 0;
+        
+        // Track stable playback on Android
+        if (Platform.OS === 'android' && !refs.current.isStablePlayback) {
+          const playbackDuration = now - refs.current.stablePlaybackStart;
+          if (playbackDuration >= ANDROID_STABLE_PLAYBACK_THRESHOLD) {
+            refs.current.isStablePlayback = true;
+            console.log('[Radio] Android: Playback now stable after', Math.round(playbackDuration / 1000), 's');
+          }
+        }
+        
         if (refs.current.mounted) {
           setIsPlaying(true);
           setIsLoading(false);
@@ -274,7 +300,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           refs.current.bufferTimeout = null;
         }
         refs.current.retryCount = 0;
-        refs.current.lastPlaybackTime = Date.now();
+        refs.current.lastPlaybackTime = now;
       } else if (status.isBuffering) {
         refs.current.lastDataReceived = Date.now();
         if (refs.current.mounted) {
@@ -403,7 +429,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   }, [clearAllTimers, cleanupWebAudio, refs]);
 
   const trySoftRestart = useCallback(async (): Promise<boolean> => {
-    if (!refs.current.sound || refs.current.softRestartAttempts >= 3) {
+    if (!refs.current.sound || refs.current.softRestartAttempts >= 5) {
       return false;
     }
     
@@ -571,11 +597,13 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       
       if (Platform.OS === 'android') {
         // Give Android more time to prepare audio subsystem
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 800));
         await configureAudioMode(true);
-        // Double-configure for better audio focus handling
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 200));
         await configureAudioMode(true);
+        await new Promise(resolve => setTimeout(resolve, 200));
+        await configureAudioMode(true);
+        console.log('[Radio] Android: Audio mode configured 3x for stability');
       }
       
       console.log('[Radio] Creating new audio stream...');
@@ -595,35 +623,39 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         console.log('[Radio] Calling Audio.Sound.createAsync');
         
         const initialStatus: any = { 
-            shouldPlay: true,
-            volume: volume,
-            isLooping: false,
-            progressUpdateIntervalMillis: Platform.OS === 'android' ? 5000 : 1000, // Less frequent updates on Android
-            rate: 1.0,
-            shouldCorrectPitch: false,
+          shouldPlay: true,
+          volume: volume,
+          isLooping: false,
+          progressUpdateIntervalMillis: Platform.OS === 'android' ? 10000 : 2000,
+          rate: 1.0,
+          shouldCorrectPitch: false,
+        };
+        
+        // Use stable URL for Android on first attempt to help with buffering
+        const streamUri = Platform.OS === 'android' && refs.current.retryCount === 0
+          ? STREAM_URL
+          : `${STREAM_URL}?t=${Date.now()}`;
+        
+        const sourceConfig: any = { 
+          uri: streamUri,
+          overrideFileExtensionAndroid: 'mp3',
+        };
+        
+        if (Platform.OS === 'android') {
+          sourceConfig.androidImplementation = 'SimpleExoPlayer';
+          sourceConfig.headers = {
+            'Cache-Control': 'no-store, no-cache',
+            'Connection': 'keep-alive',
+            'Accept': 'audio/mpeg, audio/*',
+            'Icy-MetaData': '0',
           };
-          
-          const streamUri = `${STREAM_URL}?t=${Date.now()}`;
-          
-          const sourceConfig: any = { 
-            uri: streamUri,
-            overrideFileExtensionAndroid: 'mp3',
-          };
-          
-          if (Platform.OS === 'android') {
-            sourceConfig.androidImplementation = 'SimpleExoPlayer';
-            // Hint for larger buffer on Android
-            sourceConfig.headers = {
-              'Cache-Control': 'no-cache',
-              'Connection': 'keep-alive',
-            };
-          }
-          
-          const createSoundPromise = Audio.Sound.createAsync(
-            sourceConfig,
-            initialStatus,
-            onPlaybackStatusUpdate
-          );
+        }
+        
+        const createSoundPromise = Audio.Sound.createAsync(
+          sourceConfig,
+          initialStatus,
+          onPlaybackStatusUpdate
+        );
         
         const timeoutPromise = new Promise<null>((_, reject) => {
           setTimeout(() => {
@@ -651,11 +683,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         return;
       }
       
+      const now = Date.now();
       refs.current.sound = newSound;
-      refs.current.lastDataReceived = Date.now();
-      refs.current.lastSuccessfulPlay = Date.now();
-      refs.current.sessionStartTime = Date.now();
+      refs.current.lastDataReceived = now;
+      refs.current.lastSuccessfulPlay = now;
+      refs.current.sessionStartTime = now;
+      refs.current.stablePlaybackStart = now;
       refs.current.isLongSession = false;
+      refs.current.isStablePlayback = false;
       refs.current.consecutiveErrors = 0;
       refs.current.softRestartAttempts = 0;
       console.log('[Radio] New sound created successfully');
@@ -736,14 +771,15 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             if (!status?.isBuffering && currentPosition === refs.current.lastPosition && currentPosition > 0) {
               refs.current.positionStuckCount++;
               
-              if (refs.current.positionStuckCount % 5 === 0) {
+              if (refs.current.positionStuckCount % 10 === 0) {
                 console.log('[Radio] Position unchanged:', refs.current.positionStuckCount, 'checks');
               }
               
-              // Be much more patient on Android - less aggressive stuck detection
-              const stuckThreshold = Platform.OS === 'android' 
-                ? (refs.current.isLongSession ? 40 : 30) 
-                : (refs.current.isLongSession ? 20 : 15);
+              // Be extremely patient - very conservative stuck detection
+              const baseThreshold = Platform.OS === 'android' ? 60 : 20;
+              const stuckThreshold = refs.current.isStablePlayback 
+                ? baseThreshold * 2 
+                : (refs.current.isLongSession ? baseThreshold * 1.5 : baseThreshold);
               if (refs.current.positionStuckCount >= stuckThreshold) {
                 console.log('[Radio] Stream may be stuck, trying soft restart first...');
                 refs.current.positionStuckCount = 0;
@@ -842,10 +878,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             const status = await refs.current.sound.getStatusAsync();
             const isBackground = refs.current.isInBackground;
             
-            if (!isBackground && refs.current.audioFocusCount % 20 === 0) {
+            if (!isBackground && refs.current.audioFocusCount % 30 === 0) {
               console.log('[Radio] Android keep-alive check:', {
                 isPlaying: status?.isPlaying,
                 isBuffering: status?.isBuffering,
+                stable: refs.current.isStablePlayback,
               });
             }
             
@@ -857,17 +894,20 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
                 refs.current.consecutiveErrors = 0;
                 refs.current.softRestartAttempts = 0;
               } else if (refs.current.isPlaying) {
-                // On Android, wait longer before considering it a problem
                 const timeSinceLastSuccess = Date.now() - refs.current.lastSuccessfulPlay;
-                if (timeSinceLastSuccess < 60000) {
-                  // Less than 1 minute since last success - just try playAsync without full restart
+                
+                // If we had stable playback, be extremely patient
+                const waitThreshold = refs.current.isStablePlayback ? 180000 : 120000;
+                
+                if (timeSinceLastSuccess < waitThreshold) {
                   try {
                     await refs.current.sound.playAsync();
-                    console.log('[Radio] Android: Resumed playback');
+                    console.log('[Radio] Android: Resumed playback after', Math.round(timeSinceLastSuccess / 1000), 's');
                     return;
-                  } catch (e) {
-                    console.warn('[Radio] Android: playAsync failed:', e);
+                  } catch {
+                    // Silent fail - will retry on next interval
                   }
+                  return;
                 }
                 
                 console.log('[Radio] Android: Stream paused for', Math.round(timeSinceLastSuccess / 1000), 's, attempting soft restart...');
@@ -877,9 +917,9 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
                 
                 refs.current.consecutiveErrors++;
                 
-                // Be more patient - require more consecutive errors before full reconnect
-                if (refs.current.consecutiveErrors >= 5 && refs.current.mounted && !refs.current.isRecovering) {
-                  console.log('[Radio] Android: Soft restarts failed, full reconnect...');
+                const errorThreshold = refs.current.isStablePlayback ? 10 : 7;
+                if (refs.current.consecutiveErrors >= errorThreshold && refs.current.mounted && !refs.current.isRecovering) {
+                  console.log('[Radio] Android: Soft restarts failed after', refs.current.consecutiveErrors, 'errors, full reconnect...');
                   refs.current.isRecovering = true;
                   refs.current.consecutiveErrors = 0;
                   refs.current.softRestartAttempts = 0;
@@ -894,10 +934,13 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
               }
             } else if (refs.current.isPlaying && !refs.current.isRecovering) {
               refs.current.consecutiveErrors++;
-              console.log('[Radio] Android: Sound unloaded, errors:', refs.current.consecutiveErrors);
               
-              // Require more consecutive errors before reconnecting
-              if (refs.current.consecutiveErrors >= 4) {
+              if (refs.current.consecutiveErrors % 3 === 1) {
+                console.log('[Radio] Android: Sound unloaded, errors:', refs.current.consecutiveErrors);
+              }
+              
+              const errorThreshold = refs.current.isStablePlayback ? 8 : 6;
+              if (refs.current.consecutiveErrors >= errorThreshold) {
                 refs.current.isRecovering = true;
                 refs.current.consecutiveErrors = 0;
                 await cleanupSound();
@@ -913,7 +956,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             console.warn('[Radio] Android keep-alive error:', keepAliveErr);
             refs.current.consecutiveErrors++;
             
-            if (refs.current.isPlaying && !refs.current.isRecovering && refs.current.mounted && refs.current.consecutiveErrors >= 6) {
+            const errorThreshold = refs.current.isStablePlayback ? 12 : 8;
+            if (refs.current.isPlaying && !refs.current.isRecovering && refs.current.mounted && refs.current.consecutiveErrors >= errorThreshold) {
               refs.current.isRecovering = true;
               refs.current.consecutiveErrors = 0;
               await cleanupSound();
@@ -954,8 +998,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           if (refs.current.isLongSession) {
             const hours = Math.floor(sessionDuration / 3600000);
             const minutes = Math.floor((sessionDuration % 3600000) / 60000);
-            if (minutes % 10 === 0) {
-              console.log('[Radio] Android long session:', hours, 'h', minutes, 'm');
+            if (minutes % 30 === 0 && minutes > 0) {
+              console.log('[Radio] Android long session:', hours, 'h', minutes, 'm, stable:', refs.current.isStablePlayback);
             }
             
             try {
@@ -964,8 +1008,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
                 refs.current.lastDataReceived = Date.now();
                 refs.current.lastSuccessfulPlay = Date.now();
               }
-            } catch (err) {
-              console.warn('[Radio] Android long session check error:', err);
+            } catch {
+              // Silent fail
             }
           }
         }, ANDROID_LONG_SESSION_CHECK_INTERVAL);
@@ -975,16 +1019,30 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             return;
           }
           
+          if (refs.current.isInBackground) {
+            return;
+          }
+          
           try {
             const status = await refs.current.sound.getStatusAsync();
             
             if (status?.isLoaded) {
+              const now = Date.now();
               if (status?.isPlaying || status?.isBuffering) {
-                refs.current.lastDataReceived = Date.now();
-                refs.current.lastSuccessfulPlay = Date.now();
+                refs.current.lastDataReceived = now;
+                refs.current.lastSuccessfulPlay = now;
+                
+                if (!refs.current.isStablePlayback && status?.isPlaying) {
+                  const playbackDuration = now - refs.current.stablePlaybackStart;
+                  if (playbackDuration >= ANDROID_STABLE_PLAYBACK_THRESHOLD) {
+                    refs.current.isStablePlayback = true;
+                    console.log('[Radio] Android: Playback confirmed stable');
+                  }
+                }
               }
             }
           } catch {
+            // Silent fail
           }
         }, ANDROID_FOREGROUND_PING_INTERVAL);
       }
