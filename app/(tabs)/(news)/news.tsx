@@ -20,11 +20,15 @@ import colors from '@/constants/colors';
 import { NewsArticle } from '@/types';
 
 const NEWS_PAGE_URL = 'https://freedomfm1065.com/news/';
-const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
-const MAX_RETRIES = 3;
-const NEWS_CACHE_KEY = 'freedomfm_news_cache';
-const NEWS_CACHE_TIME_KEY = 'freedomfm_news_cache_time';
-const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+const CORS_PROXIES = [
+  'https://api.allorigins.win/raw?url=',
+  'https://corsproxy.io/?',
+  'https://api.codetabs.com/v1/proxy?quest=',
+];
+const MAX_RETRIES = 2;
+const NEWS_CACHE_KEY = 'freedomfm_news_cache_v2';
+const NEWS_CACHE_TIME_KEY = 'freedomfm_news_cache_time_v2';
+const CACHE_DURATION = 24 * 60 * 60 * 1000;
 
 const decodeHtmlEntities = (text: string): string => {
   if (!text) return '';
@@ -203,134 +207,130 @@ const fetchWithRetry = async (url: string, options: RequestInit, retries: number
 const parseNewsFromHtml = (html: string): NewsArticle[] => {
   const articles: NewsArticle[] = [];
   const seenLinks = new Set<string>();
+  const defaultImage = 'https://freedomfm1065.com/wp-content/uploads/2024/01/freedom-fm-logo.png';
   
   console.log('[NEWS] Starting HTML parsing, length:', html.length);
   
-  // Method 1: Parse <article class="post"> structure (Freedom FM format)
-  const articleRegex = /<article[^>]*class="[^"]*post[^"]*"[^>]*>([\s\S]*?)<\/article>/gi;
-  let articleMatch;
+  // Method 1: Parse h4 tags with links (Freedom FM uses h4 for article titles)
+  const h4Regex = /<h4[^>]*>[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<\/h4>/gi;
+  let h4Match;
   
-  while ((articleMatch = articleRegex.exec(html)) !== null) {
+  while ((h4Match = h4Regex.exec(html)) !== null) {
     try {
-      const articleHtml = articleMatch[0];
-      
-      // Extract title and link from entry-title
-      const titleMatch = articleHtml.match(/<h[1-6][^>]*class="[^"]*entry-title[^"]*"[^>]*>[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i)
-        || articleHtml.match(/<a[^>]*href="([^"]+)"[^>]*>[\s\S]*?<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i)
-        || articleHtml.match(/<h[1-6][^>]*>[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
-      
-      if (!titleMatch) continue;
-      
-      const link = titleMatch[1].trim();
+      const link = h4Match[1].trim();
       if (seenLinks.has(link)) continue;
-      seenLinks.add(link);
+      if (link.includes('/category/') || link.includes('/tag/') || link.includes('/author/') || link.includes('/page/')) continue;
+      if (link === 'https://freedomfm1065.com/' || link === 'https://freedomfm1065.com/news/') continue;
       
-      const title = decodeHtmlEntities(titleMatch[2].replace(/<[^>]*>/g, '').trim());
+      const title = decodeHtmlEntities(h4Match[2].replace(/<[^>]*>/g, '').trim());
       if (!title || title.length < 5) continue;
       
-      // Extract image - check multiple patterns
-      let imageUrl = 'https://freedomfm1065.com/wp-content/uploads/2024/01/freedom-fm-logo.png';
-      const imgMatch = articleHtml.match(/<img[^>]*src="([^"]+)"[^>]*>/i)
-        || articleHtml.match(/data-src="([^"]+)"/i)
-        || articleHtml.match(/data-lazy-src="([^"]+)"/i)
-        || articleHtml.match(/srcset="([^\s,"]+)/i);
-      if (imgMatch && imgMatch[1]) {
+      seenLinks.add(link);
+      
+      // Try to find associated image nearby in HTML
+      const linkIndex = h4Match.index;
+      const searchArea = html.substring(Math.max(0, linkIndex - 2000), linkIndex + 500);
+      let imageUrl = defaultImage;
+      
+      const imgMatch = searchArea.match(/<img[^>]*src="([^"]+)"[^>]*>/i)
+        || searchArea.match(/data-src="([^"]+)"/i)
+        || searchArea.match(/background-image[^)]*url\(['"]?([^'"\)]+)['"]?\)/i);
+      
+      if (imgMatch && imgMatch[1] && !imgMatch[1].includes('data:') && !imgMatch[1].includes('svg')) {
         imageUrl = imgMatch[1];
       }
       
-      // Extract date from <time> tag
-      let dateStr = new Date().toISOString();
-      const timeMatch = articleHtml.match(/<time[^>]*datetime="([^"]+)"[^>]*>/i)
-        || articleHtml.match(/<time[^>]*class="[^"]*entry-date[^"]*"[^>]*datetime="([^"]+)"/i);
-      if (timeMatch && timeMatch[1]) {
-        const parsedDate = new Date(timeMatch[1]);
-        if (!isNaN(parsedDate.getTime())) {
-          dateStr = parsedDate.toISOString();
-        }
-      }
-      
-      // Extract excerpt from entry-content paragraph
-      let excerpt = title;
-      const contentMatch = articleHtml.match(/<div[^>]*class="[^"]*entry-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-      if (contentMatch) {
-        const pMatch = contentMatch[1].match(/<p[^>]*>([\s\S]*?)<\/p>/i);
-        if (pMatch) {
-          const cleanExcerpt = decodeHtmlEntities(pMatch[1].replace(/<[^>]*>/g, '').trim());
-          if (cleanExcerpt.length > 10) {
-            excerpt = cleanExcerpt.substring(0, 250);
-          }
-        }
-      }
-      
-      const id = `news-${articles.length}-${Date.now()}`;
-      
-      articles.push({
-        id,
-        title,
-        excerpt,
-        imageUrl,
-        date: dateStr,
-        category: 'News',
-        link,
-        content: '',
-      });
-      
-      console.log(`[NEWS] Parsed: ${title.substring(0, 40)}...`);
-    } catch (e) {
-      console.log('[NEWS] Error parsing article:', e);
-    }
-  }
-  
-  console.log(`[NEWS] Method 1 found ${articles.length} articles`);
-  
-  // Method 2: If no articles found, try finding entry-title links directly
-  if (articles.length === 0) {
-    console.log('[NEWS] Trying method 2: entry-title links');
-    
-    const titleLinkRegex = /<h[1-6][^>]*class="[^"]*entry-title[^"]*"[^>]*>[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
-    let linkMatch;
-    
-    while ((linkMatch = titleLinkRegex.exec(html)) !== null) {
-      const link = linkMatch[1].trim();
-      if (seenLinks.has(link)) continue;
-      if (link.includes('/category/') || link.includes('/tag/') || link.includes('/author/')) continue;
-      seenLinks.add(link);
-      
-      const title = decodeHtmlEntities(linkMatch[2].replace(/<[^>]*>/g, '').trim());
-      if (!title || title.length < 5) continue;
-      
       articles.push({
         id: `news-${articles.length}-${Date.now()}`,
         title,
         excerpt: title,
-        imageUrl: 'https://freedomfm1065.com/wp-content/uploads/2024/01/freedom-fm-logo.png',
+        imageUrl,
         date: new Date().toISOString(),
         category: 'News',
         link,
         content: '',
       });
       
+      console.log(`[NEWS] Found (h4): ${title.substring(0, 40)}...`);
       if (articles.length >= 30) break;
+    } catch (e) {
+      console.log('[NEWS] Error parsing h4 article:', e);
     }
+  }
+  
+  console.log(`[NEWS] Method 1 (h4) found ${articles.length} articles`);
+  
+  // Method 2: Parse <article> tags
+  if (articles.length === 0) {
+    console.log('[NEWS] Trying method 2: article tags');
+    const articleRegex = /<article[^>]*>([\s\S]*?)<\/article>/gi;
+    let articleMatch;
     
+    while ((articleMatch = articleRegex.exec(html)) !== null) {
+      try {
+        const articleHtml = articleMatch[0];
+        
+        const titleMatch = articleHtml.match(/<a[^>]*href="([^"]+)"[^>]*>([^<]+)/i)
+          || articleHtml.match(/<h[1-6][^>]*>[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
+        
+        if (!titleMatch) continue;
+        
+        const link = titleMatch[1].trim();
+        if (seenLinks.has(link)) continue;
+        if (link.includes('/category/') || link.includes('/tag/') || link.includes('/author/')) continue;
+        
+        const title = decodeHtmlEntities(titleMatch[2].replace(/<[^>]*>/g, '').trim());
+        if (!title || title.length < 5) continue;
+        
+        seenLinks.add(link);
+        
+        let imageUrl = defaultImage;
+        const imgMatch = articleHtml.match(/<img[^>]*src="([^"]+)"[^>]*>/i);
+        if (imgMatch && imgMatch[1]) imageUrl = imgMatch[1];
+        
+        let dateStr = new Date().toISOString();
+        const timeMatch = articleHtml.match(/<time[^>]*datetime="([^"]+)"/i);
+        if (timeMatch) {
+          const d = new Date(timeMatch[1]);
+          if (!isNaN(d.getTime())) dateStr = d.toISOString();
+        }
+        
+        articles.push({
+          id: `news-${articles.length}-${Date.now()}`,
+          title,
+          excerpt: title,
+          imageUrl,
+          date: dateStr,
+          category: 'News',
+          link,
+          content: '',
+        });
+        
+        console.log(`[NEWS] Found (article): ${title.substring(0, 40)}...`);
+        if (articles.length >= 30) break;
+      } catch (e) {
+        console.log('[NEWS] Error parsing article:', e);
+      }
+    }
     console.log(`[NEWS] Method 2 found ${articles.length} articles`);
   }
   
-  // Method 3: Generic link extraction as last resort
+  // Method 3: Find all freedomfm article links
   if (articles.length === 0) {
-    console.log('[NEWS] Trying method 3: generic links');
+    console.log('[NEWS] Trying method 3: generic freedomfm links');
     
-    const genericLinkRegex = /<a[^>]*href="(https:\/\/freedomfm1065\.com\/[a-z0-9-]+(?:-[a-z0-9]+)+\/)"[^>]*>([^<]+)/gi;
-    let gMatch;
+    const linkRegex = /<a[^>]*href="(https?:\/\/(?:www\.)?freedomfm1065\.com\/[^"]+)"[^>]*>([^<]{10,})<\/a>/gi;
+    let linkMatch;
     
-    while ((gMatch = genericLinkRegex.exec(html)) !== null) {
-      const link = gMatch[1].trim();
-      const title = decodeHtmlEntities(gMatch[2].trim());
+    while ((linkMatch = linkRegex.exec(html)) !== null) {
+      const link = linkMatch[1].trim();
+      const title = decodeHtmlEntities(linkMatch[2].trim());
       
       if (seenLinks.has(link)) continue;
-      if (link.includes('/category/') || link.includes('/tag/') || link.includes('/page/')) continue;
+      if (link.includes('/category/') || link.includes('/tag/') || link.includes('/page/') || link.includes('/author/')) continue;
       if (link === 'https://freedomfm1065.com/' || link === 'https://freedomfm1065.com/news/') continue;
-      if (!title || title.length < 15) continue;
+      if (!title || title.length < 10 || title.length > 200) continue;
+      if (title.toLowerCase().includes('read more') || title.toLowerCase().includes('click here')) continue;
       
       seenLinks.add(link);
       
@@ -338,13 +338,14 @@ const parseNewsFromHtml = (html: string): NewsArticle[] => {
         id: `news-${articles.length}-${Date.now()}`,
         title,
         excerpt: title,
-        imageUrl: 'https://freedomfm1065.com/wp-content/uploads/2024/01/freedom-fm-logo.png',
+        imageUrl: defaultImage,
         date: new Date().toISOString(),
         category: 'News',
         link,
         content: '',
       });
       
+      console.log(`[NEWS] Found (link): ${title.substring(0, 40)}...`);
       if (articles.length >= 30) break;
     }
     
@@ -354,79 +355,98 @@ const parseNewsFromHtml = (html: string): NewsArticle[] => {
   return articles;
 };
 
-const fetchFreshNews = async (): Promise<NewsArticle[]> => {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const controller = new AbortController();
-  
+const fetchWithProxy = async (proxyUrl: string, targetUrl: string, signal: AbortSignal): Promise<string | null> => {
   try {
-    const timeoutDuration = Platform.OS === 'web' ? 25000 : Platform.OS === 'android' ? 15000 : 12000;
-    timeoutId = setTimeout(() => {
-      console.log('[NEWS] Request timeout, aborting...');
-      controller.abort();
-    }, timeoutDuration);
+    const fetchUrl = proxyUrl + encodeURIComponent(targetUrl);
+    console.log('[NEWS] Trying proxy:', proxyUrl.substring(0, 30));
     
-    console.log('[NEWS] Fetching news page HTML...', Platform.OS);
-    
-    const cacheBuster = `?_t=${Date.now()}`;
-    
-    let fetchUrl: string;
-    const headers: Record<string, string> = {
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    };
-    
-    if (Platform.OS === 'web') {
-      fetchUrl = CORS_PROXY + encodeURIComponent(NEWS_PAGE_URL + cacheBuster);
-      console.log('[NEWS] Using CORS proxy for web');
-    } else {
-      fetchUrl = NEWS_PAGE_URL + cacheBuster;
-      headers['User-Agent'] = Platform.OS === 'android' 
-        ? 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
-        : 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
-      headers['Cache-Control'] = 'no-cache';
-    }
-    
-    const response = await fetchWithRetry(fetchUrl, {
+    const response = await fetch(fetchUrl, {
       method: 'GET',
-      headers,
-      signal: controller.signal,
-    }, MAX_RETRIES);
-    
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-      timeoutId = undefined;
-    }
+      headers: { 'Accept': 'text/html,application/xhtml+xml,*/*' },
+      signal,
+    });
     
     if (!response.ok) {
-      console.log('[NEWS] Server returned error status:', response.status);
-      throw new Error(`Server error: ${response.status}`);
+      console.log('[NEWS] Proxy returned status:', response.status);
+      return null;
     }
     
     const html = await response.text();
-    console.log('[NEWS] Received HTML, length:', html.length);
+    if (html && html.length > 1000) {
+      return html;
+    }
+    return null;
+  } catch (e: any) {
+    console.log('[NEWS] Proxy failed:', e?.message?.substring(0, 50));
+    return null;
+  }
+};
+
+const fetchFreshNews = async (): Promise<NewsArticle[]> => {
+  const controller = new AbortController();
+  const timeoutDuration = Platform.OS === 'web' ? 30000 : 20000;
+  
+  const timeoutId = setTimeout(() => {
+    console.log('[NEWS] Request timeout');
+    controller.abort();
+  }, timeoutDuration);
+  
+  try {
+    console.log('[NEWS] Fetching news...', Platform.OS);
+    const targetUrl = NEWS_PAGE_URL;
+    let html: string | null = null;
+    
+    if (Platform.OS === 'web') {
+      for (const proxy of CORS_PROXIES) {
+        if (controller.signal.aborted) break;
+        html = await fetchWithProxy(proxy, targetUrl, controller.signal);
+        if (html) {
+          console.log('[NEWS] Got HTML via proxy, length:', html.length);
+          break;
+        }
+      }
+    } else {
+      const headers: Record<string, string> = {
+        'Accept': 'text/html,application/xhtml+xml,*/*',
+        'User-Agent': Platform.OS === 'android' 
+          ? 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/121.0.0.0 Mobile Safari/537.36'
+          : 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) Safari/605.1.15',
+        'Cache-Control': 'no-cache',
+      };
+      
+      const response = await fetchWithRetry(targetUrl, {
+        method: 'GET',
+        headers,
+        signal: controller.signal,
+      }, MAX_RETRIES);
+      
+      if (response.ok) {
+        html = await response.text();
+        console.log('[NEWS] Got HTML directly, length:', html?.length);
+      }
+    }
+    
+    clearTimeout(timeoutId);
+    
+    if (!html || html.length < 1000) {
+      console.log('[NEWS] No valid HTML received');
+      return [];
+    }
     
     const articles = parseNewsFromHtml(html);
     
     if (articles.length > 0) {
-      console.log('[NEWS] Successfully parsed', articles.length, 'articles from HTML');
+      console.log('[NEWS] Parsed', articles.length, 'articles');
       await setCachedNews(articles);
       return articles;
     }
     
-    console.log('[NEWS] No articles parsed from HTML');
+    console.log('[NEWS] No articles found in HTML');
     return [];
     
   } catch (error: any) {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-    
-    const errorMsg = error?.message || 'Unknown error';
-    console.log('[NEWS] Error fetching news page:', errorMsg);
-    
-    if (error?.name === 'AbortError') {
-      console.log('[NEWS] Request was aborted (timeout)');
-    }
-    
+    clearTimeout(timeoutId);
+    console.log('[NEWS] Fetch error:', error?.message);
     return [];
   }
 };
