@@ -18,27 +18,7 @@ import { useRouter } from 'expo-router';
 import colors from '@/constants/colors';
 import { NewsArticle } from '@/types';
 
-interface WordPressPost {
-  id: number;
-  title: { rendered: string };
-  excerpt: { rendered: string };
-  content: { rendered: string };
-  date: string;
-  link: string;
-  categories: number[];
-  _embedded?: {
-    'wp:featuredmedia'?: {
-      source_url: string;
-    }[];
-    'wp:term'?: {
-      name: string;
-    }[][];
-  };
-}
-
-const WORDPRESS_BASE_URL = 'https://freedomfm1065.com/wp-json/wp/v2';
-const WORDPRESS_POSTS_URL = `${WORDPRESS_BASE_URL}/posts?_embed&per_page=20&orderby=date&order=desc`;
-const USE_MOCK_DATA = false;
+const NEWS_PAGE_URL = 'https://freedomfm1065.com/news/';
 const MAX_RETRIES = 3;
 
 const decodeHtmlEntities = (text: string): string => {
@@ -187,66 +167,144 @@ const fetchWithRetry = async (url: string, options: RequestInit, retries: number
   throw lastError || new Error('All fetch attempts failed');
 };
 
-const fetchNewsCategoryId = async (headers: Record<string, string>, signal: AbortSignal): Promise<number | null> => {
-  try {
-    console.log('[NEWS] Fetching news category ID...');
-    
-    // First, get all categories to find news-related ones
-    const allCategoriesUrl = `${WORDPRESS_BASE_URL}/categories?per_page=100&_t=${Date.now()}`;
-    const allResponse = await fetch(allCategoriesUrl, { method: 'GET', headers, signal });
-    
-    if (allResponse.ok) {
-      const allCategories = await allResponse.json();
-      console.log('[NEWS] Available categories:', allCategories.map((c: any) => ({ id: c.id, name: c.name, slug: c.slug })));
+const parseNewsFromHtml = (html: string): NewsArticle[] => {
+  const articles: NewsArticle[] = [];
+  
+  // Pattern to match article blocks - looking for common WordPress article patterns
+  // Match article containers with titles and links
+  const articlePatterns = [
+    // Pattern 1: <article> tags with title links
+    /<article[^>]*>([\s\S]*?)<\/article>/gi,
+    // Pattern 2: Post containers with entry-title
+    /<div[^>]*class="[^"]*post[^"]*"[^>]*>([\s\S]*?)<\/div>\s*(?=<div[^>]*class="[^"]*post|$)/gi,
+  ];
+  
+  // Try to find articles using <article> tags first
+  const articleMatches = html.match(/<article[^>]*>[\s\S]*?<\/article>/gi) || [];
+  
+  console.log(`[NEWS] Found ${articleMatches.length} article tags`);
+  
+  articleMatches.forEach((articleHtml, index) => {
+    try {
+      // Extract title and link
+      const titleMatch = articleHtml.match(/<h[1-4][^>]*class="[^"]*entry-title[^"]*"[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/i)
+        || articleHtml.match(/<a[^>]*href="([^"]+)"[^>]*class="[^"]*entry-title[^"]*"[^>]*>([^<]+)<\/a>/i)
+        || articleHtml.match(/<h[1-4][^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/i);
       
-      // Look for news-related categories by slug or name
-      const newsKeywords = ['news', 'local-news', 'latest-news', 'headlines', 'local', 'breaking'];
-      for (const keyword of newsKeywords) {
-        const found = allCategories.find((c: any) => 
-          c.slug?.toLowerCase() === keyword || 
-          c.name?.toLowerCase() === keyword ||
-          c.slug?.toLowerCase().includes('news') ||
-          c.name?.toLowerCase().includes('news')
-        );
-        if (found) {
-          console.log(`[NEWS] Found news category: ${found.name} (ID: ${found.id})`);
-          return found.id;
+      if (!titleMatch) {
+        console.log(`[NEWS] No title found in article ${index}`);
+        return;
+      }
+      
+      const link = titleMatch[1];
+      const title = decodeHtmlEntities(titleMatch[2].trim());
+      
+      // Extract image
+      const imageMatch = articleHtml.match(/<img[^>]*src="([^"]+)"[^>]*>/i)
+        || articleHtml.match(/data-src="([^"]+)"/i)
+        || articleHtml.match(/srcset="([^\s"]+)/i);
+      const imageUrl = imageMatch ? imageMatch[1] : 'https://freedomfm1065.com/wp-content/uploads/2024/01/freedom-fm-logo.png';
+      
+      // Extract date
+      const dateMatch = articleHtml.match(/<time[^>]*datetime="([^"]+)"[^>]*>/i)
+        || articleHtml.match(/<span[^>]*class="[^"]*date[^"]*"[^>]*>([^<]+)<\/span>/i)
+        || articleHtml.match(/([A-Z][a-z]+\s+\d{1,2},?\s*\d{4})/i)
+        || articleHtml.match(/(\d{1,2}\s+[A-Z][a-z]+\s+\d{4})/i)
+        || articleHtml.match(/January|February|March|April|May|June|July|August|September|October|November|December\s+\d{1,2}/i);
+      
+      let dateStr = new Date().toISOString();
+      if (dateMatch) {
+        const parsedDate = new Date(dateMatch[1]);
+        if (!isNaN(parsedDate.getTime())) {
+          dateStr = parsedDate.toISOString();
         }
       }
-    }
-    
-    // Try direct slug lookup as fallback
-    const altNames = ['news', 'local-news', 'latest-news', 'headlines', 'local'];
-    for (const name of altNames) {
-      try {
-        const altUrl = `${WORDPRESS_BASE_URL}/categories?slug=${name}&_t=${Date.now()}`;
-        const altResponse = await fetch(altUrl, { method: 'GET', headers, signal });
-        if (altResponse.ok) {
-          const altCategories = await altResponse.json();
-          if (Array.isArray(altCategories) && altCategories.length > 0) {
-            console.log(`[NEWS] Found category '${name}' with ID:`, altCategories[0].id);
-            return altCategories[0].id;
-          }
-        }
-      } catch (e) {
-        // Continue trying
+      
+      // Extract excerpt
+      const excerptMatch = articleHtml.match(/<div[^>]*class="[^"]*entry-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
+        || articleHtml.match(/<p[^>]*class="[^"]*excerpt[^"]*"[^>]*>([^<]+)<\/p>/i)
+        || articleHtml.match(/<div[^>]*class="[^"]*excerpt[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
+        || articleHtml.match(/<p>([^<]{20,})<\/p>/i);
+      
+      let excerpt = '';
+      if (excerptMatch) {
+        excerpt = decodeHtmlEntities(excerptMatch[1].replace(/<[^>]*>/g, '').trim().substring(0, 200));
       }
+      
+      // Generate unique ID from link
+      const id = link.replace(/[^a-zA-Z0-9]/g, '-').substring(0, 50) + '-' + index;
+      
+      articles.push({
+        id,
+        title,
+        excerpt: excerpt || title,
+        imageUrl,
+        date: dateStr,
+        category: 'News',
+        link,
+        content: '',
+      });
+      
+      console.log(`[NEWS] Parsed article: ${title.substring(0, 50)}...`);
+    } catch (e) {
+      console.log(`[NEWS] Error parsing article ${index}:`, e);
     }
+  });
+  
+  // If no articles found with <article> tags, try alternative patterns
+  if (articles.length === 0) {
+    console.log('[NEWS] Trying alternative parsing patterns...');
     
-    console.log('[NEWS] No specific news category found, will fetch all posts');
-    return null;
-  } catch (error) {
-    console.log('[NEWS] Error fetching categories:', error);
-    return null;
+    // Look for links that look like news article URLs
+    const linkPattern = /<a[^>]*href="(https:\/\/freedomfm1065\.com\/[a-z0-9-]+\/)"[^>]*>\s*(?:<[^>]+>)*([^<]+)/gi;
+    let match;
+    const seenLinks = new Set<string>();
+    
+    while ((match = linkPattern.exec(html)) !== null) {
+      const link = match[1];
+      const title = decodeHtmlEntities(match[2].trim());
+      
+      // Skip if not a news article link or already seen
+      if (seenLinks.has(link) || 
+          link.includes('/category/') || 
+          link.includes('/tag/') ||
+          link.includes('/author/') ||
+          link.includes('/page/') ||
+          link === 'https://freedomfm1065.com/' ||
+          link === 'https://freedomfm1065.com/news/' ||
+          title.length < 10) {
+        continue;
+      }
+      
+      seenLinks.add(link);
+      
+      // Try to find associated image
+      const contextStart = Math.max(0, match.index - 500);
+      const contextEnd = Math.min(html.length, match.index + 500);
+      const context = html.substring(contextStart, contextEnd);
+      
+      const imgMatch = context.match(/<img[^>]*src="([^"]+)"[^>]*>/i);
+      const imageUrl = imgMatch ? imgMatch[1] : 'https://freedomfm1065.com/wp-content/uploads/2024/01/freedom-fm-logo.png';
+      
+      articles.push({
+        id: `article-${articles.length}`,
+        title,
+        excerpt: title,
+        imageUrl,
+        date: new Date().toISOString(),
+        category: 'News',
+        link,
+        content: '',
+      });
+      
+      if (articles.length >= 20) break;
+    }
   }
+  
+  return articles;
 };
 
-const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
-  if (USE_MOCK_DATA) {
-    console.log('[NEWS] Using mock data (configured)');
-    return getMockData();
-  }
-
+const fetchNewsFromHtmlPage = async (): Promise<NewsArticle[]> => {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const controller = new AbortController();
   
@@ -257,37 +315,21 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
       controller.abort();
     }, timeoutDuration);
     
-    console.log('[NEWS] Fetching from WordPress API...', Platform.OS);
+    console.log('[NEWS] Fetching news page HTML...', Platform.OS);
     
-    const cacheBuster = `&_t=${Date.now()}&rand=${Math.random()}`;
+    const cacheBuster = `?_t=${Date.now()}`;
     const headers: Record<string, string> = {
-      'Accept': 'application/json',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     };
     
     if (Platform.OS !== 'web') {
-      headers['Content-Type'] = 'application/json';
-      headers['User-Agent'] = Platform.OS === 'android' ? 'FreedomFM-Android/1.0' : 'FreedomFM-iOS/1.0';
-      headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
-      headers['Pragma'] = 'no-cache';
-      headers['Expires'] = '0';
+      headers['User-Agent'] = Platform.OS === 'android' 
+        ? 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
+        : 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+      headers['Cache-Control'] = 'no-cache';
     }
     
-    // Try to get news category ID first
-    const newsCategoryId = await fetchNewsCategoryId(headers, controller.signal);
-    
-    // Build URL with category filter if we found one
-    let fetchUrl = WORDPRESS_POSTS_URL + cacheBuster;
-    if (newsCategoryId) {
-      fetchUrl = `${WORDPRESS_BASE_URL}/posts?_embed&per_page=30&orderby=date&order=desc&categories=${newsCategoryId}${cacheBuster}`;
-      console.log('[NEWS] Fetching posts from news category:', newsCategoryId);
-    } else {
-      // Try fetching posts that might be tagged as news or from a news page
-      // Some WordPress sites use custom post types or pages for news
-      fetchUrl = `${WORDPRESS_BASE_URL}/posts?_embed&per_page=30&orderby=date&order=desc${cacheBuster}`;
-      console.log('[NEWS] Fetching all recent posts (no news category found)');
-    }
-    
-    const response = await fetchWithRetry(fetchUrl, {
+    const response = await fetchWithRetry(NEWS_PAGE_URL + cacheBuster, {
       method: 'GET',
       headers,
       signal: controller.signal,
@@ -300,76 +342,35 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
     
     if (!response.ok) {
       console.log('[NEWS] Server returned error status:', response.status);
-      if (response.status === 403 || response.status === 401) {
-        console.log('[NEWS] API access denied, server may have blocked external access');
-      }
       throw new Error(`Server error: ${response.status}`);
     }
     
-    const contentType = response.headers.get('content-type');
-    if (contentType && !contentType.includes('application/json')) {
-      console.log('[NEWS] Invalid content type:', contentType);
-      throw new Error('Server returned invalid content type');
-    }
+    const html = await response.text();
+    console.log('[NEWS] Received HTML, length:', html.length);
     
-    let posts: WordPressPost[];
-    try {
-      const rawText = await response.text();
-      console.log('[NEWS] Response length:', rawText.length);
-      
-      let cleanedText = rawText.trim()
-        .replace(/^\uFEFF/, '')
-        .replace(/\r\n/g, '\n')
-        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]+/g, '');
-      
-      if (!cleanedText.startsWith('[') && !cleanedText.startsWith('{')) {
-        console.log('[NEWS] Response does not start with JSON, first 100 chars:', cleanedText.substring(0, 100));
-        throw new Error('Invalid JSON response');
-      }
-      
-      posts = JSON.parse(cleanedText);
-    } catch (parseError) {
-      console.log('[NEWS] JSON parse error:', parseError);
-      console.log('[NEWS] Falling back to sample news');
+    const articles = parseNewsFromHtml(html);
+    
+    if (articles.length === 0) {
+      console.log('[NEWS] No articles parsed from HTML, using mock data');
       return getMockData();
     }
     
-    if (!Array.isArray(posts) || posts.length === 0) {
-      console.log('[NEWS] No posts in response, using sample news');
-      return getMockData();
-    }
+    console.log('[NEWS] Successfully parsed', articles.length, 'articles from HTML');
+    return articles;
     
-    console.log('[NEWS] Successfully fetched', posts.length, 'posts from server');
-    
-    return posts.map((post) => {
-      const rawTitle = post.title?.rendered || '';
-      const rawExcerpt = post.excerpt?.rendered || '';
-      const rawCategory = post._embedded?.['wp:term']?.[0]?.[0]?.name || 'News';
-      
-      return {
-        id: post.id.toString(),
-        title: decodeHtmlEntities(rawTitle.replace(/<[^>]*>/g, '').trim()),
-        excerpt: decodeHtmlEntities(rawExcerpt.replace(/<[^>]*>/g, '').trim()),
-        content: post.content?.rendered || '',
-        imageUrl: post._embedded?.['wp:featuredmedia']?.[0]?.source_url || 'https://via.placeholder.com/400x200',
-        category: decodeHtmlEntities(rawCategory),
-        date: post.date || new Date().toISOString(),
-        link: post.link || '',
-      };
-    });
   } catch (error: any) {
     if (timeoutId) {
       clearTimeout(timeoutId);
     }
     
     const errorMsg = error?.message || 'Unknown error';
-    console.log('[NEWS] Network error occurred:', errorMsg);
+    console.log('[NEWS] Error fetching news page:', errorMsg);
     
     if (error?.name === 'AbortError') {
       console.log('[NEWS] Request was aborted (timeout)');
     }
     
-    console.log('[NEWS] Falling back to sample news content');
+    console.log('[NEWS] Falling back to mock data');
     return getMockData();
   }
 };
@@ -417,8 +418,8 @@ export default function NewsScreen() {
   const hasInitialFetched = useRef(false);
   
   const { data: articles, isLoading, error, refetch, isFetching } = useQuery({
-    queryKey: ['wordpressNews'],
-    queryFn: fetchWordPressPosts,
+    queryKey: ['freedomFmNews'],
+    queryFn: fetchNewsFromHtmlPage,
     retry: 2,
     staleTime: 0,
     gcTime: 0,
