@@ -6,8 +6,10 @@ const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/
 
 const STREAM_TIMEOUT = 60000;
 const MAX_RETRY_ATTEMPTS = 100;
-const HEALTH_CHECK_INTERVAL = 30000;
-const ANDROID_RECOVERY_DELAY = 2000;
+const HEALTH_CHECK_INTERVAL = Platform.OS === 'android' ? 10000 : 30000;
+const ANDROID_RECOVERY_DELAY = 1500;
+const ANDROID_BUFFER_CHECK_INTERVAL = 5000;
+const ANDROID_STALL_THRESHOLD = 8000;
 
 interface RadioRefs {
   mounted: boolean;
@@ -17,6 +19,7 @@ interface RadioRefs {
   isPlaying: boolean;
   isSwitching: boolean;
   healthCheck: ReturnType<typeof setInterval> | null;
+  bufferCheck: ReturnType<typeof setInterval> | null;
   retryCount: number;
   lastPlaybackTime: number;
   isRecovering: boolean;
@@ -25,6 +28,9 @@ interface RadioRefs {
   isInBackground: boolean;
   consecutiveErrors: number;
   lastSuccessfulPlay: number;
+  lastBufferTime: number;
+  stallCount: number;
+  isBuffering: boolean;
 }
 
 let expoAudioModule: any = null;
@@ -59,6 +65,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     isPlaying: false,
     isSwitching: false,
     healthCheck: null,
+    bufferCheck: null,
     retryCount: 0,
     lastPlaybackTime: 0,
     isRecovering: false,
@@ -67,14 +74,17 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     isInBackground: false,
     consecutiveErrors: 0,
     lastSuccessfulPlay: Date.now(),
+    lastBufferTime: Date.now(),
+    stallCount: 0,
+    isBuffering: false,
   });
 
   const getRetryDelay = useCallback(() => {
     const baseDelay = Platform.OS === 'android' ? ANDROID_RECOVERY_DELAY : 1500;
-    const maxDelay = 15000;
-    const multiplier = Math.min(refs.current.consecutiveErrors, 5);
-    const exponentialDelay = baseDelay * Math.pow(1.5, multiplier);
-    const jitter = Math.random() * 500;
+    const maxDelay = 10000;
+    const multiplier = Math.min(refs.current.consecutiveErrors, 3);
+    const exponentialDelay = baseDelay * Math.pow(1.3, multiplier);
+    const jitter = Math.random() * 300;
     return Math.min(exponentialDelay + jitter, maxDelay);
   }, []);
 
@@ -85,13 +95,22 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     if (!moduleLoaded || !expoAudioModule?.setAudioModeAsync) return false;
     
     try {
-      await expoAudioModule.setAudioModeAsync({
-        playsInSilentMode: true,
-        shouldPlayInBackground: true,
-        interruptionMode: 'doNotMix',
-        interruptionModeAndroid: 'doNotMix',
-      });
-      console.log('[Radio] Audio mode configured for background playback');
+      const audioConfig = Platform.OS === 'android' 
+        ? {
+            playsInSilentMode: true,
+            shouldPlayInBackground: true,
+            interruptionMode: 'duckOthers',
+            interruptionModeAndroid: 'duckOthers',
+          }
+        : {
+            playsInSilentMode: true,
+            shouldPlayInBackground: true,
+            interruptionMode: 'doNotMix',
+            interruptionModeAndroid: 'doNotMix',
+          };
+      
+      await expoAudioModule.setAudioModeAsync(audioConfig);
+      console.log('[Radio] Audio mode configured for', Platform.OS);
       return true;
     } catch (err) {
       console.warn('[Radio] Error configuring audio mode:', err);
@@ -103,6 +122,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     if (refs.current.healthCheck) {
       clearInterval(refs.current.healthCheck);
       refs.current.healthCheck = null;
+    }
+    if (refs.current.bufferCheck) {
+      clearInterval(refs.current.bufferCheck);
+      refs.current.bufferCheck = null;
     }
   }, []);
 
@@ -289,9 +312,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       const audioSource: any = {
         uri: streamUri,
         headers: {
-          'Cache-Control': 'no-cache, no-store',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
           'Connection': 'keep-alive',
           'Accept': 'audio/mpeg, audio/*;q=0.9, */*;q=0.1',
+          'Icy-MetaData': '0',
         },
       };
       
@@ -299,9 +324,16 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       
       try {
         const createPlayerPromise = (async () => {
-          const player = expoAudioModule.createAudioPlayer(audioSource, {
-            updateInterval: Platform.OS === 'android' ? 1000 : 500,
-          });
+          const playerOptions = Platform.OS === 'android'
+            ? {
+                updateInterval: 500,
+                shouldCorrectPitch: false,
+              }
+            : {
+                updateInterval: 500,
+              };
+          
+          const player = expoAudioModule.createAudioPlayer(audioSource, playerOptions);
           return player;
         })();
         
@@ -337,14 +369,20 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         
         if (status.playing) {
           refs.current.isPlaying = true;
+          refs.current.isBuffering = false;
           refs.current.lastPlaybackTime = Date.now();
+          refs.current.lastBufferTime = Date.now();
           refs.current.lastSuccessfulPlay = Date.now();
           refs.current.consecutiveErrors = 0;
+          refs.current.stallCount = 0;
           setIsPlaying(true);
           setIsLoading(false);
           setError(null);
         } else if (status.isBuffering) {
+          refs.current.isBuffering = true;
+          refs.current.lastBufferTime = Date.now();
           setIsLoading(true);
+          console.log('[Radio] Buffering...');
         } else if (status.didJustFinish) {
           console.log('[Radio] Stream ended, reconnecting...');
           if (refs.current.isPlaying && !refs.current.isRecovering && refs.current.mounted) {
@@ -356,6 +394,30 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
                 refs.current.playFn?.();
               }
             }, delay);
+          }
+        } else if (!status.playing && !status.isBuffering && refs.current.isPlaying) {
+          console.log('[Radio] Playback paused unexpectedly');
+          if (Platform.OS === 'android' && !refs.current.isRecovering && refs.current.mounted) {
+            refs.current.stallCount++;
+            if (refs.current.stallCount >= 2) {
+              console.log('[Radio] Multiple stalls detected, recovering...');
+              refs.current.isRecovering = true;
+              refs.current.stallCount = 0;
+              setTimeout(async () => {
+                if (refs.current.mounted) {
+                  await cleanupPlayer();
+                  refs.current.isRecovering = false;
+                  refs.current.playFn?.();
+                }
+              }, ANDROID_RECOVERY_DELAY);
+            } else {
+              try {
+                newPlayer.play();
+                console.log('[Radio] Attempting quick resume');
+              } catch (e) {
+                console.warn('[Radio] Quick resume failed:', e);
+              }
+            }
           }
         }
       });
@@ -387,6 +449,30 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       if (refs.current.healthCheck) {
         clearInterval(refs.current.healthCheck);
       }
+      if (refs.current.bufferCheck) {
+        clearInterval(refs.current.bufferCheck);
+      }
+      
+      if (Platform.OS === 'android') {
+        refs.current.bufferCheck = setInterval(() => {
+          if (!refs.current.player || !refs.current.isPlaying || !refs.current.mounted || refs.current.isRecovering) {
+            return;
+          }
+          
+          const player = refs.current.player;
+          const timeSinceBuffer = Date.now() - refs.current.lastBufferTime;
+          
+          if (!player.playing && !player.isBuffering && timeSinceBuffer > ANDROID_STALL_THRESHOLD) {
+            console.log('[Radio] Android stall detected, quick recovery...');
+            try {
+              player.play();
+              refs.current.lastBufferTime = Date.now();
+            } catch (e) {
+              console.warn('[Radio] Quick play failed:', e);
+            }
+          }
+        }, ANDROID_BUFFER_CHECK_INTERVAL);
+      }
       
       refs.current.healthCheck = setInterval(async () => {
         if (!refs.current.player || !refs.current.isPlaying || !refs.current.mounted) {
@@ -398,24 +484,29 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         try {
           const player = refs.current.player;
           const timeSinceLastPlayback = Date.now() - refs.current.lastPlaybackTime;
+          const stallThreshold = Platform.OS === 'android' ? 30000 : 60000;
           
           if (player.playing) {
             refs.current.lastPlaybackTime = Date.now();
+            refs.current.lastBufferTime = Date.now();
             refs.current.lastSuccessfulPlay = Date.now();
             refs.current.retryCount = 0;
             refs.current.consecutiveErrors = 0;
+            refs.current.stallCount = 0;
           } else if (player.isBuffering) {
             refs.current.lastPlaybackTime = Date.now();
-          } else if (refs.current.isPlaying && timeSinceLastPlayback > 60000) {
+            refs.current.lastBufferTime = Date.now();
+          } else if (refs.current.isPlaying && timeSinceLastPlayback > stallThreshold) {
             console.log('[Radio] Stream appears stuck, attempting recovery...');
             
             try {
               player.play();
-              await new Promise(resolve => setTimeout(resolve, 3000));
+              await new Promise(resolve => setTimeout(resolve, 2000));
               
               if (player.playing) {
                 console.log('[Radio] Recovery successful');
                 refs.current.lastPlaybackTime = Date.now();
+                refs.current.lastBufferTime = Date.now();
                 return;
               }
             } catch {
@@ -425,7 +516,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             if (refs.current.retryCount < MAX_RETRY_ATTEMPTS && refs.current.mounted && !refs.current.isRecovering) {
               refs.current.retryCount++;
               refs.current.isRecovering = true;
-              setError('Reconnecting...');
+              console.log('[Radio] Full reconnect attempt', refs.current.retryCount);
               await cleanupPlayer();
               const delay = getRetryDelay();
               await new Promise(resolve => setTimeout(resolve, delay));
@@ -578,10 +669,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       
       if (nextAppState === 'active') {
         refs.current.isInBackground = false;
+        refs.current.lastBufferTime = Date.now();
         
         if (Platform.OS === 'android') {
           try {
             await configureAudioMode();
+            await new Promise(resolve => setTimeout(resolve, 200));
           } catch (e) {
             console.warn('[Radio] Error re-configuring audio:', e);
           }
@@ -594,27 +687,33 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             if (player.playing) {
               console.log('[Radio] Audio still playing after return');
               refs.current.lastPlaybackTime = Date.now();
+              refs.current.lastBufferTime = Date.now();
               refs.current.lastSuccessfulPlay = Date.now();
+              refs.current.stallCount = 0;
               setIsPlaying(true);
               setIsLoading(false);
               setError(null);
             } else if (player.isBuffering) {
               console.log('[Radio] Audio buffering after return');
+              refs.current.lastBufferTime = Date.now();
               setIsLoading(true);
             } else if (!refs.current.isRecovering) {
               console.log('[Radio] Audio stopped while in background, restarting...');
               
               try {
+                console.log('[Radio] Attempting to resume playback...');
                 player.play();
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                await new Promise(resolve => setTimeout(resolve, Platform.OS === 'android' ? 1500 : 2000));
                 
                 if (player.playing) {
                   console.log('[Radio] Resume successful');
                   refs.current.lastPlaybackTime = Date.now();
+                  refs.current.lastBufferTime = Date.now();
+                  refs.current.stallCount = 0;
                   return;
                 }
-              } catch {
-                // Continue to full reconnect
+              } catch (resumeErr) {
+                console.warn('[Radio] Resume attempt failed:', resumeErr);
               }
               
               refs.current.isRecovering = true;
