@@ -32,20 +32,21 @@ const loadAudioModule = (): boolean => {
 
 const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/mobile.mp3';
 
-const STREAM_TIMEOUT = 45000;
-const BUFFER_TIMEOUT = 180000; // 3 minutes - very patient with buffering
-const BACKGROUND_BUFFER_TIMEOUT = 300000; // 5 minutes for background buffering
-const MAX_RETRY_ATTEMPTS = 100; // Many retries for long sessions
-const HEALTH_CHECK_INTERVAL = 60000; // Check every 60s - less aggressive
-const STALE_CHECK_THRESHOLD = 180000; // 3 minutes before considering stale
-const ANDROID_KEEPALIVE_INTERVAL = 45000; // Check every 45s - less aggressive
-const ANDROID_BACKGROUND_CHECK_INTERVAL = 90000; // Refresh audio mode every 90s
+const STREAM_TIMEOUT = 60000; // 60s for initial connection
+const BUFFER_TIMEOUT = 300000; // 5 minutes - very patient with buffering
+const BACKGROUND_BUFFER_TIMEOUT = 600000; // 10 minutes for background buffering
+const MAX_RETRY_ATTEMPTS = 200; // Many retries for long sessions
+const HEALTH_CHECK_INTERVAL = 120000; // Check every 2 minutes - less aggressive
+const STALE_CHECK_THRESHOLD = 300000; // 5 minutes before considering stale
+const ANDROID_KEEPALIVE_INTERVAL = 90000; // Check every 90s - much less aggressive
+const ANDROID_BACKGROUND_CHECK_INTERVAL = 180000; // Refresh audio mode every 3 min
 const ANDROID_LONG_SESSION_THRESHOLD = 300000; // 5 minutes = long session
-const ANDROID_LONG_SESSION_CHECK_INTERVAL = 120000; // Check every 2 minutes in long sessions
-const ANDROID_FOREGROUND_PING_INTERVAL = 30000; // Ping audio every 30s
-const ANDROID_SOFT_RESTART_WAIT = 5000; // Wait 5s after soft restart
-const ANDROID_MIN_RETRY_DELAY = 2000;
-const ANDROID_MAX_RETRY_DELAY = 15000;
+const ANDROID_LONG_SESSION_CHECK_INTERVAL = 180000; // Check every 3 minutes in long sessions
+const ANDROID_FOREGROUND_PING_INTERVAL = 60000; // Ping audio every 60s - less frequent
+const ANDROID_SOFT_RESTART_WAIT = 3000; // Wait 3s after soft restart
+const ANDROID_MIN_RETRY_DELAY = 1500;
+const ANDROID_MAX_RETRY_DELAY = 10000;
+const ANDROID_BUFFER_DURATION_MS = 30000; // 30s buffer for Android
 
 interface RadioRefs {
   mounted: boolean;
@@ -569,7 +570,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       await cleanupSound();
       
       if (Platform.OS === 'android') {
-        await new Promise(resolve => setTimeout(resolve, 200));
+        // Give Android more time to prepare audio subsystem
+        await new Promise(resolve => setTimeout(resolve, 500));
+        await configureAudioMode(true);
+        // Double-configure for better audio focus handling
+        await new Promise(resolve => setTimeout(resolve, 100));
         await configureAudioMode(true);
       }
       
@@ -593,7 +598,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             shouldPlay: true,
             volume: volume,
             isLooping: false,
-            progressUpdateIntervalMillis: 1000,
+            progressUpdateIntervalMillis: Platform.OS === 'android' ? 5000 : 1000, // Less frequent updates on Android
             rate: 1.0,
             shouldCorrectPitch: false,
           };
@@ -607,6 +612,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           
           if (Platform.OS === 'android') {
             sourceConfig.androidImplementation = 'SimpleExoPlayer';
+            // Hint for larger buffer on Android
+            sourceConfig.headers = {
+              'Cache-Control': 'no-cache',
+              'Connection': 'keep-alive',
+            };
           }
           
           const createSoundPromise = Audio.Sound.createAsync(
@@ -730,7 +740,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
                 console.log('[Radio] Position unchanged:', refs.current.positionStuckCount, 'checks');
               }
               
-              const stuckThreshold = refs.current.isLongSession ? 20 : 15;
+              // Be much more patient on Android - less aggressive stuck detection
+              const stuckThreshold = Platform.OS === 'android' 
+                ? (refs.current.isLongSession ? 40 : 30) 
+                : (refs.current.isLongSession ? 20 : 15);
               if (refs.current.positionStuckCount >= stuckThreshold) {
                 console.log('[Radio] Stream may be stuck, trying soft restart first...');
                 refs.current.positionStuckCount = 0;
@@ -772,7 +785,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             refs.current.lastDataReceived = Date.now();
             refs.current.positionStuckCount = 0;
             refs.current.lastPlaybackTime = Date.now();
-          } else if (status?.isLoaded && !status?.isPlaying && !status?.isBuffering && refs.current.isPlaying && timeSinceLastPlayback > STALE_CHECK_THRESHOLD) {
+          } else if (status?.isLoaded && !status?.isPlaying && !status?.isBuffering && refs.current.isPlaying && timeSinceLastPlayback > (Platform.OS === 'android' ? STALE_CHECK_THRESHOLD * 1.5 : STALE_CHECK_THRESHOLD)) {
             console.log('[Radio] Stream appears stuck, trying soft restart...');
             
             const softRestartWorked = await trySoftRestart();
@@ -844,14 +857,28 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
                 refs.current.consecutiveErrors = 0;
                 refs.current.softRestartAttempts = 0;
               } else if (refs.current.isPlaying) {
-                console.log('[Radio] Android: Stream paused, attempting soft restart...');
+                // On Android, wait longer before considering it a problem
+                const timeSinceLastSuccess = Date.now() - refs.current.lastSuccessfulPlay;
+                if (timeSinceLastSuccess < 60000) {
+                  // Less than 1 minute since last success - just try playAsync without full restart
+                  try {
+                    await refs.current.sound.playAsync();
+                    console.log('[Radio] Android: Resumed playback');
+                    return;
+                  } catch (e) {
+                    console.warn('[Radio] Android: playAsync failed:', e);
+                  }
+                }
+                
+                console.log('[Radio] Android: Stream paused for', Math.round(timeSinceLastSuccess / 1000), 's, attempting soft restart...');
                 
                 const softRestartWorked = await trySoftRestart();
                 if (softRestartWorked) return;
                 
                 refs.current.consecutiveErrors++;
                 
-                if (refs.current.consecutiveErrors >= 3 && refs.current.mounted && !refs.current.isRecovering) {
+                // Be more patient - require more consecutive errors before full reconnect
+                if (refs.current.consecutiveErrors >= 5 && refs.current.mounted && !refs.current.isRecovering) {
                   console.log('[Radio] Android: Soft restarts failed, full reconnect...');
                   refs.current.isRecovering = true;
                   refs.current.consecutiveErrors = 0;
@@ -869,7 +896,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
               refs.current.consecutiveErrors++;
               console.log('[Radio] Android: Sound unloaded, errors:', refs.current.consecutiveErrors);
               
-              if (refs.current.consecutiveErrors >= 2) {
+              // Require more consecutive errors before reconnecting
+              if (refs.current.consecutiveErrors >= 4) {
                 refs.current.isRecovering = true;
                 refs.current.consecutiveErrors = 0;
                 await cleanupSound();
@@ -885,7 +913,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             console.warn('[Radio] Android keep-alive error:', keepAliveErr);
             refs.current.consecutiveErrors++;
             
-            if (refs.current.isPlaying && !refs.current.isRecovering && refs.current.mounted && refs.current.consecutiveErrors >= 4) {
+            if (refs.current.isPlaying && !refs.current.isRecovering && refs.current.mounted && refs.current.consecutiveErrors >= 6) {
               refs.current.isRecovering = true;
               refs.current.consecutiveErrors = 0;
               await cleanupSound();
