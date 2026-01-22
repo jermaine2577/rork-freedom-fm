@@ -35,6 +35,7 @@ export default function PlayerScreen() {
   const [showBatteryTip, setShowBatteryTip] = useState<boolean>(false);
 
   const openBatterySettings = async () => {
+    if (Platform.OS !== 'android') return;
     try {
       await IntentLauncher.startActivityAsync(
         IntentLauncher.ActivityAction.IGNORE_BATTERY_OPTIMIZATION_SETTINGS
