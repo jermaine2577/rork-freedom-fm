@@ -9,10 +9,11 @@ import {
   Image,
   Platform,
   Modal,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as IntentLauncher from 'expo-intent-launcher';
+
 import { Play, Pause, Volume2, Radio, Info, X } from 'lucide-react-native';
 import { useRadio } from '@/contexts/RadioContext';
 import colors from '@/constants/colors';
@@ -37,20 +38,9 @@ export default function PlayerScreen() {
   const openBatterySettings = async () => {
     if (Platform.OS !== 'android') return;
     try {
-      await IntentLauncher.startActivityAsync(
-        IntentLauncher.ActivityAction.IGNORE_BATTERY_OPTIMIZATION_SETTINGS
-      );
+      await Linking.openSettings();
     } catch (e) {
-      console.log('[Radio] Failed to open battery settings:', e);
-      // Fallback to general app settings
-      try {
-        await IntentLauncher.startActivityAsync(
-          IntentLauncher.ActivityAction.APPLICATION_DETAILS_SETTINGS,
-          { data: 'package:com.freedomfm.app' }
-        );
-      } catch (e2) {
-        console.log('[Radio] Failed to open app settings:', e2);
-      }
+      console.log('[Radio] Failed to open settings:', e);
     }
   };
   
@@ -389,7 +379,7 @@ export default function PlayerScreen() {
               style={styles.modalButton}
               onPress={openBatterySettings}
             >
-              <Text style={styles.modalButtonText}>Open Battery Settings</Text>
+              <Text style={styles.modalButtonText}>Open App Settings</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
