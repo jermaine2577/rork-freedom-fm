@@ -23,6 +23,8 @@ export default function NewsLayout() {
         name="[id]"
         options={{
           title: 'Article',
+          headerBackVisible: true,
+          headerBackTitle: 'Back',
         }}
       />
     </Stack>

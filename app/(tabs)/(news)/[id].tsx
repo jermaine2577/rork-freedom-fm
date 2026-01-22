@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
   Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, Stack } from 'expo-router';
+import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { Calendar, Tag, AlertCircle, Share2 } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -294,40 +294,38 @@ const fetchArticle = async (id: string, cachedArticle?: NewsArticle): Promise<Ne
   console.log('[ARTICLE] fetchArticle called with id:', id);
   console.log('[ARTICLE] Has cached article:', !!cachedArticle);
   
-  // If we have a cached article from the news list, use it and try to fetch full content
-  if (cachedArticle) {
-    console.log('[ARTICLE] Using cached article:', cachedArticle.title?.substring(0, 50));
-    
-    // If we already have content, return as is
-    if (cachedArticle.content && cachedArticle.content.length > 100) {
-      console.log('[ARTICLE] Cached article has content, returning');
-      return cachedArticle;
-    }
-    
-    // Try to fetch full content from the article link
-    if (cachedArticle.link) {
-      try {
-        const fullContent = await fetchArticleContent(cachedArticle.link);
-        if (fullContent && fullContent.length > 50) {
-          console.log('[ARTICLE] Got full content from link');
-          return {
-            ...cachedArticle,
-            content: fullContent,
-          };
-        }
-      } catch (error: any) {
-        console.log('[ARTICLE] Failed to fetch full content, using cached data:', error?.message);
-        // Return cached article without full content
-        return cachedArticle;
-      }
-    }
-    
+  if (!cachedArticle) {
+    console.log('[ARTICLE] No cached article found for id:', id);
+    throw new Error('Article not found. Please go back and try again.');
+  }
+  
+  console.log('[ARTICLE] Using cached article:', cachedArticle.title?.substring(0, 50));
+  
+  // If we already have full content, return as is
+  if (cachedArticle.content && cachedArticle.content.length > 100) {
+    console.log('[ARTICLE] Cached article has content, returning');
     return cachedArticle;
   }
   
-  // No cached article - this shouldn't happen normally but handle it gracefully
-  console.log('[ARTICLE] No cached article found for id:', id);
-  throw new Error('Article not found. Please go back and try again.');
+  // Fetch full content from the article link
+  if (cachedArticle.link) {
+    console.log('[ARTICLE] Fetching full content from:', cachedArticle.link);
+    try {
+      const fullContent = await fetchArticleContent(cachedArticle.link);
+      if (fullContent && fullContent.length > 50) {
+        console.log('[ARTICLE] Got full content, length:', fullContent.length);
+        return {
+          ...cachedArticle,
+          content: fullContent,
+        };
+      }
+    } catch (error: any) {
+      console.log('[ARTICLE] Failed to fetch full content:', error?.message);
+      // Return cached article with excerpt as fallback
+    }
+  }
+  
+  return cachedArticle;
 };
 
 const cleanHtmlContent = (html: string): string => {
@@ -357,6 +355,7 @@ const cleanHtmlContent = (html: string): string => {
 export default function ArticleDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const queryClient = useQueryClient();
 
   // Get the article from the news list cache
@@ -375,32 +374,36 @@ export default function ArticleDetailScreen() {
   const { data: article, isLoading, error, refetch } = useQuery({
     queryKey: ['article', id],
     queryFn: () => fetchArticle(id as string, cachedArticle),
-    enabled: !!id,
-    retry: 2,
-    retryDelay: 2000,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-    initialData: cachedArticle,
+    enabled: !!id && !!cachedArticle,
+    retry: 1,
+    retryDelay: 1000,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   });
 
-  const handleShare = async () => {
-    if (!article) return;
+  const displayArticle = article || cachedArticle;
+
+  const handleShare = useCallback(async () => {
+    if (!displayArticle) {
+      console.log('[NEWS][SHARE] No article to share');
+      return;
+    }
 
     console.log('[NEWS][SHARE] pressed', {
       platform: Platform.OS,
-      id: article.id,
-      link: article.link,
+      id: displayArticle.id,
+      link: displayArticle.link,
     });
 
-    const shareUrl = article.link ?? '';
-    const shareMessage = `${article.title}\n\n${article.excerpt}\n\n${shareUrl}`.trim();
+    const shareUrl = displayArticle.link ?? '';
+    const shareMessage = `${displayArticle.title}\n\n${displayArticle.excerpt}\n\n${shareUrl}`.trim();
 
     try {
       if (Platform.OS === 'web') {
         const nav = (globalThis as any)?.navigator as any;
         if (nav?.share) {
           console.log('[NEWS][SHARE] Using Web Share API');
-          await nav.share({ title: article.title, text: `${article.title}\n\n${article.excerpt}`, url: shareUrl });
+          await nav.share({ title: displayArticle.title, text: `${displayArticle.title}\n\n${displayArticle.excerpt}`, url: shareUrl });
           return;
         }
 
@@ -419,13 +422,13 @@ export default function ArticleDetailScreen() {
       const result = await Share.share(
         Platform.OS === 'ios'
           ? {
-              message: `${article.title}\n\n${article.excerpt}`,
+              message: `${displayArticle.title}\n\n${displayArticle.excerpt}`,
               url: shareUrl,
-              title: article.title,
+              title: displayArticle.title,
             }
           : {
               message: shareMessage,
-              title: article.title,
+              title: displayArticle.title,
             },
         Platform.OS === 'android'
           ? {
@@ -439,11 +442,26 @@ export default function ArticleDetailScreen() {
       console.error('[NEWS][SHARE] error', e);
       Alert.alert('Error', 'Could not open share options. Please try again.');
     }
-  };
+  }, [displayArticle]);
 
-  if (isLoading) {
+  const handleBack = useCallback(() => {
+    console.log('[NEWS][BACK] pressed');
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/(news)/news');
+    }
+  }, [router]);
+
+  if (isLoading && !cachedArticle) {
     return (
       <View style={styles.container}>
+        <Stack.Screen
+          options={{
+            title: 'Loading...',
+            headerBackVisible: true,
+          }}
+        />
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
           <SkeletonArticle />
         </ScrollView>
@@ -451,28 +469,25 @@ export default function ArticleDetailScreen() {
     );
   }
 
-  if (error || (!article && !isLoading)) {
-    const errorMessage = error instanceof Error ? error.message : 'Could not fetch article content';
+  if (!displayArticle) {
+    const errorMessage = error instanceof Error ? error.message : 'Article not found';
     return (
       <View style={styles.centerContainer}>
+        <Stack.Screen
+          options={{
+            title: 'Error',
+            headerBackVisible: true,
+          }}
+        />
         <AlertCircle size={48} color={colors.text} />
         <Text style={styles.errorTitle}>Failed to load article</Text>
         <Text style={styles.errorMessage}>
           {errorMessage}
         </Text>
-        <Text style={[styles.errorMessage, { fontSize: 12, marginTop: 8 }]}>Please check your internet connection and try again</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-          <Text style={styles.retryButtonText}>Retry</Text>
+        <Text style={[styles.errorMessage, { fontSize: 12, marginTop: 8 }]}>Please go back and try again</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={handleBack}>
+          <Text style={styles.retryButtonText}>Go Back</Text>
         </TouchableOpacity>
-      </View>
-    );
-  }
-
-  if (!article) {
-    return (
-      <View style={styles.centerContainer}>
-        <AlertCircle size={48} color={colors.text} />
-        <Text style={styles.errorTitle}>Article not found</Text>
       </View>
     );
   }
@@ -481,6 +496,10 @@ export default function ArticleDetailScreen() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
+          title: displayArticle.title.length > 25 
+            ? displayArticle.title.substring(0, 25) + '...' 
+            : displayArticle.title,
+          headerBackVisible: true,
           headerRight: () => (
             <TouchableOpacity
               onPress={handleShare}
@@ -493,25 +512,30 @@ export default function ArticleDetailScreen() {
           ),
         }}
       />
+      {isLoading && (
+        <View style={styles.loadingBanner}>
+          <Text style={styles.loadingBannerText}>Loading full article...</Text>
+        </View>
+      )}
       <ScrollView 
         style={styles.scrollView} 
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
       >
-      <Image source={{ uri: article.imageUrl }} style={styles.heroImage} />
+      <Image source={{ uri: displayArticle.imageUrl }} style={styles.heroImage} />
       
       <View style={styles.content}>
         <View style={styles.categoryBadge}>
           <Tag size={14} color={colors.text} />
-          <Text style={styles.categoryText}>{article.category}</Text>
+          <Text style={styles.categoryText}>{displayArticle.category}</Text>
         </View>
 
-        <Text style={styles.title}>{article.title}</Text>
+        <Text style={styles.title}>{displayArticle.title}</Text>
 
         <View style={styles.dateContainer}>
           <Calendar size={16} color={colors.textSecondary} />
           <Text style={styles.date}>
-            {new Date(article.date).toLocaleDateString('en-US', {
+            {new Date(displayArticle.date).toLocaleDateString('en-US', {
               weekday: 'long',
               month: 'long',
               day: 'numeric',
@@ -523,7 +547,9 @@ export default function ArticleDetailScreen() {
         <View style={styles.divider} />
 
         <Text style={styles.body}>
-          {article.content ? cleanHtmlContent(article.content) : article.excerpt}
+          {(article?.content || displayArticle.content) 
+            ? cleanHtmlContent(article?.content || displayArticle.content || '') 
+            : displayArticle.excerpt}
         </Text>
       </View>
       </ScrollView>
@@ -604,6 +630,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
     marginTop: 16,
+  },
+  loadingBanner: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  loadingBannerText: {
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   errorTitle: {
     fontSize: 18,
