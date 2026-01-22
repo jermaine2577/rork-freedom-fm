@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Calendar, Tag, AlertCircle } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
@@ -21,6 +22,9 @@ import { NewsArticle } from '@/types';
 const NEWS_PAGE_URL = 'https://freedomfm1065.com/news/';
 const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 const MAX_RETRIES = 3;
+const NEWS_CACHE_KEY = 'freedomfm_news_cache';
+const NEWS_CACHE_TIME_KEY = 'freedomfm_news_cache_time';
+const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 const decodeHtmlEntities = (text: string): string => {
   if (!text) return '';
@@ -140,9 +144,37 @@ const decodeHtmlEntities = (text: string): string => {
   return decoded;
 };
 
-const getMockData = async (): Promise<NewsArticle[]> => {
-  const { newsArticles } = await import('@/mocks/news');
-  return newsArticles;
+const getCachedNews = async (): Promise<{ articles: NewsArticle[] | null; isStale: boolean }> => {
+  try {
+    const cachedData = await AsyncStorage.getItem(NEWS_CACHE_KEY);
+    const cacheTime = await AsyncStorage.getItem(NEWS_CACHE_TIME_KEY);
+    
+    if (!cachedData) {
+      console.log('[NEWS] No cached data found');
+      return { articles: null, isStale: true };
+    }
+    
+    const articles = JSON.parse(cachedData) as NewsArticle[];
+    const lastFetchTime = cacheTime ? parseInt(cacheTime, 10) : 0;
+    const now = Date.now();
+    const isStale = now - lastFetchTime > CACHE_DURATION;
+    
+    console.log('[NEWS] Cache found, stale:', isStale, 'age:', Math.round((now - lastFetchTime) / 1000 / 60), 'minutes');
+    return { articles, isStale };
+  } catch (error) {
+    console.log('[NEWS] Error reading cache:', error);
+    return { articles: null, isStale: true };
+  }
+};
+
+const setCachedNews = async (articles: NewsArticle[]): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(NEWS_CACHE_KEY, JSON.stringify(articles));
+    await AsyncStorage.setItem(NEWS_CACHE_TIME_KEY, Date.now().toString());
+    console.log('[NEWS] Cache updated with', articles.length, 'articles');
+  } catch (error) {
+    console.log('[NEWS] Error saving cache:', error);
+  }
 };
 
 const fetchWithRetry = async (url: string, options: RequestInit, retries: number = MAX_RETRIES): Promise<Response> => {
@@ -322,7 +354,7 @@ const parseNewsFromHtml = (html: string): NewsArticle[] => {
   return articles;
 };
 
-const fetchNewsFromHtmlPage = async (): Promise<NewsArticle[]> => {
+const fetchFreshNews = async (): Promise<NewsArticle[]> => {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const controller = new AbortController();
   
@@ -337,14 +369,12 @@ const fetchNewsFromHtmlPage = async (): Promise<NewsArticle[]> => {
     
     const cacheBuster = `?_t=${Date.now()}`;
     
-    // Use CORS proxy for web to bypass CORS restrictions
     let fetchUrl: string;
     const headers: Record<string, string> = {
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     };
     
     if (Platform.OS === 'web') {
-      // Use CORS proxy for web requests
       fetchUrl = CORS_PROXY + encodeURIComponent(NEWS_PAGE_URL + cacheBuster);
       console.log('[NEWS] Using CORS proxy for web');
     } else {
@@ -376,13 +406,14 @@ const fetchNewsFromHtmlPage = async (): Promise<NewsArticle[]> => {
     
     const articles = parseNewsFromHtml(html);
     
-    if (articles.length === 0) {
-      console.log('[NEWS] No articles parsed from HTML, using mock data');
-      return getMockData();
+    if (articles.length > 0) {
+      console.log('[NEWS] Successfully parsed', articles.length, 'articles from HTML');
+      await setCachedNews(articles);
+      return articles;
     }
     
-    console.log('[NEWS] Successfully parsed', articles.length, 'articles from HTML');
-    return articles;
+    console.log('[NEWS] No articles parsed from HTML');
+    return [];
     
   } catch (error: any) {
     if (timeoutId) {
@@ -396,9 +427,32 @@ const fetchNewsFromHtmlPage = async (): Promise<NewsArticle[]> => {
       console.log('[NEWS] Request was aborted (timeout)');
     }
     
-    console.log('[NEWS] Falling back to mock data');
-    return getMockData();
+    return [];
   }
+};
+
+const fetchNewsWithCache = async (): Promise<NewsArticle[]> => {
+  const { articles: cachedArticles, isStale } = await getCachedNews();
+  
+  if (cachedArticles && cachedArticles.length > 0 && !isStale) {
+    console.log('[NEWS] Returning fresh cached data');
+    return cachedArticles;
+  }
+  
+  console.log('[NEWS] Cache is stale or empty, fetching fresh data...');
+  const freshArticles = await fetchFreshNews();
+  
+  if (freshArticles.length > 0) {
+    return freshArticles;
+  }
+  
+  if (cachedArticles && cachedArticles.length > 0) {
+    console.log('[NEWS] Fresh fetch failed, returning stale cache');
+    return cachedArticles;
+  }
+  
+  console.log('[NEWS] No data available');
+  return [];
 };
 
 const SkeletonCard = () => {
@@ -445,46 +499,28 @@ export default function NewsScreen() {
   
   const { data: articles, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['freedomFmNews'],
-    queryFn: fetchNewsFromHtmlPage,
+    queryFn: fetchNewsWithCache,
     retry: 2,
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: true,
-    refetchInterval: 60000,
-    refetchIntervalInBackground: false,
+    staleTime: CACHE_DURATION,
+    gcTime: CACHE_DURATION,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchInterval: false,
     networkMode: 'always',
   });
 
-  // Force refetch on Android after initial mount to ensure fresh data
   useEffect(() => {
-    if (Platform.OS === 'android' && !hasInitialFetched.current) {
+    if (!hasInitialFetched.current) {
       hasInitialFetched.current = true;
-      // Small delay to let the component mount, then force a fresh fetch
-      const timer = setTimeout(() => {
-        console.log('[NEWS] Android: Forcing initial refetch for fresh data');
-        refetch();
-      }, 300);
-      return () => clearTimeout(timer);
     }
-  }, [refetch]);
-
-  // Additional refetch when screen comes into focus for Android
-  useEffect(() => {
-    if (Platform.OS === 'android') {
-      const focusTimer = setTimeout(() => {
-        if (articles && articles.length === 0) {
-          console.log('[NEWS] Android: No articles, forcing refetch');
-          refetch();
-        }
-      }, 500);
-      return () => clearTimeout(focusTimer);
-    }
-  }, [articles, refetch]);
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await refetch();
+    const freshArticles = await fetchFreshNews();
+    if (freshArticles.length > 0) {
+      await refetch();
+    }
     setRefreshing(false);
   }, [refetch]);
   
@@ -542,18 +578,18 @@ export default function NewsScreen() {
     );
   }
 
-  if (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Could not connect to Freedom FM news server';
+  if (error || (!isLoading && (!articles || articles.length === 0))) {
+    const errorMessage = error instanceof Error ? error.message : 'No news articles available';
     return (
       <View style={styles.centerContainer}>
         <AlertCircle size={48} color={colors.text} />
-        <Text style={styles.errorTitle}>Failed to load news</Text>
+        <Text style={styles.errorTitle}>No News Available</Text>
         <Text style={styles.errorMessage}>
           {errorMessage}
         </Text>
-        <Text style={[styles.errorMessage, { fontSize: 12, marginTop: 8 }]}>Please check your internet connection and try again</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-          <Text style={styles.retryButtonText}>Retry</Text>
+        <Text style={[styles.errorMessage, { fontSize: 12, marginTop: 8 }]}>Pull down to refresh and load the latest news</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
+          <Text style={styles.retryButtonText}>Refresh</Text>
         </TouchableOpacity>
       </View>
     );
