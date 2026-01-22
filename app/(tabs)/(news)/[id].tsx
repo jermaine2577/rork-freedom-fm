@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { Calendar, Tag, AlertCircle, Share2 } from 'lucide-react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import colors from '@/constants/colors';
 import { NewsArticle } from '@/types';
 
@@ -201,114 +201,133 @@ const decodeHtmlEntities = (text: string): string => {
   return decoded;
 };
 
-const fetchArticle = async (id: string): Promise<NewsArticle> => {
+const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+
+const fetchArticleContent = async (link: string): Promise<string> => {
+  console.log('[ARTICLE] Fetching full content from:', link);
+  
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const controller = new AbortController();
+  
   try {
-    console.log('Fetching article:', id);
+    const timeoutDuration = Platform.OS === 'web' ? 30000 : 25000;
+    timeoutId = setTimeout(() => {
+      console.log('[ARTICLE] Request timeout, aborting...');
+      controller.abort();
+    }, timeoutDuration);
     
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const headers: Record<string, string> = {
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    };
     
-    const response = await fetch(
-      `https://freedomfm1065.com/wp-json/wp/v2/posts/${id}?_embed`,
-      {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': Platform.OS === 'android' ? 'FreedomFM-Android/1.0' : 'FreedomFM-iOS/1.0',
-        },
-        signal: controller.signal,
-      }
-    );
+    let fetchUrl: string;
+    if (Platform.OS === 'web') {
+      fetchUrl = CORS_PROXY + encodeURIComponent(link);
+    } else {
+      fetchUrl = link;
+      headers['User-Agent'] = Platform.OS === 'android' 
+        ? 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
+        : 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+      headers['Cache-Control'] = 'no-cache';
+    }
     
-    clearTimeout(timeoutId);
+    const response = await fetch(fetchUrl, {
+      method: 'GET',
+      headers,
+      signal: controller.signal,
+    });
     
-    console.log('Article response status:', response.status);
-    console.log('Article response content-type:', response.headers.get('content-type'));
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = undefined;
+    }
     
     if (!response.ok) {
-      console.error('Failed to fetch article:', response.status, response.statusText);
-      throw new Error(`Server returned error: ${response.status}`);
+      console.log('[ARTICLE] Server error:', response.status);
+      throw new Error(`Server error: ${response.status}`);
     }
     
-    const contentType = response.headers.get('content-type');
-    if (contentType && !contentType.includes('application/json')) {
-      console.error('Server returned non-JSON response:', contentType);
-      throw new Error('Server returned invalid content type');
+    const html = await response.text();
+    console.log('[ARTICLE] Received HTML, length:', html.length);
+    
+    // Extract main content from the article page
+    let content = '';
+    
+    // Try to find entry-content div
+    const entryContentMatch = html.match(/<div[^>]*class="[^"]*entry-content[^"]*"[^>]*>([\s\S]*?)<\/div>\s*(?:<div|<footer|<aside|<nav|<section|$)/i);
+    if (entryContentMatch) {
+      content = entryContentMatch[1];
+      console.log('[ARTICLE] Found entry-content, length:', content.length);
     }
     
-    let post: WordPressPost;
-    try {
-      const rawText = await response.text();
-      console.log('Article response length:', rawText.length);
-      console.log('Article first 200 chars:', rawText.substring(0, 200));
-      
-      let cleanedText = rawText.trim();
-      
-      // Clean up common issues on all platforms
-      cleanedText = cleanedText
-        .replace(/^\uFEFF/, '') // Remove BOM
-        .replace(/\r\n/g, '\n') // Normalize line endings
-        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]+/g, ''); // Remove control chars except tab/newline
-      
-      console.log('Cleaned article text first 200 chars:', cleanedText.substring(0, 200));
-      console.log('First char code:', cleanedText.charCodeAt(0));
-      
-      // Validate that response looks like JSON
-      if (!cleanedText.startsWith('[') && !cleanedText.startsWith('{')) {
-        console.error('Response does not start with [ or {, starts with:', cleanedText.substring(0, 50));
-        throw new Error('Invalid JSON response - does not start with array or object');
+    // Fallback: try article content
+    if (!content) {
+      const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
+      if (articleMatch) {
+        content = articleMatch[1];
+        console.log('[ARTICLE] Found article tag, length:', content.length);
       }
-      
-      post = JSON.parse(cleanedText);
-      console.log('Successfully fetched and parsed article:', post.id);
-    } catch (parseError: any) {
-      console.error('==================== JSON PARSE ERROR (Article) ====================');
-      console.error('Platform:', Platform.OS);
-      console.error('Article ID:', id);
-      console.error('Error:', parseError?.message || String(parseError));
-      console.error('Error name:', parseError?.name || 'unknown');
-      console.error('Error stack:', parseError?.stack);
-      console.error('====================================================================');
-      throw new Error('Unable to parse article from server - invalid JSON format');
     }
-
-    const rawTitle = post.title?.rendered || '';
-    const rawExcerpt = post.excerpt?.rendered || '';
-    const rawCategory = post._embedded?.['wp:term']?.[0]?.[0]?.name || 'News';
     
-    return {
-      id: post.id.toString(),
-      title: decodeHtmlEntities(rawTitle.replace(/<[^>]*>/g, '').trim()),
-      excerpt: decodeHtmlEntities(rawExcerpt.replace(/<[^>]*>/g, '').trim()),
-      content: post.content?.rendered || '',
-      imageUrl:
-        post._embedded?.['wp:featuredmedia']?.[0]?.source_url ||
-        'https://via.placeholder.com/400x200',
-      category: decodeHtmlEntities(rawCategory),
-      date: post.date || new Date().toISOString(),
-      link: post.link || '',
-    };
+    // Fallback: try post-content
+    if (!content) {
+      const postContentMatch = html.match(/<div[^>]*class="[^"]*post-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+      if (postContentMatch) {
+        content = postContentMatch[1];
+        console.log('[ARTICLE] Found post-content, length:', content.length);
+      }
+    }
+    
+    return content;
+    
   } catch (error: any) {
-    console.error('Error fetching article:', error);
-    console.error('Error name:', error.name);
-    console.error('Error message:', error.message);
-    
-    if (error.name === 'AbortError') {
-      throw new Error('Connection timeout - The server is taking too long to respond');
+    if (timeoutId) {
+      clearTimeout(timeoutId);
     }
     
-    if (error.message?.includes('Network request failed') || 
-        error.message?.includes('Failed to fetch') ||
-        error.message?.includes('Load failed')) {
-      throw new Error('Cannot connect to Freedom FM servers. Please check your internet connection and try again.');
-    }
-    
-    if (error.message?.includes('JSON')) {
-      throw new Error('Server returned invalid data format');
-    }
-    
-    throw new Error(error.message || 'Failed to load article. Please try again later.');
+    console.log('[ARTICLE] Error fetching content:', error?.message);
+    throw error;
   }
+};
+
+const fetchArticle = async (id: string, cachedArticle?: NewsArticle): Promise<NewsArticle> => {
+  console.log('[ARTICLE] fetchArticle called with id:', id);
+  console.log('[ARTICLE] Has cached article:', !!cachedArticle);
+  
+  // If we have a cached article from the news list, use it and try to fetch full content
+  if (cachedArticle) {
+    console.log('[ARTICLE] Using cached article:', cachedArticle.title?.substring(0, 50));
+    
+    // If we already have content, return as is
+    if (cachedArticle.content && cachedArticle.content.length > 100) {
+      console.log('[ARTICLE] Cached article has content, returning');
+      return cachedArticle;
+    }
+    
+    // Try to fetch full content from the article link
+    if (cachedArticle.link) {
+      try {
+        const fullContent = await fetchArticleContent(cachedArticle.link);
+        if (fullContent && fullContent.length > 50) {
+          console.log('[ARTICLE] Got full content from link');
+          return {
+            ...cachedArticle,
+            content: fullContent,
+          };
+        }
+      } catch (error: any) {
+        console.log('[ARTICLE] Failed to fetch full content, using cached data:', error?.message);
+        // Return cached article without full content
+        return cachedArticle;
+      }
+    }
+    
+    return cachedArticle;
+  }
+  
+  // No cached article - this shouldn't happen normally but handle it gracefully
+  console.log('[ARTICLE] No cached article found for id:', id);
+  throw new Error('Article not found. Please go back and try again.');
 };
 
 const cleanHtmlContent = (html: string): string => {
@@ -338,15 +357,30 @@ const cleanHtmlContent = (html: string): string => {
 export default function ArticleDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+
+  // Get the article from the news list cache
+  const getCachedArticle = (): NewsArticle | undefined => {
+    const newsData = queryClient.getQueryData<NewsArticle[]>(['freedomFmNews']);
+    if (newsData && id) {
+      const found = newsData.find(article => article.id === id);
+      console.log('[ARTICLE] Looking for cached article with id:', id, 'found:', !!found);
+      return found;
+    }
+    return undefined;
+  };
+
+  const cachedArticle = getCachedArticle();
 
   const { data: article, isLoading, error, refetch } = useQuery({
     queryKey: ['article', id],
-    queryFn: () => fetchArticle(id as string),
+    queryFn: () => fetchArticle(id as string, cachedArticle),
     enabled: !!id,
-    retry: 1,
-    retryDelay: 1000,
+    retry: 2,
+    retryDelay: 2000,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
+    initialData: cachedArticle,
   });
 
   const handleShare = async () => {
