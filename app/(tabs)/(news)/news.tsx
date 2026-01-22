@@ -38,6 +38,7 @@ interface WordPressPost {
 
 const WORDPRESS_URL = 'https://freedomfm1065.com/wp-json/wp/v2/posts?_embed&per_page=20&orderby=date&order=desc';
 const USE_MOCK_DATA = false;
+const MAX_RETRIES = 3;
 
 const decodeHtmlEntities = (text: string): string => {
   if (!text) return '';
@@ -162,18 +163,42 @@ const getMockData = async (): Promise<NewsArticle[]> => {
   return newsArticles;
 };
 
+const fetchWithRetry = async (url: string, options: RequestInit, retries: number = MAX_RETRIES): Promise<Response> => {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`[NEWS] Fetch attempt ${attempt}/${retries}`);
+      const response = await fetch(url, options);
+      return response;
+    } catch (error: any) {
+      lastError = error;
+      console.log(`[NEWS] Attempt ${attempt} failed:`, error?.message);
+      
+      if (attempt < retries) {
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        console.log(`[NEWS] Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw lastError || new Error('All fetch attempts failed');
+};
+
 const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
   if (USE_MOCK_DATA) {
-    console.log('[NEWS] Using mock data');
+    console.log('[NEWS] Using mock data (configured)');
     return getMockData();
   }
 
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const controller = new AbortController();
   
   try {
-    const controller = new AbortController();
-    const timeoutDuration = Platform.OS === 'web' ? 15000 : Platform.OS === 'android' ? 10000 : 8000;
+    const timeoutDuration = Platform.OS === 'web' ? 20000 : Platform.OS === 'android' ? 15000 : 12000;
     timeoutId = setTimeout(() => {
+      console.log('[NEWS] Request timeout, aborting...');
       controller.abort();
     }, timeoutDuration);
     
@@ -192,12 +217,11 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
       headers['Expires'] = '0';
     }
     
-    const response = await fetch(WORDPRESS_URL + cacheBuster, {
+    const response = await fetchWithRetry(WORDPRESS_URL + cacheBuster, {
       method: 'GET',
       headers,
       signal: controller.signal,
-      cache: 'no-store',
-    });
+    }, MAX_RETRIES);
     
     if (timeoutId) {
       clearTimeout(timeoutId);
@@ -206,6 +230,9 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
     
     if (!response.ok) {
       console.log('[NEWS] Server returned error status:', response.status);
+      if (response.status === 403 || response.status === 401) {
+        console.log('[NEWS] API access denied, server may have blocked external access');
+      }
       throw new Error(`Server error: ${response.status}`);
     }
     
@@ -218,28 +245,31 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
     let posts: WordPressPost[];
     try {
       const rawText = await response.text();
+      console.log('[NEWS] Response length:', rawText.length);
+      
       let cleanedText = rawText.trim()
         .replace(/^\uFEFF/, '')
         .replace(/\r\n/g, '\n')
         .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]+/g, '');
       
       if (!cleanedText.startsWith('[') && !cleanedText.startsWith('{')) {
-        console.log('[NEWS] Response does not start with JSON');
+        console.log('[NEWS] Response does not start with JSON, first 100 chars:', cleanedText.substring(0, 100));
         throw new Error('Invalid JSON response');
       }
       
       posts = JSON.parse(cleanedText);
-    } catch {
-      console.log('[NEWS] JSON parse error, falling back to mock data');
+    } catch (parseError) {
+      console.log('[NEWS] JSON parse error:', parseError);
+      console.log('[NEWS] Falling back to sample news');
       return getMockData();
     }
     
     if (!Array.isArray(posts) || posts.length === 0) {
-      console.log('[NEWS] No posts in response, using mock data');
+      console.log('[NEWS] No posts in response, using sample news');
       return getMockData();
     }
     
-    console.log('[NEWS] Successfully fetched', posts.length, 'posts');
+    console.log('[NEWS] Successfully fetched', posts.length, 'posts from server');
     
     return posts.map((post) => {
       const rawTitle = post.title?.rendered || '';
@@ -262,8 +292,14 @@ const fetchWordPressPosts = async (): Promise<NewsArticle[]> => {
       clearTimeout(timeoutId);
     }
     
-    // Always fallback to mock data on any error
-    console.log('[NEWS] Network error occurred, using mock data. Error:', error?.message || 'Unknown');
+    const errorMsg = error?.message || 'Unknown error';
+    console.log('[NEWS] Network error occurred:', errorMsg);
+    
+    if (error?.name === 'AbortError') {
+      console.log('[NEWS] Request was aborted (timeout)');
+    }
+    
+    console.log('[NEWS] Falling back to sample news content');
     return getMockData();
   }
 };
