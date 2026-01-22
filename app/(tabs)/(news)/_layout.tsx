@@ -1,11 +1,8 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '@/constants/colors';
 
 export default function NewsLayout() {
-  const insets = useSafeAreaInsets();
-  
   return (
     <>
       <StatusBar style="light" />
@@ -24,7 +21,6 @@ export default function NewsLayout() {
           contentStyle: {
             backgroundColor: '#000',
           },
-          headerStatusBarHeight: insets.top,
         }}
       >
         <Stack.Screen
