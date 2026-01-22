@@ -601,16 +601,18 @@ export default function NewsScreen() {
   if (error || (!isLoading && (!articles || articles.length === 0))) {
     const errorMessage = error instanceof Error ? error.message : 'No news articles available';
     return (
-      <View style={styles.centerContainer}>
-        <AlertCircle size={48} color={colors.text} />
-        <Text style={styles.errorTitle}>No News Available</Text>
-        <Text style={styles.errorMessage}>
-          {errorMessage}
-        </Text>
-        <Text style={[styles.errorMessage, { fontSize: 12, marginTop: 8 }]}>Pull down to refresh and load the latest news</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
-          <Text style={styles.retryButtonText}>Refresh</Text>
-        </TouchableOpacity>
+      <View style={styles.container}>
+        <View style={styles.centerContent}>
+          <AlertCircle size={48} color={colors.text} />
+          <Text style={styles.errorTitle}>No News Available</Text>
+          <Text style={styles.errorMessage}>
+            {errorMessage}
+          </Text>
+          <Text style={[styles.errorMessage, { fontSize: 12, marginTop: 8 }]}>Pull down to refresh and load the latest news</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
+            <Text style={styles.retryButtonText}>Refresh</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -712,12 +714,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
   },
-  centerContainer: {
+  centerContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    backgroundColor: '#000',
   },
   loadingText: {
     fontSize: 16,
