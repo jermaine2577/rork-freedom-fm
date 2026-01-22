@@ -6,7 +6,7 @@ export default function NewsLayout() {
     <Stack
       screenOptions={{
         headerStyle: {
-          backgroundColor: 'rgba(0, 0, 0, 0.9)',
+          backgroundColor: '#000',
         },
         headerTintColor: colors.text,
         headerShadowVisible: false,
