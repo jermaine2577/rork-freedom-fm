@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as IntentLauncher from 'expo-intent-launcher';
 import { Play, Pause, Volume2, Radio, Info, X } from 'lucide-react-native';
 import { useRadio } from '@/contexts/RadioContext';
 import colors from '@/constants/colors';
@@ -32,6 +33,25 @@ export default function PlayerScreen() {
 
   const [logoFailed, setLogoFailed] = useState<boolean>(false);
   const [showBatteryTip, setShowBatteryTip] = useState<boolean>(false);
+
+  const openBatterySettings = async () => {
+    try {
+      await IntentLauncher.startActivityAsync(
+        IntentLauncher.ActivityAction.IGNORE_BATTERY_OPTIMIZATION_SETTINGS
+      );
+    } catch (e) {
+      console.log('[Radio] Failed to open battery settings:', e);
+      // Fallback to general app settings
+      try {
+        await IntentLauncher.startActivityAsync(
+          IntentLauncher.ActivityAction.APPLICATION_DETAILS_SETTINGS,
+          { data: 'package:com.freedomfm.app' }
+        );
+      } catch (e2) {
+        console.log('[Radio] Failed to open app settings:', e2);
+      }
+    }
+  };
   
 
   useEffect(() => {
@@ -366,9 +386,16 @@ export default function PlayerScreen() {
             
             <TouchableOpacity
               style={styles.modalButton}
+              onPress={openBatterySettings}
+            >
+              <Text style={styles.modalButtonText}>Open Battery Settings</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.modalButtonSecondary}
               onPress={() => setShowBatteryTip(false)}
             >
-              <Text style={styles.modalButtonText}>Got it</Text>
+              <Text style={styles.modalButtonSecondaryText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -580,5 +607,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: colors.text,
+  },
+  modalButtonSecondary: {
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  modalButtonSecondaryText: {
+    fontSize: 14,
+    color: colors.textSecondary,
   },
 });
