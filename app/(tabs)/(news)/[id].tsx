@@ -461,15 +461,24 @@ export default function ArticleDetailScreen() {
       link: displayArticle.link,
     });
 
-    const shareUrl = displayArticle.link ?? '';
-    const shareMessage = `${displayArticle.title}\n\n${displayArticle.excerpt}\n\n${shareUrl}`.trim();
+    const shareUrlRaw = displayArticle.link ?? '';
+    const shareUrl = typeof shareUrlRaw === 'string' ? shareUrlRaw.trim() : '';
+    const hasUrl = shareUrl.length > 0;
+
+    const baseText = `${displayArticle.title}\n\n${displayArticle.excerpt}`.trim();
+    const shareMessage = hasUrl ? `${baseText}\n\n${shareUrl}`.trim() : baseText;
 
     try {
       if (Platform.OS === 'web') {
         const nav = (globalThis as any)?.navigator as any;
         if (nav?.share) {
           console.log('[NEWS][SHARE] Using Web Share API');
-          await nav.share({ title: displayArticle.title, text: `${displayArticle.title}\n\n${displayArticle.excerpt}`, url: shareUrl });
+          const payload: { title?: string; text?: string; url?: string } = {
+            title: displayArticle.title,
+            text: baseText,
+          };
+          if (hasUrl) payload.url = shareUrl;
+          await nav.share(payload);
           return;
         }
 
@@ -488,8 +497,8 @@ export default function ArticleDetailScreen() {
       const result = await Share.share(
         Platform.OS === 'ios'
           ? {
-              message: `${displayArticle.title}\n\n${displayArticle.excerpt}`,
-              url: shareUrl,
+              message: baseText,
+              ...(hasUrl ? { url: shareUrl } : {}),
               title: displayArticle.title,
             }
           : {
@@ -505,8 +514,21 @@ export default function ArticleDetailScreen() {
 
       console.log('[NEWS][SHARE] result', result);
     } catch (e) {
-      console.error('[NEWS][SHARE] error', e);
-      Alert.alert('Error', 'Could not open share options. Please try again.');
+      const msg = (e as any)?.message as string | undefined;
+      console.error('[NEWS][SHARE] error', msg ?? e);
+
+      if (hasUrl) {
+        try {
+          console.log('[NEWS][SHARE] Falling back to clipboard copy');
+          await Clipboard.setStringAsync(shareUrl);
+          Alert.alert('Link Copied', 'Sharing failed, so we copied the article link to your clipboard.');
+          return;
+        } catch (copyErr) {
+          console.error('[NEWS][SHARE] clipboard fallback failed', (copyErr as any)?.message ?? copyErr);
+        }
+      }
+
+      Alert.alert('Error', 'Could not share this article. Please try again.');
     }
   }, [displayArticle]);
 
