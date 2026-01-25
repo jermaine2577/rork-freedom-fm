@@ -328,6 +328,22 @@ const fetchArticle = async (id: string, cachedArticle?: NewsArticle): Promise<Ne
   return cachedArticle;
 };
 
+const safeFormatLongDate = (isoOrAny: string): string => {
+  try {
+    const d = new Date(isoOrAny);
+    if (Number.isNaN(d.getTime())) throw new Error('Invalid date');
+    return d.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  } catch (e) {
+    console.log('[ARTICLE] safeFormatLongDate fallback for:', isoOrAny);
+    return '';
+  }
+};
+
 const cleanHtmlContent = (html: string): string => {
   if (!html) return '';
   
@@ -568,14 +584,7 @@ export default function ArticleDetailScreen() {
 
         <View style={styles.dateContainer}>
           <Calendar size={16} color={colors.textSecondary} />
-          <Text style={styles.date}>
-            {new Date(displayArticle.date).toLocaleDateString('en-US', {
-              weekday: 'long',
-              month: 'long',
-              day: 'numeric',
-              year: 'numeric',
-            })}
-          </Text>
+          <Text style={styles.date}>{safeFormatLongDate(displayArticle.date)}</Text>
         </View>
 
         <View style={styles.divider} />

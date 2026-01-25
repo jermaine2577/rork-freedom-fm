@@ -149,22 +149,73 @@ const decodeHtmlEntities = (text: string): string => {
   return decoded;
 };
 
+const normalizeNewsArticle = (raw: unknown): NewsArticle | null => {
+  try {
+    const obj = raw as Partial<NewsArticle> & Record<string, unknown>;
+
+    const id = typeof obj.id === 'string' && obj.id.trim().length > 0 ? obj.id : `news-${Date.now()}-${Math.random()}`;
+    const title = typeof obj.title === 'string' ? obj.title : '';
+    const excerpt = typeof obj.excerpt === 'string' ? obj.excerpt : title;
+    const imageUrl = typeof obj.imageUrl === 'string' && obj.imageUrl.length > 0 ? obj.imageUrl : 'https://freedomfm1065.com/wp-content/uploads/2024/01/freedom-fm-logo.png';
+    const date = typeof obj.date === 'string' && obj.date.length > 0 ? obj.date : new Date().toISOString();
+    const category = typeof obj.category === 'string' && obj.category.length > 0 ? obj.category : 'News';
+    const content = typeof obj.content === 'string' ? obj.content : '';
+    const link = typeof obj.link === 'string' ? obj.link : undefined;
+
+    if (!title || title.trim().length < 3) return null;
+
+    return {
+      id,
+      title,
+      excerpt,
+      imageUrl,
+      date,
+      category,
+      content,
+      link,
+    } satisfies NewsArticle;
+  } catch (e) {
+    console.log('[NEWS] normalizeNewsArticle error:', (e as any)?.message);
+    return null;
+  }
+};
+
+const safeFormatDate = (isoOrAny: string): string => {
+  try {
+    const d = new Date(isoOrAny);
+    if (Number.isNaN(d.getTime())) throw new Error('Invalid date');
+    return d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  } catch (e) {
+    console.log('[NEWS] safeFormatDate fallback for:', isoOrAny);
+    return '';
+  }
+};
+
 const getCachedNews = async (): Promise<{ articles: NewsArticle[] | null; isStale: boolean }> => {
   try {
     const cachedData = await AsyncStorage.getItem(NEWS_CACHE_KEY);
     const cacheTime = await AsyncStorage.getItem(NEWS_CACHE_TIME_KEY);
-    
+
     if (!cachedData) {
       console.log('[NEWS] No cached data found');
       return { articles: null, isStale: true };
     }
-    
-    const articles = JSON.parse(cachedData) as NewsArticle[];
+
+    const parsed = JSON.parse(cachedData) as unknown;
+    const list = Array.isArray(parsed) ? parsed : [];
+    const articles = list
+      .map((a) => normalizeNewsArticle(a))
+      .filter((a): a is NewsArticle => !!a);
+
     const lastFetchTime = cacheTime ? parseInt(cacheTime, 10) : 0;
     const now = Date.now();
     const isStale = now - lastFetchTime > CACHE_DURATION;
-    
-    console.log('[NEWS] Cache found, stale:', isStale, 'age:', Math.round((now - lastFetchTime) / 1000 / 60), 'minutes');
+
+    console.log('[NEWS] Cache found, stale:', isStale, 'age:', Math.round((now - lastFetchTime) / 1000 / 60), 'minutes', 'count:', articles.length);
     return { articles, isStale };
   } catch (error) {
     console.log('[NEWS] Error reading cache:', error);
@@ -737,13 +788,7 @@ export default function NewsScreen() {
         </Text>
         <View style={styles.dateContainer}>
           <Calendar size={14} color={colors.textSecondary} />
-          <Text style={styles.date}>
-            {new Date(item.date).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-            })}
-          </Text>
+          <Text style={styles.date}>{safeFormatDate(item.date)}</Text>
         </View>
       </View>
     </TouchableOpacity>
