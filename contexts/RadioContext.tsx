@@ -3,6 +3,8 @@ import createContextHook from '@nkzw/create-context-hook';
 import { AppState, AppStateStatus, Platform } from 'react-native';
 
 const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/mobile.mp3';
+const NOW_PLAYING_API = 'https://castpanel.freedomfm1065.com/api/nowplaying/freedom_fm_106.5';
+const LISTENER_POLL_INTERVAL_MS = 30000;
 
 const STREAM_CONNECT_TIMEOUT_MS = 90000;
 
@@ -75,11 +77,39 @@ const loadExpoAV = (): ExpoAV | null => {
   }
 };
 
+interface NowPlayingData {
+  listeners: {
+    total: number;
+    unique: number;
+    current: number;
+  };
+  live: {
+    is_live: boolean;
+    streamer_name: string;
+  };
+  now_playing: {
+    song: {
+      title: string;
+      artist: string;
+      album: string;
+      art: string;
+    };
+  };
+  station: {
+    name: string;
+    description: string;
+  };
+}
+
 export const [RadioProvider, useRadio] = createContextHook(() => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [volume, setVolume] = useState<number>(1.0);
   const [error, setError] = useState<string | null>(null);
+  const [listenerCount, setListenerCount] = useState<number>(0);
+  const [nowPlaying, setNowPlaying] = useState<NowPlayingData | null>(null);
+
+  const listenerPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refs = useRef<RadioRefs>({
     mounted: true,
@@ -117,6 +147,39 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     playFn: undefined,
     cleanupFn: undefined,
   });
+
+  const fetchNowPlaying = useCallback(async () => {
+    try {
+      const response = await fetch(NOW_PLAYING_API);
+      if (!response.ok) {
+        console.warn('[Radio] Now playing API error:', response.status);
+        return;
+      }
+      const data: NowPlayingData = await response.json();
+      if (refs.current.mounted) {
+        setListenerCount(data.listeners?.current ?? 0);
+        setNowPlaying(data);
+      }
+      console.log('[Radio] Listener count:', data.listeners?.current);
+    } catch (e) {
+      console.warn('[Radio] Failed to fetch now playing:', e);
+    }
+  }, []);
+
+  const startListenerPolling = useCallback(() => {
+    if (listenerPollRef.current) return;
+    fetchNowPlaying();
+    listenerPollRef.current = setInterval(fetchNowPlaying, LISTENER_POLL_INTERVAL_MS);
+    console.log('[Radio] Started listener polling');
+  }, [fetchNowPlaying]);
+
+  const stopListenerPolling = useCallback(() => {
+    if (listenerPollRef.current) {
+      clearInterval(listenerPollRef.current);
+      listenerPollRef.current = null;
+      console.log('[Radio] Stopped listener polling');
+    }
+  }, []);
 
   const getRetryDelayMs = useCallback((): number => {
     const base = Platform.OS === 'android' ? 1500 : 2000;
@@ -884,10 +947,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
   useEffect(() => {
     refs.current.mounted = true;
+    startListenerPolling();
     return () => {
       refs.current.mounted = false;
+      stopListenerPolling();
     };
-  }, []);
+  }, [startListenerPolling, stopListenerPolling]);
 
   useEffect(() => {
     return () => {
@@ -1014,13 +1079,16 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       isLoading,
       volume,
       error,
+      listenerCount,
+      nowPlaying,
       play,
       pause,
       stop,
       toggle,
       forceReset,
       changeVolume,
+      refreshNowPlaying: fetchNowPlaying,
     }),
-    [changeVolume, error, forceReset, isLoading, isPlaying, pause, play, stop, toggle, volume]
+    [changeVolume, error, fetchNowPlaying, forceReset, isLoading, isPlaying, listenerCount, nowPlaying, pause, play, stop, toggle, volume]
   );
 });
