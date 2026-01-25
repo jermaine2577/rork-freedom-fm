@@ -494,24 +494,51 @@ export default function ArticleDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: displayArticle.title.length > 25 
-            ? displayArticle.title.substring(0, 25) + '...' 
-            : displayArticle.title,
-          headerBackVisible: true,
-          headerRight: () => (
-            <TouchableOpacity
-              onPress={handleShare}
-              style={styles.shareButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              testID="news-article-share"
-            >
-              <Share2 size={24} color={colors.text} />
-            </TouchableOpacity>
-          ),
-        }}
-      />
+      {Platform.OS === 'web' ? (
+        <View style={[styles.webHeader, { paddingTop: Math.max(insets.top, 16) }]} testID="news-article-web-header">
+          <TouchableOpacity
+            onPress={handleBack}
+            style={styles.webHeaderIconBtn}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            testID="news-article-web-back"
+          >
+            <Text style={styles.webHeaderIconText}>‹</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.webHeaderTitle} numberOfLines={1}>
+            {displayArticle.title}
+          </Text>
+
+          <TouchableOpacity
+            onPress={handleShare}
+            style={styles.webHeaderIconBtn}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            testID="news-article-web-share"
+          >
+            <Share2 size={20} color={colors.text} />
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <Stack.Screen
+          options={{
+            title: displayArticle.title.length > 25 
+              ? displayArticle.title.substring(0, 25) + '...' 
+              : displayArticle.title,
+            headerBackVisible: true,
+            headerRight: () => (
+              <TouchableOpacity
+                onPress={handleShare}
+                style={styles.shareButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                testID="news-article-share"
+              >
+                <Share2 size={24} color={colors.text} />
+              </TouchableOpacity>
+            ),
+          }}
+        />
+      )}
+
       {isLoading && (
         <View style={styles.loadingBanner}>
           <Text style={styles.loadingBannerText}>Loading full article...</Text>
@@ -670,6 +697,37 @@ const styles = StyleSheet.create({
   shareButton: {
     padding: 8,
     marginRight: 8,
+  },
+  webHeader: {
+    backgroundColor: '#121212',
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    zIndex: 10,
+  },
+  webHeaderIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  webHeaderIconText: {
+    color: colors.text,
+    fontSize: 26,
+    fontWeight: '700' as const,
+    marginTop: -2,
+  },
+  webHeaderTitle: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '700' as const,
   },
   skeletonHeroImage: {
     backgroundColor: '#2a2a2a',

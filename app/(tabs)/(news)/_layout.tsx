@@ -18,7 +18,7 @@ export default function NewsLayout() {
       <StatusBar style="light" />
       <Stack
         screenOptions={{
-          headerTopInsetEnabled: true,
+          headerTopInsetEnabled: Platform.OS !== 'web',
           headerStyle: {
             backgroundColor: '#121212',
             paddingTop: headerTopPadding,
@@ -46,6 +46,7 @@ export default function NewsLayout() {
           options={{
             title: 'Article',
             headerBackTitle: 'Back',
+            headerShown: Platform.OS !== 'web',
           }}
         />
       </Stack>
