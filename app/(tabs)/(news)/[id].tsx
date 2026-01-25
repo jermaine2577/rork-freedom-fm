@@ -358,6 +358,11 @@ export default function ArticleDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
+  const webHeaderTopInset = React.useMemo(() => {
+    if (Platform.OS !== 'web') return insets.top;
+    return Math.max(insets.top, 44);
+  }, [insets.top]);
+
   // Get the article from the news list cache
   const getCachedArticle = (): NewsArticle | undefined => {
     const newsData = queryClient.getQueryData<NewsArticle[]>(['freedomFmNews']);
@@ -495,7 +500,7 @@ export default function ArticleDetailScreen() {
   return (
     <View style={styles.container}>
       {Platform.OS === 'web' ? (
-        <View style={[styles.webHeader, { paddingTop: Math.max(insets.top, 16) }]} testID="news-article-web-header">
+        <View style={[styles.webHeader, { paddingTop: webHeaderTopInset + 8 }]} testID="news-article-web-header">
           <TouchableOpacity
             onPress={handleBack}
             style={styles.webHeaderIconBtn}
@@ -701,13 +706,14 @@ const styles = StyleSheet.create({
   webHeader: {
     backgroundColor: '#121212',
     paddingHorizontal: 12,
-    paddingBottom: 10,
+    paddingBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.08)',
-    zIndex: 10,
+    zIndex: 100,
+    elevation: 10,
   },
   webHeaderIconBtn: {
     width: 36,
