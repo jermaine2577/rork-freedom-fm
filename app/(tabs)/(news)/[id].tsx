@@ -184,7 +184,12 @@ const decodeHtmlEntities = (text: string): string => {
   return decoded;
 };
 
-const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+const CORS_PROXIES = [
+  'https://corsproxy.io/?',
+  'https://api.allorigins.win/raw?url=',
+  'https://api.codetabs.com/v1/proxy?quest=',
+  'https://proxy.cors.sh/',
+] as const;
 
 const extractContentBetweenTags = (html: string, startPattern: RegExp): string => {
   const match = html.match(startPattern);
@@ -235,7 +240,7 @@ const fetchArticleContent = async (link: string): Promise<string> => {
     
     let fetchUrl: string;
     if (Platform.OS === 'web') {
-      fetchUrl = CORS_PROXY + encodeURIComponent(link);
+      fetchUrl = CORS_PROXIES[0] + encodeURIComponent(link);
     } else {
       fetchUrl = link;
       headers['User-Agent'] = Platform.OS === 'android' 
@@ -244,11 +249,39 @@ const fetchArticleContent = async (link: string): Promise<string> => {
       headers['Cache-Control'] = 'no-cache';
     }
     
-    const response = await fetch(fetchUrl, {
-      method: 'GET',
-      headers,
-      signal: controller.signal,
-    });
+    const tryFetch = async (url: string): Promise<Response | null> => {
+      try {
+        const res = await fetch(url, {
+          method: 'GET',
+          headers,
+          signal: controller.signal,
+        });
+        if (!res.ok) return null;
+        return res;
+      } catch (e: any) {
+        console.log('[ARTICLE] fetch failed:', e?.message);
+        return null;
+      }
+    };
+
+    let response: Response | null = null;
+
+    if (Platform.OS === 'web') {
+      for (const proxy of CORS_PROXIES) {
+        if (controller.signal.aborted) break;
+        const attemptUrl = proxy + encodeURIComponent(link);
+        console.log('[ARTICLE] Trying proxy:', proxy.substring(0, 30));
+        response = await tryFetch(attemptUrl);
+        if (response) break;
+      }
+    } else {
+      response = await tryFetch(fetchUrl);
+    }
+
+    if (!response) {
+      console.log('[ARTICLE] Failed to fetch HTML via all methods');
+      throw new Error('Could not load the full article. Please try again.');
+    }
     
     if (timeoutId) {
       clearTimeout(timeoutId);
@@ -336,40 +369,39 @@ const fetchArticleContent = async (link: string): Promise<string> => {
 const fetchArticle = async (id: string, cachedArticle?: NewsArticle): Promise<NewsArticle> => {
   console.log('[ARTICLE] fetchArticle called with id:', id);
   console.log('[ARTICLE] Has cached article:', !!cachedArticle);
-  
+
   if (!cachedArticle) {
     console.log('[ARTICLE] No cached article found for id:', id);
     throw new Error('Article not found. Please go back and try again.');
   }
-  
+
   console.log('[ARTICLE] Using cached article:', cachedArticle.title?.substring(0, 50));
-  
-  // Only skip fetch if we have substantial content (more than just an excerpt)
+
   if (cachedArticle.content && cachedArticle.content.length > 1000) {
     console.log('[ARTICLE] Cached article has full content, returning');
     return cachedArticle;
   }
-  
-  // Fetch full content from the article link
+
   if (cachedArticle.link) {
     console.log('[ARTICLE] Fetching full content from:', cachedArticle.link);
     try {
       const fullContent = await fetchArticleContent(cachedArticle.link);
-      if (fullContent && fullContent.length > 100) {
+      if (fullContent && fullContent.length > 200) {
         console.log('[ARTICLE] Got full content, length:', fullContent.length);
         return {
           ...cachedArticle,
           content: fullContent,
         };
-      } else {
-        console.log('[ARTICLE] Full content too short or empty, using excerpt');
       }
+
+      console.log('[ARTICLE] Full content too short or empty, using fallback');
     } catch (error: any) {
       console.log('[ARTICLE] Failed to fetch full content:', error?.message);
-      // Return cached article with excerpt as fallback
     }
+  } else {
+    console.log('[ARTICLE] No link available; cannot fetch full content');
   }
-  
+
   return cachedArticle;
 };
 
@@ -414,7 +446,16 @@ const cleanHtmlContent = (html: string): string => {
 };
 
 export default function ArticleDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{
+    id: string;
+    link?: string;
+    title?: string;
+    excerpt?: string;
+    imageUrl?: string;
+    date?: string;
+    category?: string;
+  }>();
+  const id = params?.id;
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -428,26 +469,51 @@ export default function ArticleDetailScreen() {
   const getCachedArticle = (): NewsArticle | undefined => {
     const newsData = queryClient.getQueryData<NewsArticle[]>(['freedomFmNews']);
     if (newsData && id) {
-      const found = newsData.find(article => article.id === id);
+      const found = newsData.find((article) => article.id === id);
       console.log('[ARTICLE] Looking for cached article with id:', id, 'found:', !!found);
       return found;
     }
     return undefined;
   };
 
+  const paramArticle = React.useMemo<NewsArticle | undefined>(() => {
+    if (!id) return undefined;
+
+    const link = (params?.link ?? '').trim();
+    const title = (params?.title ?? '').trim();
+
+    if (!title) return undefined;
+
+    const fallback: NewsArticle = {
+      id,
+      title,
+      excerpt: (params?.excerpt ?? title).toString(),
+      imageUrl:
+        (params?.imageUrl ?? '').trim() || 'https://freedomfm1065.com/wp-content/uploads/2024/01/freedom-fm-logo.png',
+      date: (params?.date ?? new Date().toISOString()).toString(),
+      category: (params?.category ?? 'News').toString(),
+      link: link.length > 0 ? link : undefined,
+      content: '',
+    };
+
+    console.log('[ARTICLE] Built paramArticle fallback', { id, hasLink: !!fallback.link, titleLen: title.length });
+    return fallback;
+  }, [id, params?.category, params?.date, params?.excerpt, params?.imageUrl, params?.link, params?.title]);
+
   const cachedArticle = getCachedArticle();
+  const initialArticle = cachedArticle ?? paramArticle;
 
   const { data: article, isLoading, error } = useQuery({
     queryKey: ['article', id],
-    queryFn: () => fetchArticle(id as string, cachedArticle),
-    enabled: !!id && !!cachedArticle,
+    queryFn: () => fetchArticle(id as string, initialArticle),
+    enabled: !!id && !!initialArticle,
     retry: 1,
     retryDelay: 1000,
     staleTime: 10 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
   });
 
-  const displayArticle = article || cachedArticle;
+  const displayArticle = article || initialArticle;
 
   const handleShare = useCallback(async () => {
     if (!displayArticle) {

@@ -26,6 +26,19 @@ const CORS_PROXIES = [
   'https://api.codetabs.com/v1/proxy?quest=',
   'https://proxy.cors.sh/',
 ];
+
+const stableIdFromLink = (link?: string): string => {
+  const input = (link ?? '').trim();
+  if (!input) return `news-${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+
+  let hash = 5381;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = (hash * 33) ^ input.charCodeAt(i);
+  }
+
+  const normalized = Math.abs(hash >>> 0).toString(36);
+  return `news-${normalized}`;
+};
 const MAX_RETRIES = 2;
 const NEWS_CACHE_KEY = 'freedomfm_news_cache_v2';
 const NEWS_CACHE_TIME_KEY = 'freedomfm_news_cache_time_v2';
@@ -138,7 +151,8 @@ const normalizeNewsArticle = (raw: unknown): NewsArticle | null => {
   try {
     const obj = raw as Partial<NewsArticle> & Record<string, unknown>;
 
-    const id = typeof obj.id === 'string' && obj.id.trim().length > 0 ? obj.id : `news-${Date.now()}-${Math.random()}`;
+    const link = typeof obj.link === 'string' ? obj.link : undefined;
+    const id = typeof obj.id === 'string' && obj.id.trim().length > 0 ? obj.id : stableIdFromLink(link);
     const title = typeof obj.title === 'string' ? obj.title : '';
     const excerpt = typeof obj.excerpt === 'string' ? obj.excerpt : title;
     const imageUrl =
@@ -148,7 +162,6 @@ const normalizeNewsArticle = (raw: unknown): NewsArticle | null => {
     const date = typeof obj.date === 'string' && obj.date.length > 0 ? obj.date : new Date().toISOString();
     const category = typeof obj.category === 'string' && obj.category.length > 0 ? obj.category : 'News';
     const content = typeof obj.content === 'string' ? obj.content : '';
-    const link = typeof obj.link === 'string' ? obj.link : undefined;
 
     if (!title || title.trim().length < 3) return null;
 
@@ -287,7 +300,7 @@ const parseNewsFromHtml = (html: string): NewsArticle[] => {
       }
 
       articles.push({
-        id: `news-${articles.length}-${Date.now()}`,
+        id: stableIdFromLink(link),
         title,
         excerpt: title,
         imageUrl,
@@ -342,7 +355,7 @@ const parseNewsFromHtml = (html: string): NewsArticle[] => {
         }
 
         articles.push({
-          id: `news-${articles.length}-${Date.now()}`,
+          id: stableIdFromLink(link),
           title,
           excerpt: title,
           imageUrl,
@@ -380,7 +393,7 @@ const parseNewsFromHtml = (html: string): NewsArticle[] => {
       seenLinks.add(link);
 
       articles.push({
-        id: `news-${articles.length}-${Date.now()}`,
+        id: stableIdFromLink(link),
         title,
         excerpt: title,
         imageUrl: defaultImage,
@@ -566,17 +579,62 @@ const SkeletonCard = () => {
 const INITIAL_VISIBLE_COUNT = 4;
 const LOAD_MORE_STEP = 4;
 
+const extractContentBetweenTags = (html: string, startPattern: RegExp): string => {
+  const match = html.match(startPattern);
+  if (!match) return '';
+
+  const startIndex = (match.index ?? 0) + match[0].length;
+  let depth = 1;
+  let i = startIndex;
+  const tagName = match[0].match(/<(\w+)/)?.[1] || 'div';
+
+  while (i < html.length && depth > 0) {
+    const openTag = html.indexOf(`<${tagName}`, i);
+    const closeTag = html.indexOf(`</${tagName}`, i);
+
+    if (closeTag === -1) break;
+
+    if (openTag !== -1 && openTag < closeTag) {
+      depth += 1;
+      i = openTag + 1;
+    } else {
+      depth -= 1;
+      if (depth === 0) {
+        return html.substring(startIndex, closeTag);
+      }
+      i = closeTag + 1;
+    }
+  }
+
+  return html.substring(startIndex, Math.min(startIndex + 80000, html.length));
+};
+
 const extractArticleContentFromHtml = (html: string): string => {
-  const entryContentMatch = html.match(
-    /<div[^>]*class="[^"]*entry-content[^"]*"[^>]*>([\s\S]*?)<\/div>\s*(?:<div|<footer|<aside|<nav|<section|$)/i,
-  );
-  if (entryContentMatch) return entryContentMatch[1];
+  if (!html) return '';
 
-  const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
-  if (articleMatch) return articleMatch[1];
+  const entryContentPattern = /<div[^>]*class="[^"]*entry-content[^"]*"[^>]*>/i;
+  if (entryContentPattern.test(html)) {
+    const content = extractContentBetweenTags(html, entryContentPattern);
+    if (content && content.length > 200) return content;
+  }
 
-  const postContentMatch = html.match(/<div[^>]*class="[^"]*post-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-  if (postContentMatch) return postContentMatch[1];
+  const articlePattern = /<article[^>]*>/i;
+  if (articlePattern.test(html)) {
+    const content = extractContentBetweenTags(html, articlePattern);
+    if (content && content.length > 200) return content;
+  }
+
+  const postContentPattern = /<div[^>]*class="[^"]*post-content[^"]*"[^>]*>/i;
+  if (postContentPattern.test(html)) {
+    const content = extractContentBetweenTags(html, postContentPattern);
+    if (content && content.length > 200) return content;
+  }
+
+  const theContentPattern = /<div[^>]*class="[^"]*the-content[^"]*"[^>]*>/i;
+  if (theContentPattern.test(html)) {
+    const content = extractContentBetweenTags(html, theContentPattern);
+    if (content && content.length > 200) return content;
+  }
 
   return '';
 };
@@ -768,7 +826,18 @@ export default function NewsScreen() {
         testID={`news-card-${item.id}`}
         onPress={() => {
           console.log('[NEWS] open article', { id: item.id, title: item.title?.substring(0, 60) });
-          router.push({ pathname: '/(tabs)/(news)/[id]', params: { id: item.id } } as any);
+          router.push({
+            pathname: '/(tabs)/(news)/[id]',
+            params: {
+              id: item.id,
+              link: item.link ?? '',
+              title: item.title ?? '',
+              excerpt: item.excerpt ?? '',
+              imageUrl: item.imageUrl ?? '',
+              date: item.date ?? '',
+              category: item.category ?? '',
+            },
+          } as any);
         }}
       >
         <View style={styles.imageContainer}>
