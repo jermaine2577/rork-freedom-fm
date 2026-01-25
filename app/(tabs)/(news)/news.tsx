@@ -21,9 +21,10 @@ import { NewsArticle } from '@/types';
 
 const NEWS_PAGE_URL = 'https://freedomfm1065.com/news/';
 const CORS_PROXIES = [
-  'https://api.allorigins.win/raw?url=',
   'https://corsproxy.io/?',
+  'https://api.allorigins.win/raw?url=',
   'https://api.codetabs.com/v1/proxy?quest=',
+  'https://proxy.cors.sh/',
 ];
 const MAX_RETRIES = 2;
 const NEWS_CACHE_KEY = 'freedomfm_news_cache_v2';
@@ -384,7 +385,7 @@ const fetchWithProxy = async (proxyUrl: string, targetUrl: string, signal: Abort
 
 const fetchFreshNews = async (): Promise<NewsArticle[]> => {
   const controller = new AbortController();
-  const timeoutDuration = Platform.OS === 'web' ? 30000 : 20000;
+  const timeoutDuration = Platform.OS === 'web' ? 45000 : 25000;
   
   const timeoutId = setTimeout(() => {
     console.log('[NEWS] Request timeout');
@@ -626,10 +627,10 @@ export default function NewsScreen() {
   const { data: articles, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['freedomFmNews'],
     queryFn: fetchNewsWithCache,
-    retry: 2,
+    retry: 3,
     staleTime: CACHE_DURATION,
     gcTime: CACHE_DURATION,
-    refetchOnMount: false,
+    refetchOnMount: 'always',
     refetchOnWindowFocus: false,
     refetchInterval: false,
     networkMode: 'always',
@@ -638,8 +639,10 @@ export default function NewsScreen() {
   useEffect(() => {
     if (!hasInitialFetched.current) {
       hasInitialFetched.current = true;
+      console.log('[NEWS] Initial mount, triggering fetch...');
+      refetch();
     }
-  }, []);
+  }, [refetch]);
 
   useEffect(() => {
     const list = articles ?? [];
