@@ -22,7 +22,7 @@ const RADIO_LOGO_URI = 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/atta
 
 
 export default function PlayerScreen() {
-  const { isPlaying, isLoading, error, play, pause } = useRadio();
+  const { isPlaying, isLoading, error, play, pause, stop } = useRadio();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
@@ -120,6 +120,13 @@ export default function PlayerScreen() {
     } else {
       play();
     }
+  };
+
+  const handleReconnect = () => {
+    console.log('[Radio] UI reconnect pressed');
+    stop().finally(() => {
+      play();
+    });
   };
 
   
@@ -277,7 +284,7 @@ export default function PlayerScreen() {
               isLoading && styles.playButtonLoading,
             ]}
             onPress={handlePlayPause}
-            disabled={isLoading}
+            disabled={isLoading && !isPlaying}
           >
             <LinearGradient
               colors={['rgba(0, 0, 0, 0.72)', 'rgba(0, 0, 0, 0.52)']}
@@ -306,6 +313,20 @@ export default function PlayerScreen() {
             }]}>LIVE</Text>
             <Volume2 size={ultraCompactMode ? 11 : 12} color={colors.textSecondary} />
           </View>
+
+          {isLoading && isPlaying && !error && (
+            <View style={[styles.errorContainer, { marginTop: 8 }]}>
+              <Text style={styles.errorText}>Buffering…</Text>
+              <TouchableOpacity
+                testID="radio-reconnect"
+                style={styles.retryButton}
+                onPress={handleReconnect}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.retryButtonText}>Reconnect</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {error && (
             <View style={[styles.errorContainer, { marginTop: 8 }]}>
