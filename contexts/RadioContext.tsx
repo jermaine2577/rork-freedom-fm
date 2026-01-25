@@ -9,6 +9,7 @@ const STREAM_CONNECT_TIMEOUT_MS = 60000;
 const HEALTH_CHECK_INTERVAL_MS = Platform.OS === 'android' ? 15000 : 25000;
 
 const STALL_THRESHOLD_MS = Platform.OS === 'android' ? 45000 : 60000;
+const BUFFERING_STALL_THRESHOLD_MS = Platform.OS === 'android' ? 25000 : 35000;
 const MAX_RETRY_ATTEMPTS = 6;
 
 type ExpoAV = typeof import('expo-av');
@@ -34,6 +35,7 @@ interface RadioRefs {
 
   isPlaying: boolean;
   isBuffering: boolean;
+  bufferingSince: number;
 
   desiredPlaying: boolean;
   lastAutoResumeAt: number;
@@ -96,6 +98,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
     isPlaying: false,
     isBuffering: false,
+    bufferingSince: 0,
 
     desiredPlaying: false,
     lastAutoResumeAt: 0,
@@ -135,10 +138,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     const audio = refs.current.webAudio;
     refs.current.webAudio = null;
 
+    refs.current.isBuffering = false;
+    refs.current.bufferingSince = 0;
+
     try {
       audio.oncanplay = null;
       audio.onplaying = null;
       audio.onwaiting = null;
+      (audio as any).onstalled = null;
       audio.onerror = null;
       audio.onended = null;
       audio.onpause = null;
@@ -162,6 +169,9 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
     const sound = refs.current.nativeSound;
     refs.current.nativeSound = null;
+
+    refs.current.isBuffering = false;
+    refs.current.bufferingSince = 0;
 
     if (!sound) return;
 
@@ -233,15 +243,19 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       const streamUri = `${STREAM_URL}?t=${Date.now()}`;
       const audio = new Audio();
       audio.crossOrigin = 'anonymous';
-      audio.preload = 'none';
+      audio.preload = 'auto';
       audio.src = streamUri;
       audio.volume = volume;
+      try {
+        audio.load();
+      } catch {}
 
       refs.current.webAudio = audio;
       refs.current.lastPositionMs = 0;
       refs.current.lastProgressAt = Date.now();
       refs.current.lastStatusUpdateAt = Date.now();
       refs.current.lastNonPlayingAt = 0;
+      refs.current.bufferingSince = 0;
 
       const connectTimeout = setTimeout(() => {
         if (refs.current.playSessionId !== startSessionId) return;
@@ -249,9 +263,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         try {
           audio.pause();
         } catch {}
+        refs.current.isPlaying = false;
+        refs.current.isBuffering = false;
+        refs.current.bufferingSince = 0;
+        cleanupWebAudio();
         setIsLoading(false);
         setIsPlaying(false);
-        refs.current.isPlaying = false;
         setError('Stream connection timed out. Please try again.');
       }, STREAM_CONNECT_TIMEOUT_MS);
 
@@ -265,6 +282,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         }
         refs.current.isPlaying = true;
         refs.current.isBuffering = false;
+        refs.current.bufferingSince = 0;
         refs.current.lastSuccessfulPlay = Date.now();
         refs.current.consecutiveErrors = 0;
         refs.current.retryCount = 0;
@@ -283,8 +301,21 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
       audio.onwaiting = () => {
         if (refs.current.playSessionId !== startSessionId) return;
+        if (!refs.current.isBuffering) {
+          refs.current.bufferingSince = Date.now();
+        }
         refs.current.isBuffering = true;
         console.log('[Radio] Web buffering');
+        if (refs.current.mounted) setIsLoading(true);
+      };
+
+      (audio as any).onstalled = () => {
+        if (refs.current.playSessionId !== startSessionId) return;
+        if (!refs.current.isBuffering) {
+          refs.current.bufferingSince = Date.now();
+        }
+        refs.current.isBuffering = true;
+        console.warn('[Radio] Web stalled');
         if (refs.current.mounted) setIsLoading(true);
       };
 
@@ -302,6 +333,9 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         console.error('[Radio] Web audio error');
         refs.current.consecutiveErrors++;
         refs.current.isPlaying = false;
+        refs.current.isBuffering = false;
+        refs.current.bufferingSince = 0;
+        cleanupWebAudio();
         if (refs.current.mounted) {
           setIsPlaying(false);
           setIsLoading(false);
@@ -327,6 +361,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       audio.ontimeupdate = () => {
         if (refs.current.playSessionId !== startSessionId) return;
         const now = Date.now();
+        refs.current.lastStatusUpdateAt = now;
         const positionMs = Math.floor(audio.currentTime * 1000);
         if (positionMs !== refs.current.lastPositionMs) {
           refs.current.lastPositionMs = positionMs;
@@ -389,6 +424,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       refs.current.lastProgressAt = Date.now();
       refs.current.lastStatusUpdateAt = Date.now();
       refs.current.lastNonPlayingAt = 0;
+      refs.current.bufferingSince = 0;
 
       const onStatus = (status: import('expo-av').AVPlaybackStatus) => {
         if (!refs.current.mounted) return;
@@ -415,6 +451,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         if (status.isPlaying) {
           refs.current.isPlaying = true;
           refs.current.isBuffering = false;
+          refs.current.bufferingSince = 0;
           refs.current.lastSuccessfulPlay = now;
           refs.current.lastProgressAt = now;
           refs.current.lastNonPlayingAt = 0;
@@ -429,6 +466,9 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         }
 
         if (status.isBuffering) {
+          if (!refs.current.isBuffering) {
+            refs.current.bufferingSince = now;
+          }
           refs.current.isBuffering = true;
           refs.current.lastProgressAt = now;
           if (refs.current.mounted) setIsLoading(true);
@@ -437,6 +477,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
         refs.current.isPlaying = false;
         refs.current.isBuffering = false;
+        refs.current.bufferingSince = 0;
         if (refs.current.lastNonPlayingAt === 0) refs.current.lastNonPlayingAt = now;
         if (refs.current.mounted) setIsPlaying(false);
 
@@ -490,6 +531,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         refs.current.cleanupFn?.();
       }, STREAM_CONNECT_TIMEOUT_MS);
 
+      try {
+        refs.current.nativeSub = sound.setOnPlaybackStatusUpdate(onStatus) as unknown as { remove: () => void };
+      } catch {
+        sound.setOnPlaybackStatusUpdate(onStatus);
+      }
+
       await sound.loadAsync(
         {
           uri: streamUri,
@@ -500,18 +547,24 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           },
         },
         {
-          shouldPlay: true,
+          shouldPlay: false,
           volume,
-          progressUpdateIntervalMillis: 450,
+          progressUpdateIntervalMillis: 750,
         }
       );
 
       clearTimeout(connectTimer);
 
+      if (refs.current.playSessionId !== startSessionId) {
+        console.log('[Radio] Native play aborted (session changed after load)');
+        return;
+      }
+
       try {
-        refs.current.nativeSub = sound.setOnPlaybackStatusUpdate(onStatus) as unknown as { remove: () => void };
-      } catch {
-        sound.setOnPlaybackStatusUpdate(onStatus);
+        await sound.playAsync();
+      } catch (e) {
+        console.warn('[Radio] playAsync failed after load:', e);
+        throw e;
       }
 
       refs.current.isSwitching = false;
@@ -559,14 +612,20 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         const stalledFor = now - refs.current.lastProgressAt;
         const statusQuietFor = now - refs.current.lastStatusUpdateAt;
 
-        if (refs.current.isBuffering) return;
-        if (stalledFor < STALL_THRESHOLD_MS) return;
-        if (statusQuietFor < STALL_THRESHOLD_MS) return;
+        const bufferingFor =
+          refs.current.isBuffering && refs.current.bufferingSince > 0 ? now - refs.current.bufferingSince : 0;
+
+        if (refs.current.isBuffering && bufferingFor < BUFFERING_STALL_THRESHOLD_MS) return;
+        if (!refs.current.isBuffering) {
+          if (stalledFor < STALL_THRESHOLD_MS) return;
+          if (statusQuietFor < STALL_THRESHOLD_MS) return;
+        }
 
         console.warn('[Radio] Stall detected, recovering...', {
           platform: Platform.OS,
           stalledFor,
           statusQuietFor,
+          bufferingFor,
           retryCount: refs.current.retryCount,
         });
 
@@ -616,6 +675,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       refs.current.isSwitching = false;
       refs.current.isPlaying = false;
       refs.current.isBuffering = false;
+      refs.current.bufferingSince = 0;
 
       if (refs.current.mounted) {
         setIsPlaying(false);
@@ -640,6 +700,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       refs.current.isSwitching = false;
       refs.current.isPlaying = false;
       refs.current.isBuffering = false;
+      refs.current.bufferingSince = 0;
 
       if (refs.current.mounted) {
         setIsPlaying(false);
