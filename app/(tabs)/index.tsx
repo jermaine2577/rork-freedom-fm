@@ -114,6 +114,7 @@ export default function PlayerScreen() {
   });
 
   const handlePlayPause = () => {
+    console.log('[Radio] UI play/pause pressed', { isPlaying, isLoading, hasError: !!error });
     if (isPlaying) {
       pause();
     } else {
@@ -309,6 +310,18 @@ export default function PlayerScreen() {
           {error && (
             <View style={[styles.errorContainer, { marginTop: 8 }]}>
               <Text style={styles.errorText}>{error}</Text>
+
+              <TouchableOpacity
+                testID="radio-retry"
+                style={styles.retryButton}
+                onPress={() => {
+                  console.log('[Radio] UI retry pressed');
+                  play();
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.retryButtonText}>Try again</Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -500,16 +513,32 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     backgroundColor: colors.error + '20',
     borderRadius: 10,
     borderWidth: 1,
     borderColor: colors.error,
+    alignItems: 'center',
+    gap: 8,
   },
   errorText: {
     fontSize: 12,
     color: colors.error,
     textAlign: 'center',
+  },
+  retryButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  retryButtonText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: colors.text,
+    letterSpacing: 0.3,
   },
   batteryTipButton: {
     flexDirection: 'row',
