@@ -10,7 +10,7 @@ export default function NewsLayout() {
 
   const headerTopPadding = useMemo(() => {
     if (Platform.OS !== 'web') return 0;
-    return Math.max(insets.top, 28);
+    return Math.max(insets.top, 44);
   }, [insets.top]);
 
   return (
@@ -18,17 +18,9 @@ export default function NewsLayout() {
       <StatusBar style="light" />
       <Stack
         screenOptions={{
+          headerTopInsetEnabled: true,
           headerStyle: {
             backgroundColor: '#121212',
-            height: 56 + headerTopPadding,
-          },
-          headerTitleContainerStyle: {
-            paddingTop: headerTopPadding,
-          },
-          headerLeftContainerStyle: {
-            paddingTop: headerTopPadding,
-          },
-          headerRightContainerStyle: {
             paddingTop: headerTopPadding,
           },
           headerTintColor: colors.text,
