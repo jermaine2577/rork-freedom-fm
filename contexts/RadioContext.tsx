@@ -590,11 +590,31 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   }, [cleanupNative, cleanupPlayer, configureAudioMode, getRetryDelayMs, volume]);
 
   const play = useCallback(async (): Promise<void> => {
+    console.log('[Radio] Play called', {
+      isRecovering: refs.current.isRecovering,
+      pendingPlay: !!refs.current.pendingPlay,
+      isPlaying: refs.current.isPlaying,
+      desiredPlaying: refs.current.desiredPlaying,
+    });
+
     refs.current.desiredPlaying = true;
 
+    if (refs.current.isRecovering) {
+      console.log('[Radio] Play: clearing stuck recovery state');
+      refs.current.isRecovering = false;
+    }
+
     if (refs.current.pendingPlay) {
-      console.log('[Radio] Play ignored: pending play in progress');
-      return refs.current.pendingPlay;
+      const pendingAge = Date.now() - refs.current.lastStatusUpdateAt;
+      if (pendingAge > 30000) {
+        console.warn('[Radio] Play: clearing stale pending play (age:', pendingAge, 'ms)');
+        refs.current.pendingPlay = null;
+        refs.current.playSessionId++;
+        await cleanupPlayer().catch(() => {});
+      } else {
+        console.log('[Radio] Play ignored: pending play in progress');
+        return refs.current.pendingPlay;
+      }
     }
 
     const playPromise = (async () => {
@@ -674,8 +694,69 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     return refs.current.pendingPlay;
   }, [clearHealthCheck, cleanupPlayer, getRetryDelayMs, playNative, playWeb]);
 
+  const toggle = useCallback(async (): Promise<void> => {
+    console.log('[Radio] Toggle called', {
+      isPlaying: refs.current.isPlaying,
+      stateIsPlaying: isPlaying,
+      isLoading,
+      isRecovering: refs.current.isRecovering,
+      pendingPlay: !!refs.current.pendingPlay,
+    });
+
+    const isStuck =
+      refs.current.isRecovering ||
+      (refs.current.pendingPlay && Date.now() - refs.current.lastStatusUpdateAt > 30000);
+
+    if (isStuck) {
+      console.warn('[Radio] Toggle: detected stuck state, forcing reset first');
+      await forceReset();
+      await new Promise((r) => setTimeout(r, 300));
+      await play();
+      return;
+    }
+
+    if (isPlaying || refs.current.isPlaying) {
+      await pause();
+    } else {
+      await play();
+    }
+  }, [forceReset, isPlaying, isLoading, pause, play]);
+
+  const forceReset = useCallback(async (): Promise<void> => {
+    console.log('[Radio] Force reset triggered');
+    refs.current.desiredPlaying = false;
+    refs.current.playSessionId++;
+    refs.current.pendingPlay = null;
+    refs.current.isRecovering = false;
+    refs.current.isSwitching = false;
+    refs.current.isPlaying = false;
+    refs.current.isBuffering = false;
+    refs.current.bufferingSince = 0;
+    refs.current.retryCount = 0;
+    refs.current.consecutiveErrors = 0;
+    refs.current.lastNonPlayingAt = 0;
+
+    if (refs.current.mounted) {
+      setIsPlaying(false);
+      setIsLoading(false);
+      setError(null);
+    }
+
+    try {
+      await cleanupPlayer();
+    } catch (e) {
+      console.warn('[Radio] Force reset cleanup error:', e);
+    }
+  }, [cleanupPlayer]);
+
   const pause = useCallback(async (): Promise<void> => {
     try {
+      console.log('[Radio] Pause called', {
+        isRecovering: refs.current.isRecovering,
+        pendingPlay: !!refs.current.pendingPlay,
+        isPlaying: refs.current.isPlaying,
+      });
+
       refs.current.desiredPlaying = false;
       refs.current.playSessionId++;
       refs.current.pendingPlay = null;
@@ -695,7 +776,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     } catch (e) {
       console.error('[Radio] Pause failed:', e);
       refs.current.isPlaying = false;
-      if (refs.current.mounted) setIsPlaying(false);
+      refs.current.pendingPlay = null;
+      refs.current.isRecovering = false;
+      if (refs.current.mounted) {
+        setIsPlaying(false);
+        setIsLoading(false);
+      }
     }
   }, [cleanupPlayer]);
 
@@ -797,8 +883,30 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       if (nextAppState === 'active') {
         refs.current.isInBackground = false;
 
-        if (!refs.current.desiredPlaying) return;
-        if (refs.current.isRecovering) return;
+        console.log('[Radio] App became active', {
+          desiredPlaying: refs.current.desiredPlaying,
+          isRecovering: refs.current.isRecovering,
+          isPlaying: refs.current.isPlaying,
+          pendingPlay: !!refs.current.pendingPlay,
+        });
+
+        if (!refs.current.desiredPlaying) {
+          refs.current.pendingPlay = null;
+          refs.current.isRecovering = false;
+          return;
+        }
+
+        if (refs.current.isRecovering) {
+          const recoveryAge = Date.now() - refs.current.lastStatusUpdateAt;
+          if (recoveryAge > 30000) {
+            console.warn('[Radio] Clearing stuck recovery on app resume (age:', recoveryAge, 'ms)');
+            refs.current.isRecovering = false;
+            refs.current.pendingPlay = null;
+          } else {
+            return;
+          }
+        }
+
         if (refs.current.playSessionId !== sessionAtStart) return;
 
         const sound = refs.current.nativeSound;
@@ -868,8 +976,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       play,
       pause,
       stop,
+      toggle,
+      forceReset,
       changeVolume,
     }),
-    [changeVolume, error, isLoading, isPlaying, pause, play, stop, volume]
+    [changeVolume, error, forceReset, isLoading, isPlaying, pause, play, stop, toggle, volume]
   );
 });

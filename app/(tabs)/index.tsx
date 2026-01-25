@@ -22,7 +22,7 @@ const RADIO_LOGO_URI = 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/atta
 
 
 export default function PlayerScreen() {
-  const { isPlaying, isLoading, error, play, pause, stop } = useRadio();
+  const { isPlaying, isLoading, error, play, pause, stop, toggle, forceReset } = useRadio();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
@@ -115,17 +115,13 @@ export default function PlayerScreen() {
 
   const handlePlayPause = () => {
     console.log('[Radio] UI play/pause pressed', { isPlaying, isLoading, hasError: !!error });
-    if (isPlaying) {
-      pause();
-    } else {
-      play();
-    }
+    toggle();
   };
 
   const handleReconnect = () => {
     console.log('[Radio] UI reconnect pressed');
-    stop().finally(() => {
-      play();
+    forceReset().finally(() => {
+      setTimeout(() => play(), 300);
     });
   };
 
@@ -284,7 +280,7 @@ export default function PlayerScreen() {
               isLoading && styles.playButtonLoading,
             ]}
             onPress={handlePlayPause}
-            disabled={isLoading && !isPlaying}
+            disabled={false}
           >
             <LinearGradient
               colors={['rgba(0, 0, 0, 0.72)', 'rgba(0, 0, 0, 0.52)']}
