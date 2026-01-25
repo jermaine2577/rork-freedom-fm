@@ -559,10 +559,12 @@ export default function NewsScreen() {
         />
       </View>
       <View style={styles.cardContent}>
-        <View style={styles.categoryBadge}>
-          <Tag size={12} color={colors.text} />
-          <Text style={styles.categoryText}>{item.category}</Text>
-        </View>
+        {item.category?.trim().toLowerCase() !== 'news' && (
+          <View style={styles.categoryBadge} testID="news-category-badge">
+            <Tag size={12} color={colors.text} />
+            <Text style={styles.categoryText}>{item.category}</Text>
+          </View>
+        )}
         <Text style={styles.title}>{item.title}</Text>
         <Text style={styles.excerpt} numberOfLines={2}>
           {item.excerpt}

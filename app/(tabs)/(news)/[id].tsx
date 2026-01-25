@@ -557,10 +557,12 @@ export default function ArticleDetailScreen() {
       <Image source={{ uri: displayArticle.imageUrl }} style={styles.heroImage} />
       
       <View style={styles.content}>
-        <View style={styles.categoryBadge}>
-          <Tag size={14} color={colors.text} />
-          <Text style={styles.categoryText}>{displayArticle.category}</Text>
-        </View>
+        {displayArticle.category?.trim().toLowerCase() !== 'news' && (
+          <View style={styles.categoryBadge} testID="news-article-category-badge">
+            <Tag size={14} color={colors.text} />
+            <Text style={styles.categoryText}>{displayArticle.category}</Text>
+          </View>
+        )}
 
         <Text style={styles.title}>{displayArticle.title}</Text>
 
