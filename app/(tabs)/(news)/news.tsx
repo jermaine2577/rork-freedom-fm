@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Calendar, Tag, AlertCircle } from 'lucide-react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import colors from '@/constants/colors';
 import { NewsArticle } from '@/types';
@@ -511,10 +511,116 @@ const SkeletonCard = () => {
   );
 };
 
+const INITIAL_VISIBLE_COUNT = 4;
+const LOAD_MORE_STEP = 4;
+
+const extractArticleContentFromHtml = (html: string): string => {
+  const entryContentMatch = html.match(
+    /<div[^>]*class="[^"]*entry-content[^"]*"[^>]*>([\s\S]*?)<\/div>\s*(?:<div|<footer|<aside|<nav|<section|$)/i,
+  );
+  if (entryContentMatch) return entryContentMatch[1];
+
+  const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
+  if (articleMatch) return articleMatch[1];
+
+  const postContentMatch = html.match(/<div[^>]*class="[^"]*post-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+  if (postContentMatch) return postContentMatch[1];
+
+  return '';
+};
+
+const fetchArticleContentForPrefetch = async (link: string): Promise<string> => {
+  console.log('[NEWS][PREFETCH] Fetching article content from:', link);
+
+  const controller = new AbortController();
+  const timeoutDuration = Platform.OS === 'web' ? 30000 : 20000;
+  const timeoutId = setTimeout(() => {
+    console.log('[NEWS][PREFETCH] Request timeout; aborting');
+    controller.abort();
+  }, timeoutDuration);
+
+  try {
+    const headers: Record<string, string> = {
+      Accept: 'text/html,application/xhtml+xml,*/*',
+    };
+
+    const tryFetchHtml = async (url: string): Promise<string | null> => {
+      try {
+        const res = await fetch(url, { method: 'GET', headers, signal: controller.signal });
+        if (!res.ok) return null;
+        const text = await res.text();
+        if (!text || text.length < 500) return null;
+        return text;
+      } catch (e: any) {
+        console.log('[NEWS][PREFETCH] fetch failed:', e?.message);
+        return null;
+      }
+    };
+
+    let html: string | null = null;
+
+    if (Platform.OS === 'web') {
+      for (const proxy of CORS_PROXIES) {
+        if (controller.signal.aborted) break;
+        const fetchUrl = proxy + encodeURIComponent(link);
+        console.log('[NEWS][PREFETCH] Trying proxy:', proxy.substring(0, 30));
+        html = await tryFetchHtml(fetchUrl);
+        if (html) break;
+      }
+    } else {
+      headers['User-Agent'] =
+        Platform.OS === 'android'
+          ? 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/121.0.0.0 Mobile Safari/537.36'
+          : 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) Safari/605.1.15';
+      headers['Cache-Control'] = 'no-cache';
+      html = await tryFetchHtml(link);
+    }
+
+    if (timeoutId) clearTimeout(timeoutId);
+
+    if (!html) {
+      console.log('[NEWS][PREFETCH] No HTML received');
+      return '';
+    }
+
+    const extracted = extractArticleContentFromHtml(html);
+    console.log('[NEWS][PREFETCH] Extracted content length:', extracted.length);
+    return extracted;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+const runWithConcurrency = async <T,>(
+  tasks: Array<() => Promise<T>>,
+  concurrency: number,
+): Promise<T[]> => {
+  const results: T[] = [];
+  let idx = 0;
+
+  const workers = Array.from({ length: Math.max(1, concurrency) }).map(async () => {
+    while (idx < tasks.length) {
+      const current = idx;
+      idx += 1;
+      try {
+        results[current] = await tasks[current]();
+      } catch (e) {
+        throw e;
+      }
+    }
+  });
+
+  await Promise.allSettled(workers);
+  return results;
+};
+
 export default function NewsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
+  const [visibleCount, setVisibleCount] = useState<number>(INITIAL_VISIBLE_COUNT);
+  const [showLoadMorePrompt, setShowLoadMorePrompt] = useState<boolean>(false);
   const hasInitialFetched = useRef(false);
   
   const { data: articles, isLoading, error, refetch, isFetching } = useQuery({
@@ -535,8 +641,52 @@ export default function NewsScreen() {
     }
   }, []);
 
+  useEffect(() => {
+    const list = articles ?? [];
+    if (list.length === 0) return;
+
+    console.log('[NEWS][PREFETCH] Considering prefetch for first articles:', {
+      listCount: list.length,
+      visibleCount,
+    });
+
+    const firstBatch = list.slice(0, Math.min(INITIAL_VISIBLE_COUNT, list.length));
+
+    const tasks = firstBatch
+      .filter((a) => !!a.link)
+      .map((a) => async () => {
+        const key = ['article', a.id] as const;
+        const existing = queryClient.getQueryData<NewsArticle>(key);
+        if (existing?.content && existing.content.length > 100) {
+          console.log('[NEWS][PREFETCH] Already have content for', a.id);
+          return;
+        }
+
+        console.log('[NEWS][PREFETCH] Prefetching', a.id);
+        await queryClient.prefetchQuery({
+          queryKey: key,
+          queryFn: async () => {
+            const content = a.link ? await fetchArticleContentForPrefetch(a.link) : '';
+            return {
+              ...a,
+              content,
+            } satisfies NewsArticle;
+          },
+          staleTime: 10 * 60 * 1000,
+          gcTime: 30 * 60 * 1000,
+        });
+      });
+
+    runWithConcurrency(tasks, 2).catch((e) => {
+      console.log('[NEWS][PREFETCH] Prefetch error:', (e as any)?.message);
+    });
+  }, [articles, queryClient, visibleCount]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    setVisibleCount(INITIAL_VISIBLE_COUNT);
+    setShowLoadMorePrompt(false);
+
     const freshArticles = await fetchFreshNews();
     if (freshArticles.length > 0) {
       await refetch();
@@ -548,6 +698,7 @@ export default function NewsScreen() {
     <TouchableOpacity 
       style={styles.card} 
       activeOpacity={0.8}
+      testID={`news-card-${item.id}`}
       onPress={() => router.push(`/(tabs)/(news)/${item.id}` as any)}
     >
       <View style={styles.imageContainer}>
@@ -619,22 +770,69 @@ export default function NewsScreen() {
     );
   }
 
+  const allArticles = articles ?? [];
+  const hasMore = visibleCount < allArticles.length;
+  const visibleArticles = allArticles.slice(0, Math.min(visibleCount, allArticles.length));
+
+  const handleLoadMore = useCallback(() => {
+    console.log('[NEWS] Load more pressed', { visibleCount, total: allArticles.length });
+    setVisibleCount((prev) => Math.min(prev + LOAD_MORE_STEP, allArticles.length));
+    setShowLoadMorePrompt(false);
+  }, [allArticles.length, visibleCount]);
+
+  const renderFooter = useCallback(() => {
+    if (!hasMore) return <View style={{ height: 16 }} />;
+
+    if (!showLoadMorePrompt) {
+      return <View style={{ height: 24 }} />;
+    }
+
+    const remaining = allArticles.length - visibleCount;
+
+    return (
+      <View style={styles.loadMoreWrap}>
+        <Text style={styles.loadMoreHint} testID="news-load-more-hint">
+          You’ve reached the end of the latest {visibleCount} articles.
+        </Text>
+        <TouchableOpacity
+          style={styles.loadMoreButton}
+          activeOpacity={0.85}
+          onPress={handleLoadMore}
+          testID="news-load-more-button"
+        >
+          <Text style={styles.loadMoreButtonText}>
+            Load {Math.min(LOAD_MORE_STEP, remaining)} more
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }, [allArticles.length, handleLoadMore, hasMore, showLoadMorePrompt, visibleCount]);
+
+  const handleEndReached = useCallback(() => {
+    if (!hasMore) return;
+    console.log('[NEWS] End reached; prompting load more');
+    setShowLoadMorePrompt(true);
+  }, [hasMore]);
+
   return (
     <View style={styles.container}>
       <FlatList
-        data={articles || []}
+        data={visibleArticles}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={[
           styles.listContent,
           { paddingBottom: insets.bottom + 16 }
         ]}
+        ListFooterComponent={renderFooter}
         showsVerticalScrollIndicator={false}
         removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
+        maxToRenderPerBatch={8}
         updateCellsBatchingPeriod={50}
-        initialNumToRender={5}
-        windowSize={10}
+        initialNumToRender={INITIAL_VISIBLE_COUNT}
+        windowSize={8}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.25}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -764,6 +962,35 @@ const styles = StyleSheet.create({
     backgroundColor: '#2a2a2a',
     borderRadius: 12,
     marginBottom: 12,
+  },
+  loadMoreWrap: {
+    marginTop: 10,
+    paddingTop: 14,
+    paddingBottom: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#2a2a2a',
+    alignItems: 'center',
+  },
+  loadMoreHint: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  loadMoreButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#333',
+    minWidth: 220,
+    alignItems: 'center',
+  },
+  loadMoreButtonText: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: colors.text,
   },
   skeletonTitle: {
     width: '90%',
