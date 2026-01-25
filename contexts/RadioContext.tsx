@@ -539,24 +539,62 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         sound.setOnPlaybackStatusUpdate(onStatus);
       }
 
-      await sound.loadAsync(
-        {
-          uri: streamUri,
-          headers: {
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            Pragma: 'no-cache',
-            Accept: 'audio/mpeg, audio/*;q=0.9, */*;q=0.1',
-            Connection: 'keep-alive',
+      const loadWithAndroidImpl = async (androidImplementation: 'MediaPlayer' | 'ExoPlayer') => {
+        console.log('[Radio] Loading stream', { androidImplementation, streamUri });
+        await sound.loadAsync(
+          {
+            uri: streamUri,
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              Pragma: 'no-cache',
+              Accept: 'audio/mpeg, audio/*;q=0.9, */*;q=0.1',
+              Connection: 'keep-alive',
+            },
+            overrideFileExtensionAndroid: 'mp3',
           },
-          overrideFileExtensionAndroid: 'mp3',
-        },
-        {
-          shouldPlay: false,
-          volume,
-          progressUpdateIntervalMillis: PROGRESS_UPDATE_INTERVAL_MS,
-          androidImplementation: 'MediaPlayer',
+          {
+            shouldPlay: false,
+            volume,
+            progressUpdateIntervalMillis: PROGRESS_UPDATE_INTERVAL_MS,
+            ...(Platform.OS === 'android' ? { androidImplementation } : {}),
+          }
+        );
+      };
+
+      try {
+        await loadWithAndroidImpl('ExoPlayer');
+      } catch (e) {
+        console.warn('[Radio] ExoPlayer load failed, retrying with MediaPlayer', e);
+        await cleanupNative();
+        if (refs.current.playSessionId !== startSessionId) return;
+
+        const fallbackSound = new expoAV.Audio.Sound();
+        refs.current.nativeSound = fallbackSound;
+        try {
+          refs.current.nativeSub = fallbackSound.setOnPlaybackStatusUpdate(onStatus) as unknown as { remove: () => void };
+        } catch {
+          fallbackSound.setOnPlaybackStatusUpdate(onStatus);
         }
-      );
+
+        await fallbackSound.loadAsync(
+          {
+            uri: streamUri,
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              Pragma: 'no-cache',
+              Accept: 'audio/mpeg, audio/*;q=0.9, */*;q=0.1',
+              Connection: 'keep-alive',
+            },
+            overrideFileExtensionAndroid: 'mp3',
+          },
+          {
+            shouldPlay: false,
+            volume,
+            progressUpdateIntervalMillis: PROGRESS_UPDATE_INTERVAL_MS,
+            ...(Platform.OS === 'android' ? { androidImplementation: 'MediaPlayer' as const } : {}),
+          }
+        );
+      }
 
       clearTimeout(connectTimer);
 
