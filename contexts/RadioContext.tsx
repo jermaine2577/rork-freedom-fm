@@ -230,6 +230,13 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     }
   }, []);
 
+  const buildStreamUri = useCallback((): string => {
+    const shouldBustCache = refs.current.retryCount > 0 || refs.current.consecutiveErrors > 0;
+    if (!shouldBustCache) return STREAM_URL;
+    const sep = STREAM_URL.includes('?') ? '&' : '?';
+    return `${STREAM_URL}${sep}t=${Date.now()}`;
+  }, []);
+
   const playWeb = useCallback(async (): Promise<void> => {
     const startSessionId = ++refs.current.playSessionId;
     refs.current.isSwitching = true;
@@ -242,7 +249,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
       cleanupWebAudio();
 
-      const streamUri = `${STREAM_URL}?t=${Date.now()}`;
+      const streamUri = buildStreamUri();
       const audio = new Audio();
       audio.crossOrigin = 'anonymous';
       audio.preload = 'auto';
@@ -386,7 +393,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         setError('Unable to play stream. Please try again.');
       }
     }
-  }, [cleanupWebAudio, getRetryDelayMs, volume]);
+  }, [buildStreamUri, cleanupWebAudio, getRetryDelayMs, volume]);
 
   const playNative = useCallback(async (): Promise<void> => {
     const expoAV = loadExpoAV();
@@ -417,7 +424,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         return;
       }
 
-      const streamUri = `${STREAM_URL}?t=${Date.now()}`;
+      const streamUri = buildStreamUri();
 
       const sound = new expoAV.Audio.Sound();
       refs.current.nativeSound = sound;
@@ -545,8 +552,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           {
             uri: streamUri,
             headers: {
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              Pragma: 'no-cache',
               Accept: 'audio/mpeg, audio/*;q=0.9, */*;q=0.1',
               Connection: 'keep-alive',
             },
@@ -580,8 +585,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           {
             uri: streamUri,
             headers: {
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              Pragma: 'no-cache',
               Accept: 'audio/mpeg, audio/*;q=0.9, */*;q=0.1',
               Connection: 'keep-alive',
             },
@@ -625,7 +628,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
       await cleanupNative();
     }
-  }, [cleanupNative, cleanupPlayer, configureAudioMode, getRetryDelayMs, volume]);
+  }, [buildStreamUri, cleanupNative, cleanupPlayer, configureAudioMode, getRetryDelayMs, volume]);
 
   const play = useCallback(async (): Promise<void> => {
     console.log('[Radio] Play called', {
