@@ -9,6 +9,7 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  resetKey: number;
 }
 
 export default class ErrorBoundary extends Component<Props, State> {
@@ -17,10 +18,11 @@ export default class ErrorBoundary extends Component<Props, State> {
     this.state = {
       hasError: false,
       error: null,
+      resetKey: 0,
     };
   }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return {
       hasError: true,
       error,
@@ -32,10 +34,16 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   handleReload = () => {
-    this.setState({ hasError: false, error: null });
     if (typeof window !== 'undefined') {
       window.location.reload();
+      return;
     }
+    // For native, increment resetKey to force full remount of children
+    this.setState(prev => ({
+      hasError: false,
+      error: null,
+      resetKey: prev.resetKey + 1,
+    }));
   };
 
   render() {
@@ -55,7 +63,7 @@ export default class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    return this.props.children;
+    return <React.Fragment key={this.state.resetKey}>{this.props.children}</React.Fragment>;
   }
 }
 
