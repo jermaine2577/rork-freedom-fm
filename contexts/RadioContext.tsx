@@ -4,13 +4,15 @@ import { AppState, AppStateStatus, Platform } from 'react-native';
 
 const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/mobile.mp3';
 
-const STREAM_CONNECT_TIMEOUT_MS = 60000;
+const STREAM_CONNECT_TIMEOUT_MS = 90000;
 
-const HEALTH_CHECK_INTERVAL_MS = Platform.OS === 'android' ? 25000 : 30000;
+const HEALTH_CHECK_INTERVAL_MS = Platform.OS === 'android' ? 35000 : 40000;
 
-const STALL_THRESHOLD_MS = Platform.OS === 'android' ? 120000 : 150000;
-const BUFFERING_STALL_THRESHOLD_MS = Platform.OS === 'android' ? 90000 : 120000;
-const MAX_RETRY_ATTEMPTS = 4;
+const STALL_THRESHOLD_MS = Platform.OS === 'android' ? 180000 : 200000;
+const BUFFERING_STALL_THRESHOLD_MS = Platform.OS === 'android' ? 150000 : 180000;
+const MAX_RETRY_ATTEMPTS = 6;
+
+const PROGRESS_UPDATE_INTERVAL_MS = Platform.OS === 'android' ? 2000 : 1500;
 
 type ExpoAV = typeof import('expo-av');
 
@@ -117,11 +119,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   });
 
   const getRetryDelayMs = useCallback((): number => {
-    const base = Platform.OS === 'android' ? 800 : 1200;
-    const cappedErrors = Math.min(refs.current.consecutiveErrors, 4);
-    const exp = base * Math.pow(1.5, cappedErrors);
-    const jitter = Math.random() * 250;
-    return Math.min(exp + jitter, 10000);
+    const base = Platform.OS === 'android' ? 1500 : 2000;
+    const cappedErrors = Math.min(refs.current.consecutiveErrors, 5);
+    const exp = base * Math.pow(1.4, cappedErrors);
+    const jitter = Math.random() * 500;
+    return Math.min(exp + jitter, 15000);
   }, []);
 
   const clearHealthCheck = useCallback(() => {
@@ -490,12 +492,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         if (!shouldAutoResume) return;
 
         const stoppedForMs = now - (refs.current.lastNonPlayingAt || now);
-        if (stoppedForMs < 3000) {
+        if (stoppedForMs < 5000) {
           console.log('[Radio] Not auto-resuming yet (transient pause)', { stoppedForMs });
           return;
         }
 
-        if (now - refs.current.lastAutoResumeAt < 6000) return;
+        if (now - refs.current.lastAutoResumeAt < 10000) return;
         refs.current.lastAutoResumeAt = now;
 
         console.warn('[Radio] Playback stopped (likely interruption). Auto-resuming...', {
@@ -544,12 +546,15 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             Pragma: 'no-cache',
             Accept: 'audio/mpeg, audio/*;q=0.9, */*;q=0.1',
+            Connection: 'keep-alive',
           },
+          overrideFileExtensionAndroid: 'mp3',
         },
         {
           shouldPlay: false,
           volume,
-          progressUpdateIntervalMillis: 750,
+          progressUpdateIntervalMillis: PROGRESS_UPDATE_INTERVAL_MS,
+          androidImplementation: 'MediaPlayer',
         }
       );
 
