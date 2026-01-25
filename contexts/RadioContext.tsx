@@ -6,11 +6,11 @@ const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/
 
 const STREAM_CONNECT_TIMEOUT_MS = 60000;
 
-const HEALTH_CHECK_INTERVAL_MS = Platform.OS === 'android' ? 15000 : 25000;
+const HEALTH_CHECK_INTERVAL_MS = Platform.OS === 'android' ? 25000 : 30000;
 
-const STALL_THRESHOLD_MS = Platform.OS === 'android' ? 45000 : 60000;
-const BUFFERING_STALL_THRESHOLD_MS = Platform.OS === 'android' ? 25000 : 35000;
-const MAX_RETRY_ATTEMPTS = 6;
+const STALL_THRESHOLD_MS = Platform.OS === 'android' ? 120000 : 150000;
+const BUFFERING_STALL_THRESHOLD_MS = Platform.OS === 'android' ? 90000 : 120000;
+const MAX_RETRY_ATTEMPTS = 4;
 
 type ExpoAV = typeof import('expo-av');
 
@@ -615,8 +615,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         const bufferingFor =
           refs.current.isBuffering && refs.current.bufferingSince > 0 ? now - refs.current.bufferingSince : 0;
 
-        if (refs.current.isBuffering && bufferingFor < BUFFERING_STALL_THRESHOLD_MS) return;
-        if (!refs.current.isBuffering) {
+        if (refs.current.isBuffering) {
+          if (bufferingFor < BUFFERING_STALL_THRESHOLD_MS) return;
+          if (statusQuietFor < BUFFERING_STALL_THRESHOLD_MS) return;
+        } else {
           if (stalledFor < STALL_THRESHOLD_MS) return;
           if (statusQuietFor < STALL_THRESHOLD_MS) return;
         }
@@ -627,6 +629,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           statusQuietFor,
           bufferingFor,
           retryCount: refs.current.retryCount,
+          isBuffering: refs.current.isBuffering,
         });
 
         if (refs.current.retryCount >= MAX_RETRY_ATTEMPTS) {
