@@ -453,27 +453,32 @@ const fetchFreshNews = async (): Promise<NewsArticle[]> => {
 };
 
 const fetchNewsWithCache = async (): Promise<NewsArticle[]> => {
-  const { articles: cachedArticles, isStale } = await getCachedNews();
-  
-  if (cachedArticles && cachedArticles.length > 0 && !isStale) {
-    console.log('[NEWS] Returning fresh cached data');
-    return cachedArticles;
+  try {
+    const { articles: cachedArticles, isStale } = await getCachedNews();
+    
+    if (cachedArticles && cachedArticles.length > 0 && !isStale) {
+      console.log('[NEWS] Returning fresh cached data');
+      return cachedArticles;
+    }
+    
+    console.log('[NEWS] Cache is stale or empty, fetching fresh data...');
+    const freshArticles = await fetchFreshNews();
+    
+    if (freshArticles.length > 0) {
+      return freshArticles;
+    }
+    
+    if (cachedArticles && cachedArticles.length > 0) {
+      console.log('[NEWS] Fresh fetch failed, returning stale cache');
+      return cachedArticles;
+    }
+    
+    console.log('[NEWS] No data available');
+    return [];
+  } catch (error) {
+    console.error('[NEWS] fetchNewsWithCache error:', error);
+    return [];
   }
-  
-  console.log('[NEWS] Cache is stale or empty, fetching fresh data...');
-  const freshArticles = await fetchFreshNews();
-  
-  if (freshArticles.length > 0) {
-    return freshArticles;
-  }
-  
-  if (cachedArticles && cachedArticles.length > 0) {
-    console.log('[NEWS] Fresh fetch failed, returning stale cache');
-    return cachedArticles;
-  }
-  
-  console.log('[NEWS] No data available');
-  return [];
 };
 
 const SkeletonCard = () => {
@@ -606,7 +611,7 @@ const runWithConcurrency = async <T,>(
       try {
         results[current] = await tasks[current]();
       } catch (e) {
-        throw e;
+        console.log('[NEWS] runWithConcurrency task error:', (e as any)?.message);
       }
     }
   });
@@ -627,13 +632,13 @@ export default function NewsScreen() {
   const { data: articles, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['freedomFmNews'],
     queryFn: fetchNewsWithCache,
-    retry: 3,
+    retry: 2,
     staleTime: CACHE_DURATION,
     gcTime: CACHE_DURATION,
-    refetchOnMount: 'always',
+    refetchOnMount: true,
     refetchOnWindowFocus: false,
     refetchInterval: false,
-    networkMode: 'always',
+    networkMode: 'offlineFirst',
   });
 
   useEffect(() => {
@@ -645,45 +650,53 @@ export default function NewsScreen() {
   }, [refetch]);
 
   useEffect(() => {
-    const list = articles ?? [];
-    if (list.length === 0) return;
+    try {
+      const list = articles ?? [];
+      if (list.length === 0) return;
 
-    console.log('[NEWS][PREFETCH] Considering prefetch for first articles:', {
-      listCount: list.length,
-      visibleCount,
-    });
-
-    const firstBatch = list.slice(0, Math.min(INITIAL_VISIBLE_COUNT, list.length));
-
-    const tasks = firstBatch
-      .filter((a) => !!a.link)
-      .map((a) => async () => {
-        const key = ['article', a.id] as const;
-        const existing = queryClient.getQueryData<NewsArticle>(key);
-        if (existing?.content && existing.content.length > 100) {
-          console.log('[NEWS][PREFETCH] Already have content for', a.id);
-          return;
-        }
-
-        console.log('[NEWS][PREFETCH] Prefetching', a.id);
-        await queryClient.prefetchQuery({
-          queryKey: key,
-          queryFn: async () => {
-            const content = a.link ? await fetchArticleContentForPrefetch(a.link) : '';
-            return {
-              ...a,
-              content,
-            } satisfies NewsArticle;
-          },
-          staleTime: 10 * 60 * 1000,
-          gcTime: 30 * 60 * 1000,
-        });
+      console.log('[NEWS][PREFETCH] Considering prefetch for first articles:', {
+        listCount: list.length,
+        visibleCount,
       });
 
-    runWithConcurrency(tasks, 2).catch((e) => {
-      console.log('[NEWS][PREFETCH] Prefetch error:', (e as any)?.message);
-    });
-  }, [articles, queryClient, visibleCount]);
+      const firstBatch = list.slice(0, Math.min(INITIAL_VISIBLE_COUNT, list.length));
+
+      const tasks = firstBatch
+        .filter((a) => !!a && !!a.link)
+        .map((a) => async () => {
+          try {
+            const key = ['article', a.id] as const;
+            const existing = queryClient.getQueryData<NewsArticle>(key);
+            if (existing?.content && existing.content.length > 100) {
+              console.log('[NEWS][PREFETCH] Already have content for', a.id);
+              return;
+            }
+
+            console.log('[NEWS][PREFETCH] Prefetching', a.id);
+            await queryClient.prefetchQuery({
+              queryKey: key,
+              queryFn: async () => {
+                const content = a.link ? await fetchArticleContentForPrefetch(a.link) : '';
+                return {
+                  ...a,
+                  content,
+                } satisfies NewsArticle;
+              },
+              staleTime: 10 * 60 * 1000,
+              gcTime: 30 * 60 * 1000,
+            });
+          } catch (prefetchErr) {
+            console.log('[NEWS][PREFETCH] Single prefetch error:', (prefetchErr as any)?.message);
+          }
+        });
+
+      runWithConcurrency(tasks, 2).catch((e) => {
+        console.log('[NEWS][PREFETCH] Prefetch error:', (e as any)?.message);
+      });
+    } catch (effectErr) {
+      console.log('[NEWS][PREFETCH] Effect error:', (effectErr as any)?.message);
+    }
+  }, [articles, queryClient]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
