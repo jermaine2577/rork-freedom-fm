@@ -8,10 +8,6 @@ import colors from '@/constants/colors';
 export default function NewsLayout() {
   const insets = useSafeAreaInsets();
 
-  const headerTopPadding = useMemo(() => {
-    if (Platform.OS !== 'web') return 0;
-    return Math.max(insets.top, 44);
-  }, [insets.top]);
 
   return (
     <>
@@ -21,7 +17,6 @@ export default function NewsLayout() {
           headerTopInsetEnabled: Platform.OS !== 'web',
           headerStyle: {
             backgroundColor: '#121212',
-            paddingTop: headerTopPadding,
           },
           headerTintColor: colors.text,
           headerShadowVisible: false,

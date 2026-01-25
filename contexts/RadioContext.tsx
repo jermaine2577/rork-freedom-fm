@@ -33,6 +33,9 @@ interface RadioRefs {
   isPlaying: boolean;
   isBuffering: boolean;
 
+  desiredPlaying: boolean;
+  lastAutoResumeAt: number;
+
   lastSuccessfulPlay: number;
   lastProgressAt: number;
   lastPositionMs: number;
@@ -88,6 +91,9 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
     isPlaying: false,
     isBuffering: false,
+
+    desiredPlaying: false,
+    lastAutoResumeAt: 0,
 
     lastSuccessfulPlay: Date.now(),
     lastProgressAt: Date.now(),
@@ -182,12 +188,19 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     if (!expoAV?.Audio?.setAudioModeAsync) return false;
 
     try {
+      const interruptionModeIOS =
+        (expoAV.Audio as any)?.INTERRUPTION_MODE_IOS_DO_NOT_MIX ?? (expoAV.Audio as any)?.INTERRUPTION_MODE_IOS_DUCK_OTHERS;
+      const interruptionModeAndroid =
+        (expoAV.Audio as any)?.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX ?? (expoAV.Audio as any)?.INTERRUPTION_MODE_ANDROID_DUCK_OTHERS;
+
       await expoAV.Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         playsInSilentModeIOS: true,
         staysActiveInBackground: true,
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
+        ...(typeof interruptionModeIOS === 'number' ? { interruptionModeIOS } : {}),
+        ...(typeof interruptionModeAndroid === 'number' ? { interruptionModeAndroid } : {}),
       });
       console.log('[Radio] Audio mode configured');
       return true;
@@ -201,7 +214,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     const startSessionId = ++refs.current.playSessionId;
     refs.current.isSwitching = true;
 
-    console.log('[Radio] Web play requested', { startSessionId });
+    console.log('[Radio] Web play requested', { startSessionId, desiredPlaying: refs.current.desiredPlaying });
 
     try {
       setIsLoading(true);
@@ -339,7 +352,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     const startSessionId = ++refs.current.playSessionId;
     refs.current.isSwitching = true;
 
-    console.log('[Radio] Native play requested', { startSessionId, platform: Platform.OS });
+    console.log('[Radio] Native play requested', {
+      startSessionId,
+      platform: Platform.OS,
+      desiredPlaying: refs.current.desiredPlaying,
+    });
 
     try {
       setIsLoading(true);
@@ -392,10 +409,49 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             setIsLoading(false);
             setError(null);
           }
-        } else if (status.isBuffering) {
+          return;
+        }
+
+        if (status.isBuffering) {
           refs.current.isBuffering = true;
           if (refs.current.mounted) setIsLoading(true);
+          return;
         }
+
+        refs.current.isPlaying = false;
+        refs.current.isBuffering = false;
+        if (refs.current.mounted) setIsPlaying(false);
+
+        const shouldAutoResume =
+          refs.current.desiredPlaying &&
+          !refs.current.isRecovering &&
+          !refs.current.isSwitching &&
+          !refs.current.isInBackground;
+
+        if (!shouldAutoResume) return;
+
+        const now2 = Date.now();
+        if (now2 - refs.current.lastAutoResumeAt < 2500) return;
+        refs.current.lastAutoResumeAt = now2;
+
+        console.warn('[Radio] Playback stopped (likely interruption). Auto-resuming...', {
+          platform: Platform.OS,
+          didJustFinish: (status as any)?.didJustFinish,
+        });
+
+        refs.current.isRecovering = true;
+        if (refs.current.mounted) setIsLoading(true);
+        cleanupPlayer()
+          .catch((e) => console.warn('[Radio] cleanup after interruption failed:', e))
+          .finally(() => {
+            const delay = getRetryDelayMs();
+            setTimeout(() => {
+              if (!refs.current.mounted) return;
+              if (refs.current.playSessionId !== startSessionId) return;
+              refs.current.isRecovering = false;
+              refs.current.playFn?.();
+            }, delay);
+          });
       };
 
       const connectTimer = setTimeout(() => {
@@ -449,9 +505,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
       await cleanupNative();
     }
-  }, [cleanupNative, configureAudioMode, volume]);
+  }, [cleanupNative, cleanupPlayer, configureAudioMode, getRetryDelayMs, volume]);
 
   const play = useCallback(async (): Promise<void> => {
+    refs.current.desiredPlaying = true;
+
     if (refs.current.pendingPlay) {
       console.log('[Radio] Play ignored: pending play in progress');
       return refs.current.pendingPlay;
@@ -523,6 +581,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
   const pause = useCallback(async (): Promise<void> => {
     try {
+      refs.current.desiredPlaying = false;
       refs.current.playSessionId++;
       refs.current.pendingPlay = null;
       refs.current.isRecovering = false;
@@ -546,6 +605,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
   const stop = useCallback(async (): Promise<void> => {
     try {
+      refs.current.desiredPlaying = false;
       refs.current.playSessionId++;
       refs.current.pendingPlay = null;
       refs.current.isRecovering = false;
@@ -607,11 +667,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
   useEffect(() => {
     return () => {
-      refs.current.playSessionId++;
-      refs.current.pendingPlay = null;
-      refs.current.isRecovering = false;
-      refs.current.isSwitching = false;
-      refs.current.isPlaying = false;
+      const current = refs.current;
+      current.playSessionId++;
+      current.pendingPlay = null;
+      current.isRecovering = false;
+      current.isSwitching = false;
+      current.isPlaying = false;
 
       clearHealthCheck();
 
@@ -639,7 +700,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       if (nextAppState === 'active') {
         refs.current.isInBackground = false;
 
-        if (!refs.current.isPlaying) return;
+        if (!refs.current.desiredPlaying) return;
         if (refs.current.isRecovering) return;
         if (refs.current.playSessionId !== sessionAtStart) return;
 
