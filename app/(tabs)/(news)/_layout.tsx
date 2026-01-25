@@ -14,7 +14,7 @@ export default function NewsLayout() {
       <StatusBar style="light" />
       <Stack
         screenOptions={{
-          headerTopInsetEnabled: Platform.OS !== 'web',
+
           headerStyle: {
             backgroundColor: '#121212',
           },

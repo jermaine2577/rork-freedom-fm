@@ -5,9 +5,11 @@ import { AppState, AppStateStatus, Platform } from 'react-native';
 const STREAM_URL = 'https://castpanel.freedomfm1065.com/listen/freedom_fm_106.5/mobile.mp3';
 
 const STREAM_CONNECT_TIMEOUT_MS = 60000;
-const HEALTH_CHECK_INTERVAL_MS = Platform.OS === 'android' ? 9000 : 20000;
-const STALL_THRESHOLD_MS = Platform.OS === 'android' ? 15000 : 25000;
-const MAX_RETRY_ATTEMPTS = 8;
+
+const HEALTH_CHECK_INTERVAL_MS = Platform.OS === 'android' ? 15000 : 25000;
+
+const STALL_THRESHOLD_MS = Platform.OS === 'android' ? 45000 : 60000;
+const MAX_RETRY_ATTEMPTS = 6;
 
 type ExpoAV = typeof import('expo-av');
 
@@ -39,6 +41,9 @@ interface RadioRefs {
   lastSuccessfulPlay: number;
   lastProgressAt: number;
   lastPositionMs: number;
+
+  lastStatusUpdateAt: number;
+  lastNonPlayingAt: number;
 
   isInBackground: boolean;
 
@@ -98,6 +103,9 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     lastSuccessfulPlay: Date.now(),
     lastProgressAt: Date.now(),
     lastPositionMs: 0,
+
+    lastStatusUpdateAt: Date.now(),
+    lastNonPlayingAt: 0,
 
     isInBackground: false,
 
@@ -232,6 +240,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       refs.current.webAudio = audio;
       refs.current.lastPositionMs = 0;
       refs.current.lastProgressAt = Date.now();
+      refs.current.lastStatusUpdateAt = Date.now();
+      refs.current.lastNonPlayingAt = 0;
 
       const connectTimeout = setTimeout(() => {
         if (refs.current.playSessionId !== startSessionId) return;
@@ -377,10 +387,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
       refs.current.lastPositionMs = 0;
       refs.current.lastProgressAt = Date.now();
+      refs.current.lastStatusUpdateAt = Date.now();
+      refs.current.lastNonPlayingAt = 0;
 
       const onStatus = (status: import('expo-av').AVPlaybackStatus) => {
         if (!refs.current.mounted) return;
         if (refs.current.playSessionId !== startSessionId) return;
+
+        refs.current.lastStatusUpdateAt = Date.now();
 
         if (!status.isLoaded) {
           if (status.error) {
@@ -402,6 +416,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           refs.current.isPlaying = true;
           refs.current.isBuffering = false;
           refs.current.lastSuccessfulPlay = now;
+          refs.current.lastProgressAt = now;
+          refs.current.lastNonPlayingAt = 0;
           refs.current.consecutiveErrors = 0;
           refs.current.retryCount = 0;
           if (refs.current.mounted) {
@@ -414,12 +430,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
         if (status.isBuffering) {
           refs.current.isBuffering = true;
+          refs.current.lastProgressAt = now;
           if (refs.current.mounted) setIsLoading(true);
           return;
         }
 
         refs.current.isPlaying = false;
         refs.current.isBuffering = false;
+        if (refs.current.lastNonPlayingAt === 0) refs.current.lastNonPlayingAt = now;
         if (refs.current.mounted) setIsPlaying(false);
 
         const shouldAutoResume =
@@ -430,13 +448,19 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
         if (!shouldAutoResume) return;
 
-        const now2 = Date.now();
-        if (now2 - refs.current.lastAutoResumeAt < 2500) return;
-        refs.current.lastAutoResumeAt = now2;
+        const stoppedForMs = now - (refs.current.lastNonPlayingAt || now);
+        if (stoppedForMs < 3000) {
+          console.log('[Radio] Not auto-resuming yet (transient pause)', { stoppedForMs });
+          return;
+        }
+
+        if (now - refs.current.lastAutoResumeAt < 6000) return;
+        refs.current.lastAutoResumeAt = now;
 
         console.warn('[Radio] Playback stopped (likely interruption). Auto-resuming...', {
           platform: Platform.OS,
           didJustFinish: (status as any)?.didJustFinish,
+          stoppedForMs,
         });
 
         refs.current.isRecovering = true;
@@ -478,7 +502,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         {
           shouldPlay: true,
           volume,
-          progressUpdateIntervalMillis: 800,
+          progressUpdateIntervalMillis: 450,
         }
       );
 
@@ -528,17 +552,21 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       refs.current.healthCheck = setInterval(async () => {
         if (!refs.current.mounted) return;
         if (refs.current.playSessionId !== sessionForChecks) return;
-        if (!refs.current.isPlaying) return;
+        if (!refs.current.desiredPlaying) return;
         if (refs.current.isRecovering) return;
 
         const now = Date.now();
         const stalledFor = now - refs.current.lastProgressAt;
+        const statusQuietFor = now - refs.current.lastStatusUpdateAt;
 
+        if (refs.current.isBuffering) return;
         if (stalledFor < STALL_THRESHOLD_MS) return;
+        if (statusQuietFor < STALL_THRESHOLD_MS) return;
 
         console.warn('[Radio] Stall detected, recovering...', {
           platform: Platform.OS,
           stalledFor,
+          statusQuietFor,
           retryCount: refs.current.retryCount,
         });
 
