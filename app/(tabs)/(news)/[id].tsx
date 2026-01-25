@@ -186,6 +186,36 @@ const decodeHtmlEntities = (text: string): string => {
 
 const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 
+const extractContentBetweenTags = (html: string, startPattern: RegExp): string => {
+  const match = html.match(startPattern);
+  if (!match) return '';
+  
+  const startIndex = match.index! + match[0].length;
+  let depth = 1;
+  let i = startIndex;
+  const tagName = match[0].match(/<(\w+)/)?.[1] || 'div';
+  
+  while (i < html.length && depth > 0) {
+    const openTag = html.indexOf(`<${tagName}`, i);
+    const closeTag = html.indexOf(`</${tagName}`, i);
+    
+    if (closeTag === -1) break;
+    
+    if (openTag !== -1 && openTag < closeTag) {
+      depth++;
+      i = openTag + 1;
+    } else {
+      depth--;
+      if (depth === 0) {
+        return html.substring(startIndex, closeTag);
+      }
+      i = closeTag + 1;
+    }
+  }
+  
+  return html.substring(startIndex, Math.min(startIndex + 50000, html.length));
+};
+
 const fetchArticleContent = async (link: string): Promise<string> => {
   console.log('[ARTICLE] Fetching full content from:', link);
   
@@ -233,34 +263,64 @@ const fetchArticleContent = async (link: string): Promise<string> => {
     const html = await response.text();
     console.log('[ARTICLE] Received HTML, length:', html.length);
     
-    // Extract main content from the article page
     let content = '';
     
-    // Try to find entry-content div
-    const entryContentMatch = html.match(/<div[^>]*class="[^"]*entry-content[^"]*"[^>]*>([\s\S]*?)<\/div>\s*(?:<div|<footer|<aside|<nav|<section|$)/i);
-    if (entryContentMatch) {
-      content = entryContentMatch[1];
+    // Try entry-content with proper nested div handling
+    const entryContentPattern = /<div[^>]*class="[^"]*entry-content[^"]*"[^>]*>/i;
+    if (entryContentPattern.test(html)) {
+      content = extractContentBetweenTags(html, entryContentPattern);
       console.log('[ARTICLE] Found entry-content, length:', content.length);
     }
     
-    // Fallback: try article content
-    if (!content) {
-      const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
-      if (articleMatch) {
-        content = articleMatch[1];
-        console.log('[ARTICLE] Found article tag, length:', content.length);
+    // Fallback: try article tag with proper nesting
+    if (!content || content.length < 200) {
+      const articlePattern = /<article[^>]*>/i;
+      if (articlePattern.test(html)) {
+        const articleContent = extractContentBetweenTags(html, articlePattern);
+        if (articleContent.length > content.length) {
+          content = articleContent;
+          console.log('[ARTICLE] Found article tag, length:', content.length);
+        }
       }
     }
     
     // Fallback: try post-content
-    if (!content) {
-      const postContentMatch = html.match(/<div[^>]*class="[^"]*post-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-      if (postContentMatch) {
-        content = postContentMatch[1];
-        console.log('[ARTICLE] Found post-content, length:', content.length);
+    if (!content || content.length < 200) {
+      const postContentPattern = /<div[^>]*class="[^"]*post-content[^"]*"[^>]*>/i;
+      if (postContentPattern.test(html)) {
+        const postContent = extractContentBetweenTags(html, postContentPattern);
+        if (postContent.length > content.length) {
+          content = postContent;
+          console.log('[ARTICLE] Found post-content, length:', content.length);
+        }
       }
     }
     
+    // Fallback: try the-content
+    if (!content || content.length < 200) {
+      const theContentPattern = /<div[^>]*class="[^"]*the-content[^"]*"[^>]*>/i;
+      if (theContentPattern.test(html)) {
+        const theContent = extractContentBetweenTags(html, theContentPattern);
+        if (theContent.length > content.length) {
+          content = theContent;
+          console.log('[ARTICLE] Found the-content, length:', content.length);
+        }
+      }
+    }
+    
+    // Fallback: try content-area
+    if (!content || content.length < 200) {
+      const contentAreaPattern = /<div[^>]*class="[^"]*content-area[^"]*"[^>]*>/i;
+      if (contentAreaPattern.test(html)) {
+        const areaContent = extractContentBetweenTags(html, contentAreaPattern);
+        if (areaContent.length > content.length) {
+          content = areaContent;
+          console.log('[ARTICLE] Found content-area, length:', content.length);
+        }
+      }
+    }
+    
+    console.log('[ARTICLE] Final content length:', content.length);
     return content;
     
   } catch (error: any) {
@@ -284,9 +344,9 @@ const fetchArticle = async (id: string, cachedArticle?: NewsArticle): Promise<Ne
   
   console.log('[ARTICLE] Using cached article:', cachedArticle.title?.substring(0, 50));
   
-  // If we already have full content, return as is
-  if (cachedArticle.content && cachedArticle.content.length > 100) {
-    console.log('[ARTICLE] Cached article has content, returning');
+  // Only skip fetch if we have substantial content (more than just an excerpt)
+  if (cachedArticle.content && cachedArticle.content.length > 1000) {
+    console.log('[ARTICLE] Cached article has full content, returning');
     return cachedArticle;
   }
   
@@ -295,12 +355,14 @@ const fetchArticle = async (id: string, cachedArticle?: NewsArticle): Promise<Ne
     console.log('[ARTICLE] Fetching full content from:', cachedArticle.link);
     try {
       const fullContent = await fetchArticleContent(cachedArticle.link);
-      if (fullContent && fullContent.length > 50) {
+      if (fullContent && fullContent.length > 100) {
         console.log('[ARTICLE] Got full content, length:', fullContent.length);
         return {
           ...cachedArticle,
           content: fullContent,
         };
+      } else {
+        console.log('[ARTICLE] Full content too short or empty, using excerpt');
       }
     } catch (error: any) {
       console.log('[ARTICLE] Failed to fetch full content:', error?.message);
