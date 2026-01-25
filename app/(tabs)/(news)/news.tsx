@@ -709,7 +709,6 @@ export default function NewsScreen() {
           source={{ uri: item.imageUrl }} 
           style={styles.image}
           resizeMode="cover"
-          defaultSource={require('@/assets/images/icon.png')}
         />
       </View>
       <View style={styles.cardContent}>
