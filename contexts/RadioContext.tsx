@@ -694,34 +694,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     return refs.current.pendingPlay;
   }, [clearHealthCheck, cleanupPlayer, getRetryDelayMs, playNative, playWeb]);
 
-  const toggle = useCallback(async (): Promise<void> => {
-    console.log('[Radio] Toggle called', {
-      isPlaying: refs.current.isPlaying,
-      stateIsPlaying: isPlaying,
-      isLoading,
-      isRecovering: refs.current.isRecovering,
-      pendingPlay: !!refs.current.pendingPlay,
-    });
-
-    const isStuck =
-      refs.current.isRecovering ||
-      (refs.current.pendingPlay && Date.now() - refs.current.lastStatusUpdateAt > 30000);
-
-    if (isStuck) {
-      console.warn('[Radio] Toggle: detected stuck state, forcing reset first');
-      await forceReset();
-      await new Promise((r) => setTimeout(r, 300));
-      await play();
-      return;
-    }
-
-    if (isPlaying || refs.current.isPlaying) {
-      await pause();
-    } else {
-      await play();
-    }
-  }, [forceReset, isPlaying, isLoading, pause, play]);
-
   const forceReset = useCallback(async (): Promise<void> => {
     console.log('[Radio] Force reset triggered');
     refs.current.desiredPlaying = false;
@@ -784,6 +756,34 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       }
     }
   }, [cleanupPlayer]);
+
+  const toggle = useCallback(async (): Promise<void> => {
+    console.log('[Radio] Toggle called', {
+      isPlaying: refs.current.isPlaying,
+      stateIsPlaying: isPlaying,
+      isLoading,
+      isRecovering: refs.current.isRecovering,
+      pendingPlay: !!refs.current.pendingPlay,
+    });
+
+    const isStuck =
+      refs.current.isRecovering ||
+      (refs.current.pendingPlay && Date.now() - refs.current.lastStatusUpdateAt > 30000);
+
+    if (isStuck) {
+      console.warn('[Radio] Toggle: detected stuck state, forcing reset first');
+      await forceReset();
+      await new Promise((r) => setTimeout(r, 300));
+      await play();
+      return;
+    }
+
+    if (isPlaying || refs.current.isPlaying) {
+      await pause();
+    } else {
+      await play();
+    }
+  }, [forceReset, isPlaying, isLoading, pause, play]);
 
   const stop = useCallback(async (): Promise<void> => {
     try {
