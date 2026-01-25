@@ -65,23 +65,6 @@ const SkeletonArticle = () => {
   );
 };
 
-interface WordPressPost {
-  id: number;
-  title: { rendered: string };
-  excerpt: { rendered: string };
-  content: { rendered: string };
-  date: string;
-  link: string;
-  categories: number[];
-  _embedded?: {
-    'wp:featuredmedia'?: {
-      source_url: string;
-    }[];
-    'wp:term'?: {
-      name: string;
-    }[][];
-  };
-}
 
 const decodeHtmlEntities = (text: string): string => {
   if (!text) return '';
@@ -338,7 +321,7 @@ const safeFormatLongDate = (isoOrAny: string): string => {
       day: 'numeric',
       year: 'numeric',
     });
-  } catch (e) {
+  } catch {
     console.log('[ARTICLE] safeFormatLongDate fallback for:', isoOrAny);
     return '';
   }
@@ -392,7 +375,7 @@ export default function ArticleDetailScreen() {
 
   const cachedArticle = getCachedArticle();
 
-  const { data: article, isLoading, error, refetch } = useQuery({
+  const { data: article, isLoading, error } = useQuery({
     queryKey: ['article', id],
     queryFn: () => fetchArticle(id as string, cachedArticle),
     enabled: !!id && !!cachedArticle,
@@ -575,7 +558,7 @@ export default function ArticleDetailScreen() {
       <View style={styles.content}>
         {displayArticle.category?.trim().toLowerCase() !== 'news' && (
           <View style={styles.categoryBadge} testID="news-article-category-badge">
-            <Tag size={14} color={colors.text} />
+            <Tag size={14} color={colors.text} style={{ marginRight: 6 }} />
             <Text style={styles.categoryText}>{displayArticle.category}</Text>
           </View>
         )}
@@ -583,7 +566,7 @@ export default function ArticleDetailScreen() {
         <Text style={styles.title}>{displayArticle.title}</Text>
 
         <View style={styles.dateContainer}>
-          <Calendar size={16} color={colors.textSecondary} />
+          <Calendar size={16} color={colors.textSecondary} style={{ marginRight: 8 }} />
           <Text style={styles.date}>{safeFormatLongDate(displayArticle.date)}</Text>
         </View>
 
@@ -621,7 +604,6 @@ const styles = StyleSheet.create({
   categoryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
     backgroundColor: colors.red,
@@ -644,7 +626,6 @@ const styles = StyleSheet.create({
   dateContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     marginBottom: 20,
   },
   date: {
@@ -720,7 +701,6 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.08)',
     zIndex: 100,
@@ -745,6 +725,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
     fontWeight: '700' as const,
+    marginHorizontal: 10,
   },
   skeletonHeroImage: {
     backgroundColor: '#2a2a2a',

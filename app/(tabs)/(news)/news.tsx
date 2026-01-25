@@ -33,20 +33,17 @@ const CACHE_DURATION = 24 * 60 * 60 * 1000;
 
 const decodeHtmlEntities = (text: string): string => {
   if (!text) return '';
-  
+
   const decodeOnce = (str: string): string => {
     let result = str;
-    
-    // Handle URL-encoded ampersand first
+
     result = result.replace(/%26/g, '&');
     result = result.replace(/%23/g, '#');
-    
-    // Handle quadruple, triple and double-encoded ampersands
+
     result = result.replace(/&amp;amp;amp;amp;/gi, '&');
     result = result.replace(/&amp;amp;amp;/gi, '&');
     result = result.replace(/&amp;amp;/gi, '&');
-    
-    // Handle double-encoded entities (e.g., &amp;nbsp; &amp;quot;)
+
     result = result.replace(/&amp;nbsp;/gi, ' ');
     result = result.replace(/&amp;quot;/gi, '"');
     result = result.replace(/&amp;apos;/gi, "'");
@@ -54,13 +51,11 @@ const decodeHtmlEntities = (text: string): string => {
     result = result.replace(/&amp;gt;/gi, '>');
     result = result.replace(/&amp;#(\d+);/gi, '&#$1;');
     result = result.replace(/&amp;#x([a-fA-F0-9]+);/gi, '&#x$1;');
-    
-    // WordPress specific encodings
+
     result = result.replace(/&#038;/g, '&');
     result = result.replace(/&#38;/g, '&');
     result = result.replace(/&#0?38;/g, '&');
-    
-    // Standard HTML entities (case insensitive)
+
     result = result.replace(/&amp;/gi, '&');
     result = result.replace(/&lt;/gi, '<');
     result = result.replace(/&gt;/gi, '>');
@@ -68,8 +63,7 @@ const decodeHtmlEntities = (text: string): string => {
     result = result.replace(/&#0?39;/g, "'");
     result = result.replace(/&#039;/g, "'");
     result = result.replace(/&apos;/gi, "'");
-    
-    // Smart quotes and typography
+
     result = result.replace(/&#8217;/g, "'");
     result = result.replace(/&#8216;/g, "'");
     result = result.replace(/&#8220;/g, '"');
@@ -81,8 +75,7 @@ const decodeHtmlEntities = (text: string): string => {
     result = result.replace(/&#8222;/g, '„');
     result = result.replace(/&#8242;/g, "'");
     result = result.replace(/&#8243;/g, '"');
-    
-    // Named entities
+
     result = result.replace(/&hellip;/gi, '…');
     result = result.replace(/&ndash;/gi, '–');
     result = result.replace(/&mdash;/gi, '—');
@@ -109,43 +102,35 @@ const decodeHtmlEntities = (text: string): string => {
     result = result.replace(/&times;/gi, '×');
     result = result.replace(/&divide;/gi, '÷');
     result = result.replace(/&plusmn;/gi, '±');
-    
-    // Handle numeric entities (decimal)
-    result = result.replace(/&#(\d+);/g, (_, num) => {
+
+    result = result.replace(/&#(\d+);/g, (match, num) => {
       const code = parseInt(num, 10);
-      if (code > 0 && code < 65536) {
-        return String.fromCharCode(code);
-      }
-      return _;
+      if (code > 0 && code < 65536) return String.fromCharCode(code);
+      return match;
     });
-    
-    // Handle numeric entities (hex)
-    result = result.replace(/&#x([a-fA-F0-9]+);/gi, (_, hex) => {
+
+    result = result.replace(/&#x([a-fA-F0-9]+);/gi, (match, hex) => {
       const code = parseInt(hex, 16);
-      if (code > 0 && code < 65536) {
-        return String.fromCharCode(code);
-      }
-      return _;
+      if (code > 0 && code < 65536) return String.fromCharCode(code);
+      return match;
     });
-    
-    // Clean up any remaining artifacts
-    result = result.replace(/\u00A0/g, ' '); // Non-breaking space unicode
-    
+
+    result = result.replace(/\u00A0/g, ' ');
+
     return result;
   };
-  
-  // Run multiple passes to catch multi-encoded entities
+
   let decoded = text;
   let previous = '';
   let iterations = 0;
   const maxIterations = 8;
-  
+
   while (decoded !== previous && iterations < maxIterations) {
     previous = decoded;
     decoded = decodeOnce(decoded);
-    iterations++;
+    iterations += 1;
   }
-  
+
   return decoded;
 };
 
@@ -156,7 +141,10 @@ const normalizeNewsArticle = (raw: unknown): NewsArticle | null => {
     const id = typeof obj.id === 'string' && obj.id.trim().length > 0 ? obj.id : `news-${Date.now()}-${Math.random()}`;
     const title = typeof obj.title === 'string' ? obj.title : '';
     const excerpt = typeof obj.excerpt === 'string' ? obj.excerpt : title;
-    const imageUrl = typeof obj.imageUrl === 'string' && obj.imageUrl.length > 0 ? obj.imageUrl : 'https://freedomfm1065.com/wp-content/uploads/2024/01/freedom-fm-logo.png';
+    const imageUrl =
+      typeof obj.imageUrl === 'string' && obj.imageUrl.length > 0
+        ? obj.imageUrl
+        : 'https://freedomfm1065.com/wp-content/uploads/2024/01/freedom-fm-logo.png';
     const date = typeof obj.date === 'string' && obj.date.length > 0 ? obj.date : new Date().toISOString();
     const category = typeof obj.category === 'string' && obj.category.length > 0 ? obj.category : 'News';
     const content = typeof obj.content === 'string' ? obj.content : '';
@@ -189,7 +177,7 @@ const safeFormatDate = (isoOrAny: string): string => {
       day: 'numeric',
       year: 'numeric',
     });
-  } catch (e) {
+  } catch {
     console.log('[NEWS] safeFormatDate fallback for:', isoOrAny);
     return '';
   }
@@ -207,15 +195,22 @@ const getCachedNews = async (): Promise<{ articles: NewsArticle[] | null; isStal
 
     const parsed = JSON.parse(cachedData) as unknown;
     const list = Array.isArray(parsed) ? parsed : [];
-    const articles = list
-      .map((a) => normalizeNewsArticle(a))
-      .filter((a): a is NewsArticle => !!a);
+    const articles = list.map((a) => normalizeNewsArticle(a)).filter((a): a is NewsArticle => !!a);
 
     const lastFetchTime = cacheTime ? parseInt(cacheTime, 10) : 0;
     const now = Date.now();
     const isStale = now - lastFetchTime > CACHE_DURATION;
 
-    console.log('[NEWS] Cache found, stale:', isStale, 'age:', Math.round((now - lastFetchTime) / 1000 / 60), 'minutes', 'count:', articles.length);
+    console.log(
+      '[NEWS] Cache found, stale:',
+      isStale,
+      'age:',
+      Math.round((now - lastFetchTime) / 1000 / 60),
+      'minutes',
+      'count:',
+      articles.length,
+    );
+
     return { articles, isStale };
   } catch (error) {
     console.log('[NEWS] Error reading cache:', error);
@@ -235,7 +230,7 @@ const setCachedNews = async (articles: NewsArticle[]): Promise<void> => {
 
 const fetchWithRetry = async (url: string, options: RequestInit, retries: number = MAX_RETRIES): Promise<Response> => {
   let lastError: Error | null = null;
-  
+
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       console.log(`[NEWS] Fetch attempt ${attempt}/${retries}`);
@@ -244,15 +239,15 @@ const fetchWithRetry = async (url: string, options: RequestInit, retries: number
     } catch (error: any) {
       lastError = error;
       console.log(`[NEWS] Attempt ${attempt} failed:`, error?.message);
-      
+
       if (attempt < retries) {
         const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
         console.log(`[NEWS] Retrying in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
   }
-  
+
   throw lastError || new Error('All fetch attempts failed');
 };
 
@@ -260,38 +255,37 @@ const parseNewsFromHtml = (html: string): NewsArticle[] => {
   const articles: NewsArticle[] = [];
   const seenLinks = new Set<string>();
   const defaultImage = 'https://freedomfm1065.com/wp-content/uploads/2024/01/freedom-fm-logo.png';
-  
+
   console.log('[NEWS] Starting HTML parsing, length:', html.length);
-  
-  // Method 1: Parse h4 tags with links (Freedom FM uses h4 for article titles)
+
   const h4Regex = /<h4[^>]*>[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<\/h4>/gi;
   let h4Match;
-  
+
   while ((h4Match = h4Regex.exec(html)) !== null) {
     try {
       const link = h4Match[1].trim();
       if (seenLinks.has(link)) continue;
       if (link.includes('/category/') || link.includes('/tag/') || link.includes('/author/') || link.includes('/page/')) continue;
       if (link === 'https://freedomfm1065.com/' || link === 'https://freedomfm1065.com/news/') continue;
-      
+
       const title = decodeHtmlEntities(h4Match[2].replace(/<[^>]*>/g, '').trim());
       if (!title || title.length < 5) continue;
-      
+
       seenLinks.add(link);
-      
-      // Try to find associated image nearby in HTML
+
       const linkIndex = h4Match.index;
       const searchArea = html.substring(Math.max(0, linkIndex - 2000), linkIndex + 500);
       let imageUrl = defaultImage;
-      
-      const imgMatch = searchArea.match(/<img[^>]*src="([^"]+)"[^>]*>/i)
-        || searchArea.match(/data-src="([^"]+)"/i)
-        || searchArea.match(/background-image[^)]*url\(['"]?([^'"\)]+)['"]?\)/i);
-      
+
+      const imgMatch =
+        searchArea.match(/<img[^>]*src="([^"]+)"[^>]*>/i) ||
+        searchArea.match(/data-src="([^"]+)"/i) ||
+        searchArea.match(/background-image[^)]*url\(['"]?([^'"\)]+)['"]?\)/i);
+
       if (imgMatch && imgMatch[1] && !imgMatch[1].includes('data:') && !imgMatch[1].includes('svg')) {
         imageUrl = imgMatch[1];
       }
-      
+
       articles.push({
         id: `news-${articles.length}-${Date.now()}`,
         title,
@@ -302,51 +296,51 @@ const parseNewsFromHtml = (html: string): NewsArticle[] => {
         link,
         content: '',
       });
-      
+
       console.log(`[NEWS] Found (h4): ${title.substring(0, 40)}...`);
       if (articles.length >= 30) break;
     } catch (e) {
       console.log('[NEWS] Error parsing h4 article:', e);
     }
   }
-  
+
   console.log(`[NEWS] Method 1 (h4) found ${articles.length} articles`);
-  
-  // Method 2: Parse <article> tags
+
   if (articles.length === 0) {
     console.log('[NEWS] Trying method 2: article tags');
     const articleRegex = /<article[^>]*>([\s\S]*?)<\/article>/gi;
     let articleMatch;
-    
+
     while ((articleMatch = articleRegex.exec(html)) !== null) {
       try {
         const articleHtml = articleMatch[0];
-        
-        const titleMatch = articleHtml.match(/<a[^>]*href="([^"]+)"[^>]*>([^<]+)/i)
-          || articleHtml.match(/<h[1-6][^>]*>[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
-        
+
+        const titleMatch =
+          articleHtml.match(/<a[^>]*href="([^"]+)"[^>]*>([^<]+)/i) ||
+          articleHtml.match(/<h[1-6][^>]*>[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
+
         if (!titleMatch) continue;
-        
+
         const link = titleMatch[1].trim();
         if (seenLinks.has(link)) continue;
         if (link.includes('/category/') || link.includes('/tag/') || link.includes('/author/')) continue;
-        
+
         const title = decodeHtmlEntities(titleMatch[2].replace(/<[^>]*>/g, '').trim());
         if (!title || title.length < 5) continue;
-        
+
         seenLinks.add(link);
-        
+
         let imageUrl = defaultImage;
         const imgMatch = articleHtml.match(/<img[^>]*src="([^"]+)"[^>]*>/i);
         if (imgMatch && imgMatch[1]) imageUrl = imgMatch[1];
-        
+
         let dateStr = new Date().toISOString();
         const timeMatch = articleHtml.match(/<time[^>]*datetime="([^"]+)"/i);
         if (timeMatch) {
           const d = new Date(timeMatch[1]);
-          if (!isNaN(d.getTime())) dateStr = d.toISOString();
+          if (!Number.isNaN(d.getTime())) dateStr = d.toISOString();
         }
-        
+
         articles.push({
           id: `news-${articles.length}-${Date.now()}`,
           title,
@@ -357,7 +351,7 @@ const parseNewsFromHtml = (html: string): NewsArticle[] => {
           link,
           content: '',
         });
-        
+
         console.log(`[NEWS] Found (article): ${title.substring(0, 40)}...`);
         if (articles.length >= 30) break;
       } catch (e) {
@@ -366,26 +360,25 @@ const parseNewsFromHtml = (html: string): NewsArticle[] => {
     }
     console.log(`[NEWS] Method 2 found ${articles.length} articles`);
   }
-  
-  // Method 3: Find all freedomfm article links
+
   if (articles.length === 0) {
     console.log('[NEWS] Trying method 3: generic freedomfm links');
-    
-    const linkRegex = /<a[^>]*href="(https?:\/\/(?:www\.)?freedomfm1065\.com\/[^"]+)"[^>]*>([^<]{10,})<\/a>/gi;
+
+    const linkRegex = /<a[^>]*href="(https?:\/\/(?:www\.)?freedomfm1065\.com\/[^\"]+)"[^>]*>([^<]{10,})<\/a>/gi;
     let linkMatch;
-    
+
     while ((linkMatch = linkRegex.exec(html)) !== null) {
       const link = linkMatch[1].trim();
       const title = decodeHtmlEntities(linkMatch[2].trim());
-      
+
       if (seenLinks.has(link)) continue;
       if (link.includes('/category/') || link.includes('/tag/') || link.includes('/page/') || link.includes('/author/')) continue;
       if (link === 'https://freedomfm1065.com/' || link === 'https://freedomfm1065.com/news/') continue;
       if (!title || title.length < 10 || title.length > 200) continue;
       if (title.toLowerCase().includes('read more') || title.toLowerCase().includes('click here')) continue;
-      
+
       seenLinks.add(link);
-      
+
       articles.push({
         id: `news-${articles.length}-${Date.now()}`,
         title,
@@ -396,14 +389,14 @@ const parseNewsFromHtml = (html: string): NewsArticle[] => {
         link,
         content: '',
       });
-      
+
       console.log(`[NEWS] Found (link): ${title.substring(0, 40)}...`);
       if (articles.length >= 30) break;
     }
-    
+
     console.log(`[NEWS] Method 3 found ${articles.length} articles`);
   }
-  
+
   return articles;
 };
 
@@ -411,22 +404,20 @@ const fetchWithProxy = async (proxyUrl: string, targetUrl: string, signal: Abort
   try {
     const fetchUrl = proxyUrl + encodeURIComponent(targetUrl);
     console.log('[NEWS] Trying proxy:', proxyUrl.substring(0, 30));
-    
+
     const response = await fetch(fetchUrl, {
       method: 'GET',
-      headers: { 'Accept': 'text/html,application/xhtml+xml,*/*' },
+      headers: { Accept: 'text/html,application/xhtml+xml,*/*' },
       signal,
     });
-    
+
     if (!response.ok) {
       console.log('[NEWS] Proxy returned status:', response.status);
       return null;
     }
-    
+
     const html = await response.text();
-    if (html && html.length > 1000) {
-      return html;
-    }
+    if (html && html.length > 1000) return html;
     return null;
   } catch (e: any) {
     console.log('[NEWS] Proxy failed:', e?.message?.substring(0, 50));
@@ -437,17 +428,17 @@ const fetchWithProxy = async (proxyUrl: string, targetUrl: string, signal: Abort
 const fetchFreshNews = async (): Promise<NewsArticle[]> => {
   const controller = new AbortController();
   const timeoutDuration = Platform.OS === 'web' ? 45000 : 25000;
-  
+
   const timeoutId = setTimeout(() => {
     console.log('[NEWS] Request timeout');
     controller.abort();
   }, timeoutDuration);
-  
+
   try {
     console.log('[NEWS] Fetching news...', Platform.OS);
     const targetUrl = NEWS_PAGE_URL;
     let html: string | null = null;
-    
+
     if (Platform.OS === 'web') {
       for (const proxy of CORS_PROXIES) {
         if (controller.signal.aborted) break;
@@ -459,43 +450,47 @@ const fetchFreshNews = async (): Promise<NewsArticle[]> => {
       }
     } else {
       const headers: Record<string, string> = {
-        'Accept': 'text/html,application/xhtml+xml,*/*',
-        'User-Agent': Platform.OS === 'android' 
-          ? 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/121.0.0.0 Mobile Safari/537.36'
-          : 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) Safari/605.1.15',
+        Accept: 'text/html,application/xhtml+xml,*/*',
+        'User-Agent':
+          Platform.OS === 'android'
+            ? 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/121.0.0.0 Mobile Safari/537.36'
+            : 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) Safari/605.1.15',
         'Cache-Control': 'no-cache',
       };
-      
-      const response = await fetchWithRetry(targetUrl, {
-        method: 'GET',
-        headers,
-        signal: controller.signal,
-      }, MAX_RETRIES);
-      
+
+      const response = await fetchWithRetry(
+        targetUrl,
+        {
+          method: 'GET',
+          headers,
+          signal: controller.signal,
+        },
+        MAX_RETRIES,
+      );
+
       if (response.ok) {
         html = await response.text();
         console.log('[NEWS] Got HTML directly, length:', html?.length);
       }
     }
-    
+
     clearTimeout(timeoutId);
-    
+
     if (!html || html.length < 1000) {
       console.log('[NEWS] No valid HTML received');
       return [];
     }
-    
+
     const articles = parseNewsFromHtml(html);
-    
+
     if (articles.length > 0) {
       console.log('[NEWS] Parsed', articles.length, 'articles');
       await setCachedNews(articles);
       return articles;
     }
-    
+
     console.log('[NEWS] No articles found in HTML');
     return [];
-    
   } catch (error: any) {
     clearTimeout(timeoutId);
     console.log('[NEWS] Fetch error:', error?.message);
@@ -506,24 +501,24 @@ const fetchFreshNews = async (): Promise<NewsArticle[]> => {
 const fetchNewsWithCache = async (): Promise<NewsArticle[]> => {
   try {
     const { articles: cachedArticles, isStale } = await getCachedNews();
-    
+
     if (cachedArticles && cachedArticles.length > 0 && !isStale) {
       console.log('[NEWS] Returning fresh cached data');
       return cachedArticles;
     }
-    
+
     console.log('[NEWS] Cache is stale or empty, fetching fresh data...');
     const freshArticles = await fetchFreshNews();
-    
+
     if (freshArticles.length > 0) {
       return freshArticles;
     }
-    
+
     if (cachedArticles && cachedArticles.length > 0) {
       console.log('[NEWS] Fresh fetch failed, returning stale cache');
       return cachedArticles;
     }
-    
+
     console.log('[NEWS] No data available');
     return [];
   } catch (error) {
@@ -548,7 +543,7 @@ const SkeletonCard = () => {
           duration: 800,
           useNativeDriver: true,
         }),
-      ])
+      ]),
     ).start();
   }, [fadeAnim]);
 
@@ -648,10 +643,7 @@ const fetchArticleContentForPrefetch = async (link: string): Promise<string> => 
   }
 };
 
-const runWithConcurrency = async <T,>(
-  tasks: Array<() => Promise<T>>,
-  concurrency: number,
-): Promise<T[]> => {
+const runWithConcurrency = async <T,>(tasks: (() => Promise<T>)[], concurrency: number): Promise<T[]> => {
   const results: T[] = [];
   let idx = 0;
 
@@ -675,12 +667,18 @@ export default function NewsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const [refreshing, setRefreshing] = useState(false);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [visibleCount, setVisibleCount] = useState<number>(INITIAL_VISIBLE_COUNT);
   const [showLoadMorePrompt, setShowLoadMorePrompt] = useState<boolean>(false);
-  const hasInitialFetched = useRef(false);
-  
-  const { data: articles, isLoading, error, refetch, isFetching } = useQuery({
+  const hasInitialFetched = useRef<boolean>(false);
+
+  const {
+    data: articles,
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ['freedomFmNews'],
     queryFn: fetchNewsWithCache,
     retry: 2,
@@ -747,7 +745,7 @@ export default function NewsScreen() {
     } catch (effectErr) {
       console.log('[NEWS][PREFETCH] Effect error:', (effectErr as any)?.message);
     }
-  }, [articles, queryClient]);
+  }, [articles, queryClient, visibleCount]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -758,77 +756,44 @@ export default function NewsScreen() {
     if (freshArticles.length > 0) {
       await refetch();
     }
+
     setRefreshing(false);
   }, [refetch]);
-  
-  const renderItem = useCallback(({ item }: { item: NewsArticle }) => (
-    <TouchableOpacity 
-      style={styles.card} 
-      activeOpacity={0.8}
-      testID={`news-card-${item.id}`}
-      onPress={() => router.push(`/(tabs)/(news)/${item.id}` as any)}
-    >
-      <View style={styles.imageContainer}>
-        <Image 
-          source={{ uri: item.imageUrl }} 
-          style={styles.image}
-          resizeMode="cover"
-        />
-      </View>
-      <View style={styles.cardContent}>
-        {item.category?.trim().toLowerCase() !== 'news' && (
-          <View style={styles.categoryBadge} testID="news-category-badge">
-            <Tag size={12} color={colors.text} />
-            <Text style={styles.categoryText}>{item.category}</Text>
-          </View>
-        )}
-        <Text style={styles.title}>{item.title}</Text>
-        <Text style={styles.excerpt} numberOfLines={2}>
-          {item.excerpt}
-        </Text>
-        <View style={styles.dateContainer}>
-          <Calendar size={14} color={colors.textSecondary} />
-          <Text style={styles.date}>{safeFormatDate(item.date)}</Text>
+
+  const renderItem = useCallback(
+    ({ item }: { item: NewsArticle }) => (
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.8}
+        testID={`news-card-${item.id}`}
+        onPress={() => {
+          console.log('[NEWS] open article', { id: item.id, title: item.title?.substring(0, 60) });
+          router.push({ pathname: '/(tabs)/(news)/[id]', params: { id: item.id } } as any);
+        }}
+      >
+        <View style={styles.imageContainer}>
+          <Image source={{ uri: item.imageUrl }} style={styles.image} resizeMode="cover" />
         </View>
-      </View>
-    </TouchableOpacity>
-  ), [router]);
-
-  if ((isLoading || isFetching) && !articles) {
-    return (
-      <View style={styles.container}>
-        <FlatList
-          data={[1, 2, 3, 4, 5]}
-          renderItem={() => <SkeletonCard />}
-          keyExtractor={(item) => `skeleton-${item}`}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingBottom: insets.bottom + 16 }
-          ]}
-          showsVerticalScrollIndicator={false}
-        />
-      </View>
-    );
-  }
-
-  if (error || (!isLoading && (!articles || articles.length === 0))) {
-    const errorMessage = error instanceof Error ? error.message : 'No news articles available';
-    return (
-      <View style={styles.container}>
-        <View style={styles.centerContent}>
-          <AlertCircle size={48} color={colors.text} />
-          <Text style={styles.errorTitle}>No News Available</Text>
-          <Text style={styles.errorMessage}>
-            {errorMessage}
+        <View style={styles.cardContent}>
+          {item.category?.trim().toLowerCase() !== 'news' && (
+            <View style={styles.categoryBadge} testID="news-category-badge">
+              <Tag size={12} color={colors.text} style={{ marginRight: 4 }} />
+              <Text style={styles.categoryText}>{item.category}</Text>
+            </View>
+          )}
+          <Text style={styles.title}>{item.title}</Text>
+          <Text style={styles.excerpt} numberOfLines={2}>
+            {item.excerpt}
           </Text>
-          <Text style={[styles.errorMessage, { fontSize: 12, marginTop: 8 }]}>Pull down to refresh and load the latest news</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
-            <Text style={styles.retryButtonText}>Refresh</Text>
-          </TouchableOpacity>
+          <View style={styles.dateContainer}>
+            <Calendar size={14} color={colors.textSecondary} style={{ marginRight: 6 }} />
+            <Text style={styles.date}>{safeFormatDate(item.date)}</Text>
+          </View>
         </View>
-      </View>
-    );
-  }
+      </TouchableOpacity>
+    ),
+    [router],
+  );
 
   const allArticles = articles ?? [];
   const hasMore = visibleCount < allArticles.length;
@@ -860,9 +825,7 @@ export default function NewsScreen() {
           onPress={handleLoadMore}
           testID="news-load-more-button"
         >
-          <Text style={styles.loadMoreButtonText}>
-            Load {Math.min(LOAD_MORE_STEP, remaining)} more
-          </Text>
+          <Text style={styles.loadMoreButtonText}>Load {Math.min(LOAD_MORE_STEP, remaining)} more</Text>
         </TouchableOpacity>
       </View>
     );
@@ -874,19 +837,48 @@ export default function NewsScreen() {
     setShowLoadMorePrompt(true);
   }, [hasMore]);
 
+  if ((isLoading || isFetching) && !articles) {
+    return (
+      <View style={styles.container}>
+        <FlatList
+          data={[1, 2, 3, 4, 5]}
+          renderItem={() => <SkeletonCard />}
+          keyExtractor={(item) => `skeleton-${item}`}
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 16 }]}
+          showsVerticalScrollIndicator={false}
+        />
+      </View>
+    );
+  }
+
+  if (error || (!isLoading && (!articles || articles.length === 0))) {
+    const errorMessage = error instanceof Error ? error.message : 'No news articles available';
+    return (
+      <View style={styles.container}>
+        <View style={styles.centerContent}>
+          <AlertCircle size={48} color={colors.text} />
+          <Text style={styles.errorTitle}>No News Available</Text>
+          <Text style={styles.errorMessage}>{errorMessage}</Text>
+          <Text style={[styles.errorMessage, { fontSize: 12, marginTop: 8 }]}>Pull down to refresh and load the latest news</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={onRefresh} testID="news-refresh-button">
+            <Text style={styles.retryButtonText}>Refresh</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <FlatList
         data={visibleArticles}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={[
-          styles.listContent,
-          { paddingBottom: insets.bottom + 16 }
-        ]}
+        contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 16 }]}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListFooterComponent={renderFooter}
         showsVerticalScrollIndicator={false}
-        removeClippedSubviews={true}
+        removeClippedSubviews={Platform.OS !== 'web'}
         maxToRenderPerBatch={8}
         updateCellsBatchingPeriod={50}
         initialNumToRender={INITIAL_VISIBLE_COUNT}
@@ -914,7 +906,10 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    gap: 16,
+    paddingBottom: 0,
+  },
+  separator: {
+    height: 16,
   },
   card: {
     backgroundColor: '#1a1a1a',
@@ -933,14 +928,12 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
   },
-
   cardContent: {
     padding: 16,
   },
   categoryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 4,
     backgroundColor: '#333',
@@ -968,7 +961,6 @@ const styles = StyleSheet.create({
   dateContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
   },
   date: {
     fontSize: 12,
@@ -979,11 +971,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: colors.text,
-    marginTop: 16,
   },
   errorTitle: {
     fontSize: 18,
@@ -1023,6 +1010,25 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 12,
   },
+  skeletonTitle: {
+    width: '90%',
+    height: 24,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 4,
+    marginBottom: 8,
+  },
+  skeletonExcerpt: {
+    width: '100%',
+    height: 16,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 4,
+  },
+  skeletonDate: {
+    width: 120,
+    height: 14,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 4,
+  },
   loadMoreWrap: {
     marginTop: 10,
     paddingTop: 14,
@@ -1051,24 +1057,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700' as const,
     color: colors.text,
-  },
-  skeletonTitle: {
-    width: '90%',
-    height: 24,
-    backgroundColor: '#2a2a2a',
-    borderRadius: 4,
-    marginBottom: 8,
-  },
-  skeletonExcerpt: {
-    width: '100%',
-    height: 16,
-    backgroundColor: '#2a2a2a',
-    borderRadius: 4,
-  },
-  skeletonDate: {
-    width: 120,
-    height: 14,
-    backgroundColor: '#2a2a2a',
-    borderRadius: 4,
   },
 });
