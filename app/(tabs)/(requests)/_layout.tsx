@@ -6,13 +6,15 @@ import colors from '@/constants/colors';
 
 export default function RequestsLayout() {
   const insets = useSafeAreaInsets();
-  const headerStatusBarHeight = Math.max(insets.top, Platform.OS === 'web' ? 14 : 0);
+  const extraDrop = Platform.OS === 'web' ? 18 : 10;
+  const headerStatusBarHeight = Math.max(insets.top + extraDrop, extraDrop);
 
   return (
     <Stack
       screenOptions={{
         headerTopInsetEnabled: false,
         headerStatusBarHeight,
+        headerTitleAlign: 'center',
         statusBarStyle: 'light',
         statusBarTranslucent: false,
         headerStyle: {
@@ -20,13 +22,14 @@ export default function RequestsLayout() {
         },
         headerTitleStyle: {
           color: colors.text,
-          fontWeight: '600' as const,
+          fontWeight: '700' as const,
           fontSize: 17,
         },
         headerTransparent: false,
         headerTintColor: colors.text,
         headerShadowVisible: false,
         headerBackTitle: 'Back',
+        headerBackTitleVisible: false,
         contentStyle: {
           backgroundColor: '#000000',
         },
