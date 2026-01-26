@@ -94,6 +94,8 @@ export default function AnniversaryScreen() {
           javaScriptEnabled={true}
           domStorageEnabled={true}
           cacheEnabled={true}
+          automaticallyAdjustContentInsets={true}
+          contentInsetAdjustmentBehavior="automatic"
         />
       </Animated.View>
       {loading && (
