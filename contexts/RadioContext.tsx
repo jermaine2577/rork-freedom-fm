@@ -632,7 +632,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
               Accept: 'application/vnd.apple.mpegurl, application/x-mpegURL, */*',
               Connection: 'keep-alive',
             },
-            overrideFileExtensionAndroid: 'mp3',
+            overrideFileExtensionAndroid: 'm3u8',
           },
           {
             shouldPlay: false,
@@ -665,7 +665,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
               Accept: 'application/vnd.apple.mpegurl, application/x-mpegURL, */*',
               Connection: 'keep-alive',
             },
-            overrideFileExtensionAndroid: 'mp3',
+            overrideFileExtensionAndroid: 'm3u8',
           },
           {
             shouldPlay: false,
