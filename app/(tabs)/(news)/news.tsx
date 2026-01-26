@@ -264,6 +264,42 @@ const fetchWithRetry = async (url: string, options: RequestInit, retries: number
   throw lastError || new Error('All fetch attempts failed');
 };
 
+const extractDateFromHtml = (htmlSnippet: string): string | null => {
+  // Try to find <time datetime="...">
+  const timeMatch = htmlSnippet.match(/<time[^>]*datetime="([^"]+)"[^>]*>/i);
+  if (timeMatch) {
+    const d = new Date(timeMatch[1]);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+
+  // Try to find date in various formats like "January 25, 2025" or "Jan 25, 2025" or "25 January 2025"
+  const datePatterns = [
+    /(\d{1,2})[\s\/\-](\d{1,2})[\s\/\-](\d{4})/,  // DD/MM/YYYY or MM/DD/YYYY
+    /(\d{4})[\s\/\-](\d{1,2})[\s\/\-](\d{1,2})/,  // YYYY/MM/DD
+    /(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})/i,
+    /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)(?:\.|uary|ruary|ch|il|e|y|ust|tember|ober|ember)?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})/i,
+    /(\d{1,2})(?:st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December),?\s+(\d{4})/i,
+    /(\d{1,2})(?:st|nd|rd|th)?\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)(?:\.|uary|ruary|ch|il|e|y|ust|tember|ober|ember)?,?\s+(\d{4})/i,
+  ];
+
+  for (const pattern of datePatterns) {
+    const match = htmlSnippet.match(pattern);
+    if (match) {
+      try {
+        const dateStr = match[0];
+        const d = new Date(dateStr);
+        if (!Number.isNaN(d.getTime()) && d.getFullYear() > 2000 && d.getFullYear() < 2100) {
+          return d.toISOString();
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return null;
+};
+
 const parseNewsFromHtml = (html: string): NewsArticle[] => {
   const articles: NewsArticle[] = [];
   const seenLinks = new Set<string>();
@@ -287,7 +323,7 @@ const parseNewsFromHtml = (html: string): NewsArticle[] => {
       seenLinks.add(link);
 
       const linkIndex = h4Match.index;
-      const searchArea = html.substring(Math.max(0, linkIndex - 2000), linkIndex + 500);
+      const searchArea = html.substring(Math.max(0, linkIndex - 2000), linkIndex + 1000);
       let imageUrl = defaultImage;
 
       const imgMatch =
@@ -299,12 +335,16 @@ const parseNewsFromHtml = (html: string): NewsArticle[] => {
         imageUrl = imgMatch[1];
       }
 
+      // Try to extract date from surrounding HTML
+      const extractedDate = extractDateFromHtml(searchArea);
+      const articleDate = extractedDate || new Date().toISOString();
+
       articles.push({
         id: stableIdFromLink(link),
         title,
         excerpt: title,
         imageUrl,
-        date: new Date().toISOString(),
+        date: articleDate,
         category: 'News',
         link,
         content: '',
@@ -392,12 +432,18 @@ const parseNewsFromHtml = (html: string): NewsArticle[] => {
 
       seenLinks.add(link);
 
+      // Try to extract date from surrounding area
+      const linkIdx = linkMatch.index ?? 0;
+      const linkSearchArea = html.substring(Math.max(0, linkIdx - 1000), linkIdx + 500);
+      const extractedLinkDate = extractDateFromHtml(linkSearchArea);
+      const linkArticleDate = extractedLinkDate || new Date().toISOString();
+
       articles.push({
         id: stableIdFromLink(link),
         title,
         excerpt: title,
         imageUrl: defaultImage,
-        date: new Date().toISOString(),
+        date: linkArticleDate,
         category: 'News',
         link,
         content: '',
