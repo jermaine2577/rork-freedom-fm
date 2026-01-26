@@ -8,13 +8,13 @@ const LISTENER_POLL_INTERVAL_MS = 30000;
 
 const STREAM_CONNECT_TIMEOUT_MS = 90000;
 
-const HEALTH_CHECK_INTERVAL_MS = Platform.OS === 'android' ? 35000 : 40000;
+const HEALTH_CHECK_INTERVAL_MS = Platform.OS === 'android' ? 35000 : 30000;
 
-const STALL_THRESHOLD_MS = Platform.OS === 'android' ? 180000 : 200000;
-const BUFFERING_STALL_THRESHOLD_MS = Platform.OS === 'android' ? 150000 : 180000;
+const STALL_THRESHOLD_MS = Platform.OS === 'android' ? 180000 : 120000;
+const BUFFERING_STALL_THRESHOLD_MS = Platform.OS === 'android' ? 150000 : 90000;
 const MAX_RETRY_ATTEMPTS = 6;
 
-const PROGRESS_UPDATE_INTERVAL_MS = Platform.OS === 'android' ? 2000 : 1500;
+const PROGRESS_UPDATE_INTERVAL_MS = Platform.OS === 'android' ? 2000 : 1000;
 
 type ExpoAV = typeof import('expo-av');
 
@@ -271,10 +271,15 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     if (!expoAV?.Audio?.setAudioModeAsync) return false;
 
     try {
-      const interruptionModeIOS =
-        (expoAV.Audio as any)?.INTERRUPTION_MODE_IOS_DO_NOT_MIX ?? (expoAV.Audio as any)?.INTERRUPTION_MODE_IOS_DUCK_OTHERS;
-      const interruptionModeAndroid =
-        (expoAV.Audio as any)?.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX ?? (expoAV.Audio as any)?.INTERRUPTION_MODE_ANDROID_DUCK_OTHERS;
+      const InterruptionModeIOS = (expoAV.Audio as any).InterruptionModeIOS;
+      const InterruptionModeAndroid = (expoAV.Audio as any).InterruptionModeAndroid;
+
+      const interruptionModeIOS = InterruptionModeIOS?.DoNotMix ?? 
+        (expoAV.Audio as any)?.INTERRUPTION_MODE_IOS_DO_NOT_MIX ?? 2;
+      const interruptionModeAndroid = InterruptionModeAndroid?.DoNotMix ?? 
+        (expoAV.Audio as any)?.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX ?? 2;
+
+      console.log('[Radio] Configuring audio mode for', Platform.OS, { interruptionModeIOS, interruptionModeAndroid });
 
       await expoAV.Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
@@ -282,10 +287,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         staysActiveInBackground: true,
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
-        ...(typeof interruptionModeIOS === 'number' ? { interruptionModeIOS } : {}),
-        ...(typeof interruptionModeAndroid === 'number' ? { interruptionModeAndroid } : {}),
+        interruptionModeIOS,
+        interruptionModeAndroid,
       });
-      console.log('[Radio] Audio mode configured');
+      console.log('[Radio] Audio mode configured successfully for', Platform.OS);
       return true;
     } catch (e) {
       console.warn('[Radio] Failed to configure audio mode:', e);
@@ -624,56 +629,78 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       }
 
       const loadWithAndroidImpl = async (androidImplementation: 'MediaPlayer' | 'ExoPlayer') => {
-        console.log('[Radio] Loading stream', { androidImplementation, streamUri });
-        await sound.loadAsync(
-          {
-            uri: streamUri,
-            headers: {
-              Accept: 'application/vnd.apple.mpegurl, application/x-mpegURL, */*',
-              Connection: 'keep-alive',
-            },
-            overrideFileExtensionAndroid: 'm3u8',
+        console.log('[Radio] Loading stream', { platform: Platform.OS, androidImplementation, streamUri });
+        
+        const sourceConfig: any = {
+          uri: streamUri,
+          headers: {
+            'Accept': 'application/vnd.apple.mpegurl, application/x-mpegURL, audio/mpegurl, audio/x-mpegurl, */*',
+            'Connection': 'keep-alive',
+            'Cache-Control': 'no-cache',
           },
-          {
-            shouldPlay: false,
-            volume,
-            progressUpdateIntervalMillis: PROGRESS_UPDATE_INTERVAL_MS,
-            ...(Platform.OS === 'android' ? { androidImplementation } : {}),
-          }
-        );
-      };
+        };
 
-      try {
-        await loadWithAndroidImpl('ExoPlayer');
-      } catch (e) {
-        console.warn('[Radio] ExoPlayer load failed, retrying with MediaPlayer', e);
-        await cleanupNative();
-        if (refs.current.playSessionId !== startSessionId) return;
-
-        const fallbackSound = new expoAV.Audio.Sound();
-        refs.current.nativeSound = fallbackSound;
-        try {
-          refs.current.nativeSub = fallbackSound.setOnPlaybackStatusUpdate(onStatus) as unknown as { remove: () => void };
-        } catch {
-          fallbackSound.setOnPlaybackStatusUpdate(onStatus);
+        if (Platform.OS === 'android') {
+          sourceConfig.overrideFileExtensionAndroid = 'm3u8';
         }
 
-        await fallbackSound.loadAsync(
-          {
+        const initialStatus: any = {
+          shouldPlay: false,
+          volume,
+          progressUpdateIntervalMillis: PROGRESS_UPDATE_INTERVAL_MS,
+        };
+
+        if (Platform.OS === 'android') {
+          initialStatus.androidImplementation = androidImplementation;
+        }
+
+        await sound.loadAsync(sourceConfig, initialStatus);
+        console.log('[Radio] Stream loaded successfully on', Platform.OS);
+      };
+
+      if (Platform.OS === 'ios') {
+        try {
+          await loadWithAndroidImpl('ExoPlayer');
+        } catch (e) {
+          console.error('[Radio] iOS load failed:', e);
+          throw e;
+        }
+      } else {
+        try {
+          await loadWithAndroidImpl('ExoPlayer');
+        } catch (e) {
+          console.warn('[Radio] ExoPlayer load failed, retrying with MediaPlayer', e);
+          await cleanupNative();
+          if (refs.current.playSessionId !== startSessionId) return;
+
+          const fallbackSound = new expoAV.Audio.Sound();
+          refs.current.nativeSound = fallbackSound;
+          try {
+            refs.current.nativeSub = fallbackSound.setOnPlaybackStatusUpdate(onStatus) as unknown as { remove: () => void };
+          } catch {
+            fallbackSound.setOnPlaybackStatusUpdate(onStatus);
+          }
+
+          const fallbackSource: any = {
             uri: streamUri,
             headers: {
-              Accept: 'application/vnd.apple.mpegurl, application/x-mpegURL, */*',
-              Connection: 'keep-alive',
+              'Accept': 'application/vnd.apple.mpegurl, application/x-mpegURL, audio/mpegurl, */*',
+              'Connection': 'keep-alive',
+              'Cache-Control': 'no-cache',
             },
             overrideFileExtensionAndroid: 'm3u8',
-          },
-          {
-            shouldPlay: false,
-            volume,
-            progressUpdateIntervalMillis: PROGRESS_UPDATE_INTERVAL_MS,
-            ...(Platform.OS === 'android' ? { androidImplementation: 'MediaPlayer' as const } : {}),
-          }
-        );
+          };
+
+          await fallbackSound.loadAsync(
+            fallbackSource,
+            {
+              shouldPlay: false,
+              volume,
+              progressUpdateIntervalMillis: PROGRESS_UPDATE_INTERVAL_MS,
+              androidImplementation: 'MediaPlayer' as const,
+            }
+          );
+        }
       }
 
       clearTimeout(connectTimer);
@@ -967,7 +994,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
-    configureAudioMode().catch((e) => console.warn('[Radio] Initial audio mode setup failed:', e));
+    console.log('[Radio] Setting up audio mode for platform:', Platform.OS);
+    configureAudioMode()
+      .then((success) => {
+        console.log('[Radio] Initial audio mode setup result:', success);
+      })
+      .catch((e) => console.warn('[Radio] Initial audio mode setup failed:', e));
   }, [configureAudioMode]);
 
   useEffect(() => {
