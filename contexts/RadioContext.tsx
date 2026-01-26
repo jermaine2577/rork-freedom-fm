@@ -378,7 +378,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         }
         refs.current.isBuffering = true;
         console.log('[Radio] Web buffering');
-        if (refs.current.mounted) setIsLoading(true);
       };
 
       (audio as any).onstalled = () => {
@@ -388,7 +387,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         }
         refs.current.isBuffering = true;
         console.warn('[Radio] Web stalled');
-        if (refs.current.mounted) setIsLoading(true);
       };
 
       audio.onpause = () => {
@@ -438,6 +436,19 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         if (positionMs !== refs.current.lastPositionMs) {
           refs.current.lastPositionMs = positionMs;
           refs.current.lastProgressAt = now;
+          
+          if (refs.current.isBuffering) {
+            refs.current.isBuffering = false;
+            refs.current.bufferingSince = 0;
+            if (refs.current.mounted) setIsLoading(false);
+          }
+        }
+        
+        if (refs.current.isBuffering && refs.current.bufferingSince > 0) {
+          const bufferingDuration = now - refs.current.bufferingSince;
+          if (bufferingDuration > 3000 && refs.current.mounted) {
+            setIsLoading(true);
+          }
         }
       };
 
