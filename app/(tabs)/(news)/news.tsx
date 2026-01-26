@@ -40,8 +40,8 @@ const stableIdFromLink = (link?: string): string => {
   return `news-${normalized}`;
 };
 const MAX_RETRIES = 2;
-const NEWS_CACHE_KEY = 'freedomfm_news_cache_v2';
-const NEWS_CACHE_TIME_KEY = 'freedomfm_news_cache_time_v2';
+const NEWS_CACHE_KEY = 'freedomfm_news_cache_v3';
+const NEWS_CACHE_TIME_KEY = 'freedomfm_news_cache_time_v3';
 const CACHE_DURATION = 24 * 60 * 60 * 1000;
 
 const decodeHtmlEntities = (text: string): string => {
@@ -159,7 +159,7 @@ const normalizeNewsArticle = (raw: unknown): NewsArticle | null => {
       typeof obj.imageUrl === 'string' && obj.imageUrl.length > 0
         ? obj.imageUrl
         : 'https://freedomfm1065.com/wp-content/uploads/2024/01/freedom-fm-logo.png';
-    const date = typeof obj.date === 'string' && obj.date.length > 0 ? obj.date : new Date().toISOString();
+    const date = typeof obj.date === 'string' && obj.date.length > 0 ? obj.date : '';
     const category = typeof obj.category === 'string' && obj.category.length > 0 ? obj.category : 'News';
     const content = typeof obj.content === 'string' ? obj.content : '';
 
@@ -420,11 +420,14 @@ const parseNewsFromHtml = (html: string): NewsArticle[] => {
         const imgMatch = articleHtml.match(/<img[^>]*src="([^"]+)"[^>]*>/i);
         if (imgMatch && imgMatch[1]) imageUrl = imgMatch[1];
 
-        let dateStr = new Date().toISOString();
+        let dateStr = '';
         const timeMatch = articleHtml.match(/<time[^>]*datetime="([^"]+)"/i);
         if (timeMatch) {
           const d = new Date(timeMatch[1]);
           if (!Number.isNaN(d.getTime())) dateStr = d.toISOString();
+        } else {
+          const extractedDate = extractDateFromHtml(articleHtml, articles.length);
+          if (extractedDate) dateStr = extractedDate;
         }
 
         articles.push({
