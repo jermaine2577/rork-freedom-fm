@@ -6,6 +6,9 @@ export default function RequestsLayout() {
   return (
     <Stack
       screenOptions={{
+        headerTopInsetEnabled: true,
+        statusBarStyle: 'light',
+        statusBarTranslucent: false,
         headerStyle: {
           backgroundColor: '#000000',
         },
