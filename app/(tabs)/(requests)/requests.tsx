@@ -72,7 +72,7 @@ export default function RequestIndexScreen() {
         contentContainerStyle={[
           styles.content,
           { 
-            paddingTop: insets.top + 40, 
+            paddingTop: Math.max(insets.top, 44) + 16, 
             paddingBottom: insets.bottom + 40,
           }
         ]}
