@@ -683,8 +683,19 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         return;
       }
 
+      const currentSound = refs.current.nativeSound;
+      if (!currentSound) {
+        console.warn('[Radio] No sound instance available for playAsync');
+        throw new Error('Sound instance not available');
+      }
+
       try {
-        await sound.playAsync();
+        const status = await currentSound.getStatusAsync();
+        if (!status.isLoaded) {
+          console.warn('[Radio] Sound not loaded before playAsync');
+          throw new Error('Sound not loaded');
+        }
+        await currentSound.playAsync();
       } catch (e) {
         console.warn('[Radio] playAsync failed after load:', e);
         throw e;
