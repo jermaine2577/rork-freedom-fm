@@ -182,6 +182,9 @@ const normalizeNewsArticle = (raw: unknown): NewsArticle | null => {
 };
 
 const safeFormatDate = (isoOrAny: string): string => {
+  if (!isoOrAny || isoOrAny.trim() === '') {
+    return '';
+  }
   try {
     const d = new Date(isoOrAny);
     if (Number.isNaN(d.getTime())) throw new Error('Invalid date');
@@ -264,7 +267,7 @@ const fetchWithRetry = async (url: string, options: RequestInit, retries: number
   throw lastError || new Error('All fetch attempts failed');
 };
 
-const extractDateFromHtml = (htmlSnippet: string): string | null => {
+const extractDateFromHtml = (htmlSnippet: string, articleIndex: number = 0): string | null => {
   // Try to find <time datetime="...">
   const timeMatch = htmlSnippet.match(/<time[^>]*datetime="([^"]+)"[^>]*>/i);
   if (timeMatch) {
@@ -272,31 +275,60 @@ const extractDateFromHtml = (htmlSnippet: string): string | null => {
     if (!Number.isNaN(d.getTime())) return d.toISOString();
   }
 
-  // Try to find date in various formats like "January 25, 2025" or "Jan 25, 2025" or "25 January 2025"
-  const datePatterns = [
-    /(\d{1,2})[\s\/\-](\d{1,2})[\s\/\-](\d{4})/,  // DD/MM/YYYY or MM/DD/YYYY
-    /(\d{4})[\s\/\-](\d{1,2})[\s\/\-](\d{1,2})/,  // YYYY/MM/DD
-    /(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})/i,
-    /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)(?:\.|uary|ruary|ch|il|e|y|ust|tember|ober|ember)?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})/i,
-    /(\d{1,2})(?:st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December),?\s+(\d{4})/i,
-    /(\d{1,2})(?:st|nd|rd|th)?\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)(?:\.|uary|ruary|ch|il|e|y|ust|tember|ober|ember)?,?\s+(\d{4})/i,
+  // Try to find date in class="post-date" or class="entry-date" spans
+  const dateClassPatterns = [
+    /<[^>]*class="[^"]*(?:post-date|entry-date|date|published|meta-date|article-date)[^"]*"[^>]*>([^<]+)</gi,
+    /<span[^>]*class="[^"]*date[^"]*"[^>]*>([^<]+)</gi,
+    /<div[^>]*class="[^"]*date[^"]*"[^>]*>([^<]+)</gi,
   ];
 
-  for (const pattern of datePatterns) {
-    const match = htmlSnippet.match(pattern);
-    if (match) {
-      try {
-        const dateStr = match[0];
-        const d = new Date(dateStr);
-        if (!Number.isNaN(d.getTime()) && d.getFullYear() > 2000 && d.getFullYear() < 2100) {
-          return d.toISOString();
-        }
-      } catch {
-        continue;
+  for (const pattern of dateClassPatterns) {
+    const matches = htmlSnippet.matchAll(pattern);
+    for (const match of matches) {
+      if (match[1]) {
+        const dateText = match[1].trim();
+        const parsed = tryParseDate(dateText);
+        if (parsed) return parsed;
       }
     }
   }
 
+  // Try to find date in various formats like "January 25, 2025" or "Jan 25, 2025" or "25 January 2025"
+  const datePatterns = [
+    /(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})/gi,
+    /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})/gi,
+    /(\d{1,2})(?:st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December),?\s+(\d{4})/gi,
+    /(\d{1,2})(?:st|nd|rd|th)?\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?,?\s+(\d{4})/gi,
+    /(\d{4})-(\d{2})-(\d{2})/g, // ISO format YYYY-MM-DD
+    /(\d{1,2})\/(\d{1,2})\/(\d{4})/g, // MM/DD/YYYY or DD/MM/YYYY
+  ];
+
+  for (const pattern of datePatterns) {
+    const matches = [...htmlSnippet.matchAll(pattern)];
+    if (matches.length > 0) {
+      for (const match of matches) {
+        const parsed = tryParseDate(match[0]);
+        if (parsed) return parsed;
+      }
+    }
+  }
+
+  return null;
+};
+
+const tryParseDate = (dateStr: string): string | null => {
+  if (!dateStr || dateStr.length < 6) return null;
+  
+  try {
+    // Clean the string
+    const cleaned = dateStr.replace(/(?:st|nd|rd|th)/gi, '').trim();
+    const d = new Date(cleaned);
+    if (!Number.isNaN(d.getTime()) && d.getFullYear() > 2000 && d.getFullYear() < 2100) {
+      return d.toISOString();
+    }
+  } catch {
+    // ignore
+  }
   return null;
 };
 
@@ -336,8 +368,9 @@ const parseNewsFromHtml = (html: string): NewsArticle[] => {
       }
 
       // Try to extract date from surrounding HTML
-      const extractedDate = extractDateFromHtml(searchArea);
-      const articleDate = extractedDate || new Date().toISOString();
+      const extractedDate = extractDateFromHtml(searchArea, articles.length);
+      // If no date found, don't use current date - leave empty to show "No date" or skip showing date
+      const articleDate = extractedDate || '';
 
       articles.push({
         id: stableIdFromLink(link),
@@ -435,8 +468,8 @@ const parseNewsFromHtml = (html: string): NewsArticle[] => {
       // Try to extract date from surrounding area
       const linkIdx = linkMatch.index ?? 0;
       const linkSearchArea = html.substring(Math.max(0, linkIdx - 1000), linkIdx + 500);
-      const extractedLinkDate = extractDateFromHtml(linkSearchArea);
-      const linkArticleDate = extractedLinkDate || new Date().toISOString();
+      const extractedLinkDate = extractDateFromHtml(linkSearchArea, articles.length);
+      const linkArticleDate = extractedLinkDate || '';
 
       articles.push({
         id: stableIdFromLink(link),
@@ -900,10 +933,12 @@ export default function NewsScreen() {
           <Text style={styles.excerpt} numberOfLines={2}>
             {item.excerpt}
           </Text>
-          <View style={styles.dateContainer}>
-            <Calendar size={14} color={colors.textSecondary} style={{ marginRight: 6 }} />
-            <Text style={styles.date}>{safeFormatDate(item.date)}</Text>
-          </View>
+          {safeFormatDate(item.date) !== '' && (
+            <View style={styles.dateContainer}>
+              <Calendar size={14} color={colors.textSecondary} style={{ marginRight: 6 }} />
+              <Text style={styles.date}>{safeFormatDate(item.date)}</Text>
+            </View>
+          )}
         </View>
       </TouchableOpacity>
     ),
