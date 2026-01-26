@@ -7,8 +7,9 @@ export default function RequestsLayout() {
     <Stack
       screenOptions={{
         headerStyle: {
-          backgroundColor: 'rgba(0, 0, 0, 0.9)',
+          backgroundColor: '#000000',
         },
+        headerTransparent: false,
         headerTintColor: colors.text,
         headerShadowVisible: false,
         headerBackTitle: 'Back',
