@@ -1,12 +1,18 @@
 import { Stack } from 'expo-router';
 import React from 'react';
+import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '@/constants/colors';
 
 export default function RequestsLayout() {
+  const insets = useSafeAreaInsets();
+  const headerStatusBarHeight = Math.max(insets.top, Platform.OS === 'web' ? 14 : 0);
+
   return (
     <Stack
       screenOptions={{
-        headerTopInsetEnabled: true,
+        headerTopInsetEnabled: false,
+        headerStatusBarHeight,
         statusBarStyle: 'light',
         statusBarTranslucent: false,
         headerStyle: {
