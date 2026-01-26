@@ -15,7 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import { Calendar, Tag, AlertCircle, Share2 } from 'lucide-react-native';
+import { Tag, AlertCircle, Share2 } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import colors from '@/constants/colors';
 import { NewsArticle } from '@/types';
@@ -719,10 +719,6 @@ export default function ArticleDetailScreen() {
 
         <Text style={styles.title}>{displayArticle.title}</Text>
 
-        <View style={styles.dateContainer}>
-          <Calendar size={16} color={colors.textSecondary} style={{ marginRight: 8 }} />
-          <Text style={styles.date}>{safeFormatLongDate(displayArticle.date)}</Text>
-        </View>
 
         <View style={styles.divider} />
 

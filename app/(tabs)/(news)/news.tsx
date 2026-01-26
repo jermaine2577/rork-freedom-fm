@@ -13,7 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { Calendar, Tag, AlertCircle } from 'lucide-react-native';
+import { Tag, AlertCircle } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import colors from '@/constants/colors';
@@ -916,7 +916,6 @@ export default function NewsScreen() {
               title: item.title ?? '',
               excerpt: item.excerpt ?? '',
               imageUrl: item.imageUrl ?? '',
-              date: item.date ?? '',
               category: item.category ?? '',
             },
           } as any);
@@ -936,12 +935,7 @@ export default function NewsScreen() {
           <Text style={styles.excerpt} numberOfLines={2}>
             {item.excerpt}
           </Text>
-          {safeFormatDate(item.date) !== '' && (
-            <View style={styles.dateContainer}>
-              <Calendar size={14} color={colors.textSecondary} style={{ marginRight: 6 }} />
-              <Text style={styles.date}>{safeFormatDate(item.date)}</Text>
-            </View>
-          )}
+
         </View>
       </TouchableOpacity>
     ),
