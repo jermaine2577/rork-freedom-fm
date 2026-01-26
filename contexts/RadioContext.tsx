@@ -543,7 +543,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           }
           refs.current.isBuffering = true;
           refs.current.lastProgressAt = now;
-          if (refs.current.mounted) setIsLoading(true);
+          const bufferingDuration = now - refs.current.bufferingSince;
+          if (refs.current.mounted && bufferingDuration > 1500) {
+            setIsLoading(true);
+          }
           return;
         }
 
