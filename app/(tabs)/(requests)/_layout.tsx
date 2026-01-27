@@ -15,7 +15,7 @@ function CustomHeader({ title }: { title: string }) {
   const topInset = Math.max(insets.top, androidStatusBar);
 
   return (
-    <View style={[styles.headerContainer, { paddingTop: topInset + 20 }]}>
+    <View style={[styles.headerContainer, { paddingTop: topInset }]}>
       <TouchableOpacity
         style={styles.backButton}
         onPress={() => router.back()}
