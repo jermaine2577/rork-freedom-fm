@@ -610,7 +610,7 @@ export default function ArticleDetailScreen() {
   if (isLoading && !cachedArticle) {
     return (
       <View style={styles.container}>
-        <View style={[styles.topHeader, { paddingTop: insets.top + 70 }]} testID="news-article-top-header-loading">
+        <View style={[styles.topHeader, { paddingTop: insets.top + 8 }]} testID="news-article-top-header-loading">
           <TouchableOpacity
             testID="news-article-back"
             style={styles.topHeaderIconBtn}
@@ -635,7 +635,7 @@ export default function ArticleDetailScreen() {
     const errorMessage = error instanceof Error ? error.message : 'Article not found';
     return (
       <View style={styles.centerContainer}>
-        <View style={[styles.topHeader, { paddingTop: insets.top + 70 }]} testID="news-article-top-header-error">
+        <View style={[styles.topHeader, { paddingTop: insets.top + 8 }]} testID="news-article-top-header-error">
           <TouchableOpacity
             testID="news-article-back"
             style={styles.topHeaderIconBtn}
@@ -662,7 +662,7 @@ export default function ArticleDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.topHeader, { paddingTop: insets.top + 70 }]} testID="news-article-top-header">
+      <View style={[styles.topHeader, { paddingTop: insets.top + 8 }]} testID="news-article-top-header">
         <TouchableOpacity
           testID="news-article-back"
           style={styles.topHeaderIconBtn}
