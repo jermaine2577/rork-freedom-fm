@@ -56,8 +56,7 @@ export default function NewsLayout() {
         <Stack.Screen
           name="[id]"
           options={{
-            header: () => <NewsHeader title="Article" showBack={true} />,
-            headerShown: true,
+            headerShown: false,
           }}
         />
       </Stack>

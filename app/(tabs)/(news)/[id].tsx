@@ -13,7 +13,7 @@ import {
   Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { Tag, AlertCircle, Share2 } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -460,10 +460,6 @@ export default function ArticleDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const webHeaderTopInset = React.useMemo(() => {
-    if (Platform.OS !== 'web') return insets.top;
-    return Math.max(insets.top, 44);
-  }, [insets.top]);
 
   // Get the article from the news list cache
   const getCachedArticle = (): NewsArticle | undefined => {
@@ -614,12 +610,11 @@ export default function ArticleDetailScreen() {
   if (isLoading && !cachedArticle) {
     return (
       <View style={styles.container}>
-        <Stack.Screen
-          options={{
-            title: 'Loading...',
-            headerBackVisible: true,
-          }}
-        />
+        <View style={[styles.inScreenHeader, { paddingTop: insets.top + 12 }]} testID="news-article-title-row-loading">
+          <Text style={styles.inScreenHeaderTitle} numberOfLines={1}>
+            Loading…
+          </Text>
+        </View>
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
           <SkeletonArticle />
         </ScrollView>
@@ -631,19 +626,16 @@ export default function ArticleDetailScreen() {
     const errorMessage = error instanceof Error ? error.message : 'Article not found';
     return (
       <View style={styles.centerContainer}>
-        <Stack.Screen
-          options={{
-            title: 'Error',
-            headerBackVisible: true,
-          }}
-        />
+        <View style={[styles.inScreenHeader, { paddingTop: insets.top + 12 }]} testID="news-article-title-row-error">
+          <Text style={styles.inScreenHeaderTitle} numberOfLines={1}>
+            News
+          </Text>
+        </View>
         <AlertCircle size={48} color={colors.text} />
         <Text style={styles.errorTitle}>Failed to load article</Text>
-        <Text style={styles.errorMessage}>
-          {errorMessage}
-        </Text>
+        <Text style={styles.errorMessage}>{errorMessage}</Text>
         <Text style={[styles.errorMessage, { fontSize: 12, marginTop: 8 }]}>Please go back and try again</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={handleBack}>
+        <TouchableOpacity style={styles.retryButton} onPress={handleBack} testID="news-article-go-back">
           <Text style={styles.retryButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -652,50 +644,19 @@ export default function ArticleDetailScreen() {
 
   return (
     <View style={styles.container}>
-      {Platform.OS === 'web' ? (
-        <View style={[styles.webHeader, { paddingTop: webHeaderTopInset + 8 }]} testID="news-article-web-header">
-          <TouchableOpacity
-            onPress={handleBack}
-            style={styles.webHeaderIconBtn}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            testID="news-article-web-back"
-          >
-            <Text style={styles.webHeaderIconText}>‹</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.webHeaderTitle} numberOfLines={1}>
-            {displayArticle.title}
-          </Text>
-
-          <TouchableOpacity
-            onPress={handleShare}
-            style={styles.webHeaderIconBtn}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            testID="news-article-web-share"
-          >
-            <Share2 size={20} color={colors.text} />
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <Stack.Screen
-          options={{
-            title: displayArticle.title.length > 25 
-              ? displayArticle.title.substring(0, 25) + '...' 
-              : displayArticle.title,
-            headerBackVisible: true,
-            headerRight: () => (
-              <TouchableOpacity
-                onPress={handleShare}
-                style={styles.shareButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                testID="news-article-share"
-              >
-                <Share2 size={24} color={colors.text} />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-      )}
+      <View style={[styles.inScreenHeader, { paddingTop: insets.top + 12 }]} testID="news-article-title-row">
+        <Text style={styles.inScreenHeaderTitle} numberOfLines={2}>
+          {displayArticle.title}
+        </Text>
+        <TouchableOpacity
+          onPress={handleShare}
+          style={styles.inScreenHeaderAction}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          testID="news-article-share"
+        >
+          <Share2 size={20} color={colors.text} />
+        </TouchableOpacity>
+      </View>
 
       {isLoading && (
         <View style={styles.loadingBanner}>
@@ -716,9 +677,6 @@ export default function ArticleDetailScreen() {
             <Text style={styles.categoryText}>{displayArticle.category}</Text>
           </View>
         )}
-
-        <Text style={styles.title}>{displayArticle.title}</Text>
-
 
         <View style={styles.divider} />
 
@@ -840,6 +798,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: colors.text,
+  },
+  inScreenHeader: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: '#121212',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 12,
+  },
+  inScreenHeaderTitle: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '800' as const,
+    lineHeight: 22,
+    letterSpacing: 0.2,
+  },
+  inScreenHeaderAction: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   shareButton: {
     padding: 8,
