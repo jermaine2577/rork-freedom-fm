@@ -1,8 +1,7 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import React from 'react';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import colors from '@/constants/colors';
 
