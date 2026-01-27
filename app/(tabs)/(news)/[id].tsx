@@ -15,7 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import { Tag, AlertCircle, Share2 } from 'lucide-react-native';
+import { Tag, AlertCircle, Share2, ChevronLeft } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import colors from '@/constants/colors';
 import { NewsArticle } from '@/types';
@@ -610,10 +610,19 @@ export default function ArticleDetailScreen() {
   if (isLoading && !cachedArticle) {
     return (
       <View style={styles.container}>
-        <View style={[styles.inScreenHeader, { paddingTop: insets.top + 12 }]} testID="news-article-title-row-loading">
-          <Text style={styles.inScreenHeaderTitle} numberOfLines={1}>
+        <View style={[styles.topHeader, { paddingTop: insets.top + 70 }]} testID="news-article-top-header-loading">
+          <TouchableOpacity
+            testID="news-article-back"
+            style={styles.topHeaderIconBtn}
+            onPress={handleBack}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <ChevronLeft size={28} color={colors.text} />
+          </TouchableOpacity>
+          <Text testID="news-article-top-title" style={styles.topHeaderTitle} numberOfLines={1}>
             Loading…
           </Text>
+          <View style={styles.topHeaderSide} />
         </View>
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
           <SkeletonArticle />
@@ -626,10 +635,19 @@ export default function ArticleDetailScreen() {
     const errorMessage = error instanceof Error ? error.message : 'Article not found';
     return (
       <View style={styles.centerContainer}>
-        <View style={[styles.inScreenHeader, { paddingTop: insets.top + 12 }]} testID="news-article-title-row-error">
-          <Text style={styles.inScreenHeaderTitle} numberOfLines={1}>
+        <View style={[styles.topHeader, { paddingTop: insets.top + 70 }]} testID="news-article-top-header-error">
+          <TouchableOpacity
+            testID="news-article-back"
+            style={styles.topHeaderIconBtn}
+            onPress={handleBack}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <ChevronLeft size={28} color={colors.text} />
+          </TouchableOpacity>
+          <Text testID="news-article-top-title" style={styles.topHeaderTitle} numberOfLines={1}>
             News
           </Text>
+          <View style={styles.topHeaderSide} />
         </View>
         <AlertCircle size={48} color={colors.text} />
         <Text style={styles.errorTitle}>Failed to load article</Text>
@@ -644,13 +662,21 @@ export default function ArticleDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.inScreenHeader, { paddingTop: insets.top + 12 }]} testID="news-article-title-row">
-        <Text style={styles.inScreenHeaderTitle} numberOfLines={2}>
+      <View style={[styles.topHeader, { paddingTop: insets.top + 70 }]} testID="news-article-top-header">
+        <TouchableOpacity
+          testID="news-article-back"
+          style={styles.topHeaderIconBtn}
+          onPress={handleBack}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <ChevronLeft size={28} color={colors.text} />
+        </TouchableOpacity>
+        <Text testID="news-article-top-title" style={styles.topHeaderTitle} numberOfLines={1}>
           {displayArticle.title}
         </Text>
         <TouchableOpacity
           onPress={handleShare}
-          style={styles.inScreenHeaderAction}
+          style={[styles.topHeaderIconBtn, { alignItems: 'flex-end' }]}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           testID="news-article-share"
         >
@@ -799,31 +825,33 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: colors.text,
   },
-  inScreenHeader: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+  topHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#121212',
+    paddingHorizontal: 16,
+    paddingBottom: 18,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.08)',
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 12,
   },
-  inScreenHeaderTitle: {
+  topHeaderIconBtn: {
+    width: 40,
+    height: 36,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  topHeaderSide: {
+    width: 40,
+    height: 36,
+  },
+  topHeaderTitle: {
     flex: 1,
     color: colors.text,
-    fontSize: 18,
-    fontWeight: '800' as const,
-    lineHeight: 22,
-    letterSpacing: 0.2,
-  },
-  inScreenHeaderAction: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    fontSize: 17,
+    fontWeight: '700' as const,
+    textAlign: 'center',
+    marginHorizontal: 8,
   },
   shareButton: {
     padding: 8,
