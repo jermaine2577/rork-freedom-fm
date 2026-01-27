@@ -1,20 +1,15 @@
 import React from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
-import { Platform, StatusBar as RNStatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
 import colors from '@/constants/colors';
 
 function NewsHeader({ title, showBack }: { title: string; showBack: boolean }) {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const androidStatusBar = Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 0) : 0;
-  const topInset = Math.max(insets.top, androidStatusBar);
-
   return (
-    <View style={[styles.headerContainer, { paddingTop: topInset }]}>
+    <View style={styles.headerContainer}>
       {showBack ? (
         <TouchableOpacity
           testID="news-header-back"
@@ -74,6 +69,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#121212',
     paddingHorizontal: 16,
+    paddingTop: 10,
     paddingBottom: 12,
     minHeight: 52,
   },
