@@ -14,7 +14,7 @@ function NewsHeader({ title, showBack }: { title: string; showBack: boolean }) {
   const topInset = Math.max(insets.top, androidStatusBar);
 
   return (
-    <View style={[styles.headerContainer, { paddingTop: topInset + 6 }]}>
+    <View style={[styles.headerContainer, { paddingTop: topInset + 20 }]}>
       {showBack ? (
         <TouchableOpacity
           testID="news-header-back"
