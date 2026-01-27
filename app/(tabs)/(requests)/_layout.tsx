@@ -11,7 +11,7 @@ function CustomHeader({ title }: { title: string }) {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.headerContainer, { paddingTop: insets.top + 10 }]}>
+    <View style={[styles.headerContainer, { paddingTop: insets.top + 35 }]}>
       <TouchableOpacity
         style={styles.backButton}
         onPress={() => router.back()}
