@@ -11,7 +11,7 @@ function NewsHeader({ title, showBack }: { title: string; showBack: boolean }) {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.headerContainer, { paddingTop: insets.top + 35 }]}>
+    <View style={[styles.headerContainer, { paddingTop: insets.top + 8 }]}>
       {showBack ? (
         <TouchableOpacity
           testID="news-header-back"
