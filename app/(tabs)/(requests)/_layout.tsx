@@ -11,7 +11,7 @@ function CustomHeader({ title }: { title: string }) {
   const router = useRouter();
 
   return (
-    <View style={[styles.headerContainer, { paddingTop: insets.top }]}>
+    <View style={[styles.headerContainer, { paddingTop: Math.max(insets.top - 6, 8) }]}>
       <TouchableOpacity
         style={styles.backButton}
         onPress={() => router.back()}
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#000000',
     paddingHorizontal: 16,
-    paddingBottom: 18,
+    paddingBottom: 12,
   },
   backButton: {
     width: 40,

@@ -11,7 +11,7 @@ function NewsHeader({ title, showBack }: { title: string; showBack: boolean }) {
   const router = useRouter();
 
   return (
-    <View style={[styles.headerContainer, { paddingTop: insets.top }]}>
+    <View style={[styles.headerContainer, { paddingTop: Math.max(insets.top - 6, 8) }]}>
       {showBack ? (
         <TouchableOpacity
           testID="news-header-back"
@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#121212',
     paddingHorizontal: 16,
-    paddingBottom: 18,
+    paddingBottom: 12,
   },
   backButton: {
     width: 40,
