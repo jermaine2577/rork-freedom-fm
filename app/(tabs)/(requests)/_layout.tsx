@@ -5,17 +5,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '@/constants/colors';
 
 export default function RequestsLayout() {
-  const insets = useSafeAreaInsets();
-  const extraDrop = Platform.OS === 'web' ? 28 : 20;
-  const headerStatusBarHeight = Math.max(insets.top + extraDrop, extraDrop);
-
   return (
     <Stack
       screenOptions={{
-        headerStatusBarHeight,
         headerTitleAlign: 'center',
         statusBarStyle: 'light',
-        statusBarTranslucent: false,
         headerStyle: {
           backgroundColor: '#000000',
         },
