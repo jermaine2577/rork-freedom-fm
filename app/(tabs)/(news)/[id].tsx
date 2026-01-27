@@ -460,7 +460,7 @@ export default function ArticleDetailScreen() {
   const insets = useSafeAreaInsets();
   const androidStatusBar = Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 0) : 0;
   const topInset = Math.max(insets.top, androidStatusBar);
-  const headerPadTop = Platform.OS === 'ios' ? topInset + 12 : topInset + 56;
+  const headerPadTop = topInset + 12;
   const router = useRouter();
   const queryClient = useQueryClient();
 
