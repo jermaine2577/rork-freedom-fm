@@ -1,30 +1,46 @@
-import React, { useMemo } from 'react';
-import { Stack } from 'expo-router';
+import React from 'react';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Platform } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChevronLeft } from 'lucide-react-native';
 import colors from '@/constants/colors';
 
-export default function NewsLayout() {
+function NewsHeader({ title, showBack }: { title: string; showBack: boolean }) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
 
+  return (
+    <View style={[styles.headerContainer, { paddingTop: insets.top + 52 }]}>
+      {showBack ? (
+        <TouchableOpacity
+          testID="news-header-back"
+          style={styles.backButton}
+          onPress={() => router.back()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <ChevronLeft size={28} color={colors.text} />
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.headerSide} />
+      )}
 
+      <Text testID="news-header-title" style={styles.headerTitle} numberOfLines={1}>
+        {title}
+      </Text>
+
+      <View style={styles.headerSide} />
+    </View>
+  );
+}
+
+export default function NewsLayout() {
   return (
     <>
       <StatusBar style="light" />
       <Stack
         screenOptions={{
-
-          headerStyle: {
-            backgroundColor: '#121212',
-          },
-          headerTintColor: colors.text,
-          headerShadowVisible: false,
-          headerTitleAlign: 'center',
-          headerTitleStyle: {
-            fontWeight: '700',
-            fontSize: 17,
-          },
+          headerShown: false,
           contentStyle: {
             backgroundColor: '#121212',
           },
@@ -33,18 +49,45 @@ export default function NewsLayout() {
         <Stack.Screen
           name="news"
           options={{
-            title: 'News Headlines',
+            header: () => <NewsHeader title="News" showBack={false} />,
+            headerShown: true,
           }}
         />
         <Stack.Screen
           name="[id]"
           options={{
-            title: 'Article',
-            headerBackTitle: 'Back',
-            headerShown: Platform.OS !== 'web',
+            header: () => <NewsHeader title="Article" showBack={true} />,
+            headerShown: true,
           }}
         />
       </Stack>
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#121212',
+    paddingHorizontal: 16,
+    paddingBottom: 18,
+  },
+  backButton: {
+    width: 40,
+    height: 36,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  headerSide: {
+    width: 40,
+  },
+  headerTitle: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '700' as const,
+    textAlign: 'center',
+  },
+});
