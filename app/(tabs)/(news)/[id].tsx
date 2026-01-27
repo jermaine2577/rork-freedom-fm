@@ -11,6 +11,7 @@ import {
   Platform,
   Alert,
   Animated,
+  StatusBar as RNStatusBar,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -457,6 +458,9 @@ export default function ArticleDetailScreen() {
   }>();
   const id = params?.id;
   const insets = useSafeAreaInsets();
+  const androidStatusBar = Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 0) : 0;
+  const topInset = Math.max(insets.top, androidStatusBar);
+  const headerPadTop = topInset + 6;
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -610,7 +614,7 @@ export default function ArticleDetailScreen() {
   if (isLoading && !cachedArticle) {
     return (
       <View style={styles.container}>
-        <View style={[styles.topHeader, { paddingTop: insets.top + 8 }]} testID="news-article-top-header-loading">
+        <View style={[styles.topHeader, { paddingTop: headerPadTop }]} testID="news-article-top-header-loading">
           <TouchableOpacity
             testID="news-article-back"
             style={styles.topHeaderIconBtn}
@@ -635,7 +639,7 @@ export default function ArticleDetailScreen() {
     const errorMessage = error instanceof Error ? error.message : 'Article not found';
     return (
       <View style={styles.centerContainer}>
-        <View style={[styles.topHeader, { paddingTop: insets.top + 8 }]} testID="news-article-top-header-error">
+        <View style={[styles.topHeader, { paddingTop: headerPadTop }]} testID="news-article-top-header-error">
           <TouchableOpacity
             testID="news-article-back"
             style={styles.topHeaderIconBtn}
@@ -662,7 +666,7 @@ export default function ArticleDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.topHeader, { paddingTop: insets.top + 8 }]} testID="news-article-top-header">
+      <View style={[styles.topHeader, { paddingTop: headerPadTop }]} testID="news-article-top-header">
         <TouchableOpacity
           testID="news-article-back"
           style={styles.topHeaderIconBtn}
@@ -832,6 +836,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#121212',
     paddingHorizontal: 16,
     paddingBottom: 18,
+    minHeight: 52,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.08)',
   },

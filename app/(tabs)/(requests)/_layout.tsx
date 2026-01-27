@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+import { Platform, StatusBar as RNStatusBar, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
@@ -10,8 +11,11 @@ function CustomHeader({ title }: { title: string }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
+  const androidStatusBar = Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 0) : 0;
+  const topInset = Math.max(insets.top, androidStatusBar);
+
   return (
-    <View style={[styles.headerContainer, { paddingTop: insets.top + 8 }]}>
+    <View style={[styles.headerContainer, { paddingTop: topInset + 6 }]}>
       <TouchableOpacity
         style={styles.backButton}
         onPress={() => router.back()}
@@ -27,7 +31,9 @@ function CustomHeader({ title }: { title: string }) {
 
 export default function RequestsLayout() {
   return (
-    <Stack
+    <>
+      <ExpoStatusBar style="light" translucent={false} backgroundColor="#000000" />
+      <Stack
       screenOptions={{
         headerShown: false,
         statusBarStyle: 'light',
@@ -71,6 +77,7 @@ export default function RequestsLayout() {
         }}
       />
     </Stack>
+    </>
   );
 }
 
@@ -82,6 +89,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
     paddingHorizontal: 16,
     paddingBottom: 12,
+    minHeight: 52,
   },
   backButton: {
     width: 40,

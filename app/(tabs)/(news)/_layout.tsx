@@ -1,7 +1,7 @@
 import React from 'react';
 import { Stack, useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+import { Platform, StatusBar as RNStatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
 import colors from '@/constants/colors';
@@ -10,8 +10,11 @@ function NewsHeader({ title, showBack }: { title: string; showBack: boolean }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
+  const androidStatusBar = Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 0) : 0;
+  const topInset = Math.max(insets.top, androidStatusBar);
+
   return (
-    <View style={[styles.headerContainer, { paddingTop: insets.top + 8 }]}>
+    <View style={[styles.headerContainer, { paddingTop: topInset + 6 }]}>
       {showBack ? (
         <TouchableOpacity
           testID="news-header-back"
@@ -37,7 +40,7 @@ function NewsHeader({ title, showBack }: { title: string; showBack: boolean }) {
 export default function NewsLayout() {
   return (
     <>
-      <StatusBar style="light" />
+      <ExpoStatusBar style="light" translucent={false} backgroundColor="#121212" />
       <Stack
         screenOptions={{
           headerShown: false,
@@ -72,6 +75,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#121212',
     paddingHorizontal: 16,
     paddingBottom: 12,
+    minHeight: 52,
   },
   backButton: {
     width: 40,
