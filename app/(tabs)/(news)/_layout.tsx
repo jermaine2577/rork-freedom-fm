@@ -33,7 +33,7 @@ export default function NewsLayout() {
         <Stack.Screen
           name="news"
           options={{
-            title: 'News',
+            title: 'News Headlines',
           }}
         />
         <Stack.Screen
