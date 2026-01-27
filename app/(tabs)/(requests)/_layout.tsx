@@ -11,7 +11,7 @@ function CustomHeader({ title }: { title: string }) {
   const router = useRouter();
 
   return (
-    <View style={[styles.headerContainer, { paddingTop: insets.top + 8 }]}>
+    <View style={[styles.headerContainer, { paddingTop: insets.top }]}>
       <TouchableOpacity
         style={styles.backButton}
         onPress={() => router.back()}
