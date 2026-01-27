@@ -12,7 +12,6 @@ export default function RequestsLayout() {
   return (
     <Stack
       screenOptions={{
-        headerTopInsetEnabled: false,
         headerStatusBarHeight,
         headerTitleAlign: 'center',
         statusBarStyle: 'light',
