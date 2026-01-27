@@ -1,28 +1,36 @@
 import { Stack } from 'expo-router';
 import React from 'react';
-import { Platform } from 'react-native';
+import { Platform, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { ChevronLeft } from 'lucide-react-native';
 import colors from '@/constants/colors';
+
+function CustomHeader({ title }: { title: string }) {
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+
+  return (
+    <View style={[styles.headerContainer, { paddingTop: insets.top + 10 }]}>
+      <TouchableOpacity 
+        style={styles.backButton} 
+        onPress={() => router.back()}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <ChevronLeft size={28} color={colors.text} />
+      </TouchableOpacity>
+      <Text style={styles.headerTitle}>{title}</Text>
+      <View style={styles.headerRight} />
+    </View>
+  );
+}
 
 export default function RequestsLayout() {
   return (
     <Stack
       screenOptions={{
-        headerTitleAlign: 'center',
+        headerShown: false,
         statusBarStyle: 'light',
-        headerStyle: {
-          backgroundColor: '#000000',
-        },
-        headerTitleStyle: {
-          color: colors.text,
-          fontWeight: '700' as const,
-          fontSize: 17,
-        },
-        headerTransparent: false,
-        headerTintColor: colors.text,
-        headerShadowVisible: false,
-        headerBackTitle: 'Back',
-        headerBackTitleVisible: false,
         contentStyle: {
           backgroundColor: '#000000',
         },
@@ -37,27 +45,56 @@ export default function RequestsLayout() {
       <Stack.Screen
         name="song-request"
         options={{
-          title: 'Song Request',
+          header: () => <CustomHeader title="Song Request" />,
+          headerShown: true,
         }}
       />
       <Stack.Screen
         name="birthday-request"
         options={{
-          title: 'Birthday Request',
+          header: () => <CustomHeader title="Birthday Request" />,
+          headerShown: true,
         }}
       />
       <Stack.Screen
         name="birthday-list"
         options={{
-          title: 'Birthday List',
+          header: () => <CustomHeader title="Birthday List" />,
+          headerShown: true,
         }}
       />
       <Stack.Screen
         name="anniversary"
         options={{
-          title: 'Anniversary',
+          header: () => <CustomHeader title="Anniversary" />,
+          headerShown: true,
         }}
       />
     </Stack>
   );
 }
+
+const styles = StyleSheet.create({
+  headerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#000000',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  backButton: {
+    width: 40,
+    alignItems: 'flex-start',
+  },
+  headerTitle: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '700' as const,
+    textAlign: 'center',
+  },
+  headerRight: {
+    width: 40,
+  },
+});
