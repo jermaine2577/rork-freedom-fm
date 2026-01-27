@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import React from 'react';
-import { Platform, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
@@ -11,11 +11,11 @@ function CustomHeader({ title }: { title: string }) {
   const router = useRouter();
 
   return (
-    <View style={[styles.headerContainer, { paddingTop: insets.top + 10 }]}>
-      <TouchableOpacity 
-        style={styles.backButton} 
+    <View style={[styles.headerContainer, { paddingTop: insets.top + 22 }]}>
+      <TouchableOpacity
+        style={styles.backButton}
         onPress={() => router.back()}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
       >
         <ChevronLeft size={28} color={colors.text} />
       </TouchableOpacity>
@@ -81,11 +81,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#000000',
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 14,
   },
   backButton: {
     width: 40,
+    height: 36,
     alignItems: 'flex-start',
+    justifyContent: 'center',
   },
   headerTitle: {
     flex: 1,
