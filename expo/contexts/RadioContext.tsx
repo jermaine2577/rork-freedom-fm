@@ -1243,4 +1243,3 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     [changeVolume, error, fetchNowPlaying, forceReset, isLoading, isPlaying, listenerCount, nowPlaying, pause, play, stop, toggle, volume]
   );
 });
-});
