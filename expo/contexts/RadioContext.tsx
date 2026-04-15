@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
-import { AppState, AppStateStatus, Platform } from 'react-native';
+import { AppState, AppStateStatus, Platform, NativeEventEmitter, NativeModules } from 'react-native';
 
 const STREAM_URL = 'https://castpanel.freedomfm1065.com/hls/freedom_fm_106.5/live.m3u8';
 const NOW_PLAYING_API = 'https://castpanel.freedomfm1065.com/api/nowplaying/freedom_fm_106.5';
@@ -166,6 +166,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     }
   }, []);
 
+  useEffect(() => {
+    if (refs.current.isPlaying && nowPlaying) {
+      updateNowPlayingInfo(true);
+    }
+  }, [nowPlaying, updateNowPlayingInfo]);
+
   const startListenerPolling = useCallback(() => {
     if (listenerPollRef.current) return;
     fetchNowPlaying();
@@ -297,6 +303,40 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       return false;
     }
   }, []);
+
+  const updateNowPlayingInfo = useCallback(async (playing: boolean) => {
+    if (Platform.OS === 'web') return;
+    
+    const currentSong = nowPlaying?.now_playing?.song;
+    const stationName = nowPlaying?.station?.name || 'Freedom FM 106.5';
+    
+    try {
+      const metadata = {
+        title: playing ? (currentSong?.title || 'Live Stream') : 'Freedom FM 106.5',
+        artist: playing ? (currentSong?.artist || 'Freedom FM') : 'Tap Play to Listen',
+        artwork: currentSong?.art || undefined,
+        album: stationName,
+      };
+
+      if (Platform.OS === 'ios') {
+        const ExpoMusicPicker = NativeModules.ExponentMusicPicker;
+        if (ExpoMusicPicker?.updateNowPlaying) {
+          await ExpoMusicPicker.updateNowPlaying(metadata);
+        }
+      }
+      
+      if (Platform.OS === 'android') {
+        const { ExponentAV } = NativeModules;
+        if (ExponentAV?.setNowPlayingInfo) {
+          await ExponentAV.setNowPlayingInfo(metadata);
+        }
+      }
+      
+      console.log('[Radio] Updated now playing info:', metadata);
+    } catch (e) {
+      console.warn('[Radio] Failed to update now playing info:', e);
+    }
+  }, [nowPlaying]);
 
   const buildStreamUri = useCallback((): string => {
     const shouldBustCache = refs.current.retryCount > 0 || refs.current.consecutiveErrors > 0;
@@ -550,6 +590,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             setIsLoading(false);
             setError(null);
           }
+          updateNowPlayingInfo(true);
           return;
         }
 
@@ -571,6 +612,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         refs.current.bufferingSince = 0;
         if (refs.current.lastNonPlayingAt === 0) refs.current.lastNonPlayingAt = now;
         if (refs.current.mounted) setIsPlaying(false);
+        updateNowPlayingInfo(false);
 
         const shouldAutoResume =
           refs.current.desiredPlaying &&
@@ -900,6 +942,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         setError(null);
       }
 
+      updateNowPlayingInfo(false);
       await cleanupPlayer();
     } catch (e) {
       console.error('[Radio] Pause failed:', e);
@@ -911,7 +954,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         setIsLoading(false);
       }
     }
-  }, [cleanupPlayer]);
+  }, [cleanupPlayer, updateNowPlayingInfo]);
 
   const toggle = useCallback(async (): Promise<void> => {
     console.log('[Radio] Toggle called', {
@@ -958,13 +1001,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         setError(null);
       }
 
+      updateNowPlayingInfo(false);
       await cleanupPlayer();
     } catch (e) {
       console.error('[Radio] Stop failed:', e);
       refs.current.isPlaying = false;
       if (refs.current.mounted) setIsPlaying(false);
     }
-  }, [cleanupPlayer]);
+  }, [cleanupPlayer, updateNowPlayingInfo]);
 
   const changeVolume = useCallback(async (newVolume: number): Promise<void> => {
     try {
@@ -1001,6 +1045,56 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       })
       .catch((e) => console.warn('[Radio] Initial audio mode setup failed:', e));
   }, [configureAudioMode]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    let remoteControlSubscription: { remove: () => void } | null = null;
+
+    const setupRemoteControls = async () => {
+      try {
+        const { ExponentAV } = NativeModules;
+        if (!ExponentAV) return;
+
+        const eventEmitter = new NativeEventEmitter(ExponentAV);
+        
+        remoteControlSubscription = eventEmitter.addListener('onRemoteControl', (event: { type: string }) => {
+          console.log('[Radio] Remote control event:', event.type);
+          
+          switch (event.type) {
+            case 'play':
+              if (!refs.current.isPlaying) {
+                play();
+              }
+              break;
+            case 'pause':
+              if (refs.current.isPlaying) {
+                pause();
+              }
+              break;
+            case 'togglePlayPause':
+              toggle();
+              break;
+            case 'stop':
+              stop();
+              break;
+            default:
+              break;
+          }
+        }) as unknown as { remove: () => void };
+
+        console.log('[Radio] Remote controls setup complete');
+      } catch (e) {
+        console.warn('[Radio] Failed to setup remote controls:', e);
+      }
+    };
+
+    setupRemoteControls();
+
+    return () => {
+      remoteControlSubscription?.remove?.();
+    };
+  }, [pause, play, stop, toggle]);
 
   useEffect(() => {
     refs.current.mounted = true;
@@ -1148,4 +1242,5 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     }),
     [changeVolume, error, fetchNowPlaying, forceReset, isLoading, isPlaying, listenerCount, nowPlaying, pause, play, stop, toggle, volume]
   );
+});
 });
