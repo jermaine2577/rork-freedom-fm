@@ -166,12 +166,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     }
   }, []);
 
-  useEffect(() => {
-    if (refs.current.isPlaying && nowPlaying) {
-      updateNowPlayingInfo(true);
-    }
-  }, [nowPlaying, updateNowPlayingInfo]);
-
   const startListenerPolling = useCallback(() => {
     if (listenerPollRef.current) return;
     fetchNowPlaying();
@@ -337,6 +331,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       console.warn('[Radio] Failed to update now playing info:', e);
     }
   }, [nowPlaying]);
+
+  useEffect(() => {
+    if (refs.current.isPlaying && nowPlaying) {
+      updateNowPlayingInfo(true);
+    }
+  }, [nowPlaying, updateNowPlayingInfo]);
 
   const buildStreamUri = useCallback((): string => {
     const shouldBustCache = refs.current.retryCount > 0 || refs.current.consecutiveErrors > 0;
