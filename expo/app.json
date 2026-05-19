@@ -30,7 +30,10 @@
       },
       "package": "app.rork.radio_news_hub_app",
       "permissions": [
-        "RECORD_AUDIO"
+        "RECORD_AUDIO",
+        "WAKE_LOCK",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ]
     },
     "web": {
