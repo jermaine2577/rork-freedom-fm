@@ -112,14 +112,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   }, []);
 
   const buildMetadata = useCallback(() => {
-    const song = nowPlaying?.now_playing?.song;
-    const station = nowPlaying?.station?.name ?? 'Freedom FM 106.5';
     return {
-      title: song?.title?.trim() ? song.title : 'Freedom FM 106.5',
-      artist: song?.artist?.trim() ? song.artist : station,
-      artwork: song?.art ?? undefined,
+      title: 'Freedom FM 106.5',
+      artist: 'Freedom FM 106.5',
+      artwork: undefined as string | undefined,
     };
-  }, [nowPlaying]);
+  }, []);
 
   const configureAudioMode = useCallback(async () => {
     if (Platform.OS === 'web') return;
