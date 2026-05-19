@@ -54,7 +54,15 @@
           "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone"
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-video",
+        {
+          "supportsBackgroundPlayback": true,
+          "supportsPictureInPicture": false
+        }
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true
