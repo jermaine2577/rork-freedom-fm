@@ -116,13 +116,30 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     }
   }, []);
 
-  const buildMetadata = useCallback(() => {
-    return {
-      title: 'Freedom FM 106.5',
-      artist: 'Freedom FM 106.5',
-      artwork: ARTWORK_URI,
-    };
+  /**
+   * Builds the lock-screen / notification metadata.
+   * Title is the first five words of the currently-playing article
+   * (the song title from the now-playing feed) followed by an ellipsis.
+   * Falls back to the station name when no article is available.
+   */
+  const buildTitle = useCallback((data: NowPlayingData | null): string => {
+    const raw = data?.now_playing?.song?.title?.trim();
+    if (!raw) return 'Freedom FM 106.5';
+    const words = raw.split(/\s+/).filter(Boolean);
+    if (words.length <= 5) return raw;
+    return `${words.slice(0, 5).join(' ')}\u2026`;
   }, []);
+
+  const buildMetadata = useCallback(
+    (data: NowPlayingData | null) => {
+      return {
+        title: buildTitle(data),
+        artist: 'Freedom FM 106.5',
+        artwork: ARTWORK_URI,
+      };
+    },
+    [buildTitle]
+  );
 
   const configureAudioMode = useCallback(async () => {
     if (Platform.OS === 'web') return;
@@ -194,7 +211,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       const ms = (navigator as unknown as { mediaSession?: MediaSession }).mediaSession;
       if (!ms) return;
       try {
-        const meta = buildMetadata();
+        const meta = buildMetadata(nowPlaying);
         const MM = (globalThis as unknown as { MediaMetadata?: typeof MediaMetadata }).MediaMetadata;
         if (MM) {
           ms.metadata = new MM({
@@ -277,7 +294,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     setIsLoading(true);
     setError(null);
 
-    const meta = buildMetadata();
+    const meta = buildMetadata(nowPlaying);
     const source: any = {
       uri: STREAM_URL,
       metadata: {
@@ -482,12 +499,46 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   }, [configureAudioMode]);
 
   // Keep web MediaSession metadata in sync with playback state.
-  // Native metadata is static ("Freedom FM 106.5"), so we never call player.replace()
-  // here — doing so on every now-playing poll causes the stream to re-buffer.
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     if (refs.current.webAudio) updateMediaSessionWeb(isPlaying);
   }, [isPlaying, nowPlaying, updateMediaSessionWeb]);
+
+  // On native, refresh the lock-screen title when the article changes.
+  // We only call replaceAsync when the truncated title actually changes so
+  // we don't re-buffer the stream on every now-playing poll.
+  const lastNativeTitleRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const player = refs.current.player;
+    if (!player) {
+      lastNativeTitleRef.current = null;
+      return;
+    }
+    const meta = buildMetadata(nowPlaying);
+    if (lastNativeTitleRef.current === meta.title) return;
+    lastNativeTitleRef.current = meta.title;
+    const source: any = {
+      uri: STREAM_URL,
+      metadata: {
+        title: meta.title,
+        artist: meta.artist,
+        artwork: meta.artwork,
+      },
+    };
+    try {
+      const replaceAsync = (player as any).replaceAsync;
+      if (typeof replaceAsync === 'function') {
+        replaceAsync.call(player, source).catch((e: unknown) => {
+          console.warn('[Radio] replaceAsync failed:', e);
+        });
+      } else {
+        (player as any).replace?.(source);
+      }
+    } catch (e) {
+      console.warn('[Radio] update metadata failed:', e);
+    }
+  }, [buildMetadata, nowPlaying]);
 
   // Set up MediaSession action handlers on web for lock screen controls
   useEffect(() => {
