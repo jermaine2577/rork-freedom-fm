@@ -61,8 +61,7 @@
           "supportsBackgroundPlayback": true,
           "supportsPictureInPicture": false
         }
-      ],
-      "expo-video"
+      ]
     ],
     "experiments": {
       "typedRoutes": true
