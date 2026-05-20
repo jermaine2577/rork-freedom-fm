@@ -379,12 +379,49 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     if (Platform.OS === 'web') {
       await playWeb();
     } else {
+      // If we already have a player (e.g. paused via notification/lockscreen),
+      // just resume it so we don't tear down the foreground service.
+      const existing = refs.current.player;
+      if (existing) {
+        try {
+          setIsLoading(true);
+          setError(null);
+          existing.play();
+          return;
+        } catch (e) {
+          console.warn('[Radio] resume failed, recreating player:', e);
+        }
+      }
       await playNative();
     }
   }, [playNative, playWeb]);
 
   const pause = useCallback(async () => {
     console.log('[Radio] Pause requested');
+    refs.current.desiredPlaying = false;
+
+    if (Platform.OS === 'web') {
+      cleanupWebAudio();
+      updateMediaSessionWeb(false);
+    } else {
+      // Keep the player alive so the MediaSession / foreground notification
+      // stays visible with a Play control. Only release on stop / unmount.
+      try {
+        refs.current.player?.pause();
+      } catch (e) {
+        console.warn('[Radio] player.pause() failed:', e);
+      }
+    }
+
+    if (refs.current.mounted) {
+      setIsPlaying(false);
+      setIsLoading(false);
+      setError(null);
+    }
+  }, [cleanupWebAudio, updateMediaSessionWeb]);
+
+  const stop = useCallback(async () => {
+    console.log('[Radio] Stop requested');
     refs.current.desiredPlaying = false;
 
     if (Platform.OS === 'web') {
@@ -400,10 +437,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       setError(null);
     }
   }, [cleanupWebAudio, disposePlayer, updateMediaSessionWeb]);
-
-  const stop = useCallback(async () => {
-    await pause();
-  }, [pause]);
 
   const forceReset = useCallback(async () => {
     console.log('[Radio] Force reset');
