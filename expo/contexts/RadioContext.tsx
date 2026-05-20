@@ -443,37 +443,13 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     configureAudioMode();
   }, [configureAudioMode]);
 
-  // Refresh metadata on the active player whenever nowPlaying changes
+  // Keep web MediaSession metadata in sync with playback state.
+  // Native metadata is static ("Freedom FM 106.5"), so we never call player.replace()
+  // here — doing so on every now-playing poll causes the stream to re-buffer.
   useEffect(() => {
-    if (!nowPlaying) return;
-
-    if (Platform.OS === 'web') {
-      if (refs.current.webAudio) updateMediaSessionWeb(isPlaying);
-      return;
-    }
-
-    const player = refs.current.player;
-    if (!player) return;
-
-    const meta = buildMetadata();
-    try {
-      const newSource: any = {
-        uri: STREAM_URL,
-        metadata: {
-          title: meta.title,
-          artist: meta.artist,
-          artwork: meta.artwork,
-        },
-      };
-      // Replace updates the now-playing metadata without re-buffering noticeably
-      // Only call if currently playing to avoid recreating idle state
-      if (isPlaying) {
-        (player as any).replace?.(newSource);
-      }
-    } catch (e) {
-      console.warn('[Radio] Metadata refresh failed:', e);
-    }
-  }, [buildMetadata, isPlaying, nowPlaying, updateMediaSessionWeb]);
+    if (Platform.OS !== 'web') return;
+    if (refs.current.webAudio) updateMediaSessionWeb(isPlaying);
+  }, [isPlaying, nowPlaying, updateMediaSessionWeb]);
 
   // Set up MediaSession action handlers on web for lock screen controls
   useEffect(() => {
