@@ -867,13 +867,40 @@ export default function ArticleDetailScreen() {
           </View>
         )}
 
+        <Text style={styles.title} testID="news-article-title">
+          {decodeHtmlEntities(displayArticle.title ?? '')}
+        </Text>
+
+        {!!displayArticle.date && (
+          <View style={styles.dateContainer}>
+            <Text style={styles.date}>{safeFormatLongDate(displayArticle.date)}</Text>
+          </View>
+        )}
+
         <View style={styles.divider} />
 
-        <Text style={styles.body}>
-          {(article?.content || displayArticle.content) 
-            ? cleanHtmlContent(article?.content || displayArticle.content || '') 
-            : displayArticle.excerpt}
-        </Text>
+        {(() => {
+          const rawContent = article?.content || displayArticle.content || '';
+          const cleaned = rawContent ? cleanHtmlContent(rawContent) : '';
+          const title = (displayArticle.title ?? '').trim();
+          const excerptRaw = decodeHtmlEntities(displayArticle.excerpt ?? '').trim();
+          // If we have real article content, render it. Otherwise show the excerpt,
+          // but only when the excerpt is meaningfully different from the title.
+          if (cleaned && cleaned.length > 40) {
+            return <Text style={styles.body}>{cleaned}</Text>;
+          }
+          if (excerptRaw && excerptRaw !== title) {
+            return <Text style={styles.body}>{excerptRaw}</Text>;
+          }
+          if (isLoading) {
+            return <Text style={styles.body}>Loading article…</Text>;
+          }
+          return (
+            <Text style={styles.body}>
+              The full article couldn't be loaded right now. Pull down to refresh, or open it on the website.
+            </Text>
+          );
+        })()}
       </View>
       </ScrollView>
     </View>
