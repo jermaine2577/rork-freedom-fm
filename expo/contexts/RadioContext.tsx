@@ -214,17 +214,29 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       refs.current.watchdogAttempts += 1;
       const attempt = refs.current.watchdogAttempts;
       console.log('[Radio] Watchdog attempt', attempt);
+      // Never give up while the user still wants playback. Alternate between
+      // a soft play() on the existing player and a full recreate. After the
+      // first burst, recreate is the only thing that recovers from an
+      // interrupting app (YouTube, call, etc.) that deactivated our audio
+      // session.
       if (attempt <= 2 && refs.current.player) {
         try {
           refs.current.player.play();
         } catch (e) {
           console.warn('[Radio] Watchdog soft play failed:', e);
         }
-      } else if (attempt <= 10) {
-        playNativeRef.current?.();
       } else {
-        console.log('[Radio] Watchdog giving up after', attempt, 'attempts');
-        stopResumeWatchdog();
+        // Try a soft play() first if we still have a player — cheaper than
+        // recreating — and recreate every other attempt.
+        if (refs.current.player && attempt % 2 === 1) {
+          try {
+            refs.current.player.play();
+          } catch (e) {
+            console.warn('[Radio] Watchdog soft play failed:', e);
+          }
+        } else {
+          playNativeRef.current?.();
+        }
       }
     }, 3000);
   }, [stopResumeWatchdog]);
@@ -675,21 +687,25 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   }, [startListenerPolling, stopListenerPolling]);
 
   // Cleanup on unmount.
-  // IMPORTANT: do NOT dispose the native player if the user still wants
-  // playback. The foreground media service must remain sticky across
-  // provider remounts (hot reload, navigation churn, brief task trims) so
-  // audio keeps playing and the lock-screen notification doesn't disappear.
+  // IMPORTANT: do NOT dispose the native player or stop the resume watchdog
+  // if the user still wants playback. The foreground media service must
+  // remain sticky across provider remounts (hot reload, navigation churn,
+  // brief task trims) so audio keeps playing and the lock-screen
+  // notification doesn't disappear. The watchdog must also keep running so
+  // that when an interrupting app (YouTube, call, etc.) stops, we resume
+  // automatically even if the user hasn't returned to Freedom FM yet.
   useEffect(() => {
     return () => {
-      stopResumeWatchdog();
       if (Platform.OS === 'web') {
+        stopResumeWatchdog();
         cleanupWebAudio();
         return;
       }
       if (refs.current.desiredPlaying) {
-        console.log('[Radio] Provider unmount with desiredPlaying=true — keeping service alive');
+        console.log('[Radio] Provider unmount with desiredPlaying=true — keeping service & watchdog alive');
         return;
       }
+      stopResumeWatchdog();
       disposePlayer();
     };
   }, [cleanupWebAudio, disposePlayer, stopResumeWatchdog]);
@@ -702,6 +718,16 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     if (Platform.OS === 'web') return;
     const onChange = async (s: AppStateStatus) => {
       console.log('[Radio] AppState change:', s, 'desired:', refs.current.desiredPlaying);
+
+      // Going to background while user wants playback — start the watchdog so
+      // that if an interrupting app (e.g. YouTube) stops, we attempt to take
+      // the audio session back automatically without requiring the user to
+      // return to Freedom FM first.
+      if ((s === 'background' || s === 'inactive') && refs.current.desiredPlaying) {
+        startResumeWatchdog();
+        return;
+      }
+
       if (s !== 'active') return;
       if (!refs.current.desiredPlaying) return;
 
