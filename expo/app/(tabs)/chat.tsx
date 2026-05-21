@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTerms } from '@/contexts/TermsContext';
 import TermsAgreementScreen from '@/components/TermsAgreementScreen';
-import { Mail, AlertCircle, X } from 'lucide-react-native';
+import { Mail, AlertCircle, X, ExternalLink } from 'lucide-react-native';
 import colors from '@/constants/colors';
 
 let WebViewModule: any = null;
@@ -415,6 +415,19 @@ function ChatScreenContent() {
         )}
         {!error && (
           <View style={styles.webview}>
+            <View style={styles.previewBanner}>
+              <Text style={styles.previewBannerText}>
+                Messages may not load in browser preview. Open in your browser for the full chat, or test on a device.
+              </Text>
+              <TouchableOpacity
+                style={styles.openExternalButton}
+                onPress={() => Linking.openURL('https://freedomfm1065.com/mobile-chatroom/')}
+                activeOpacity={0.7}
+              >
+                <ExternalLink size={14} color="#FFFFFF" />
+                <Text style={styles.openExternalText}>Open</Text>
+              </TouchableOpacity>
+            </View>
             <iframe
               key={key}
               src={`https://freedomfm1065.com/mobile-chatroom/?_t=${cacheBuster}&_k=${key}`}
@@ -426,6 +439,8 @@ function ChatScreenContent() {
                 opacity: loading ? 0 : 1,
               } as any}
               title="Freedom Wall Chat"
+              allow="clipboard-read; clipboard-write; autoplay"
+              referrerPolicy="no-referrer-when-downgrade"
               onLoad={() => {
                 console.log('[Chat] iframe onLoad fired');
                 setLoading(false);
@@ -817,5 +832,36 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
     textAlign: 'center',
+  },
+  previewBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(255, 107, 53, 0.12)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 107, 53, 0.35)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  previewBannerText: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 12,
+    lineHeight: 16,
+    opacity: 0.9,
+  },
+  openExternalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FF6B35',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  openExternalText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600' as const,
   },
 });
