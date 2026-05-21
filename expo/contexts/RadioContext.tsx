@@ -228,26 +228,15 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       return;
     }
 
-    // If another app owns focus, do NOT probe or call play() — that's what
-    // was stopping YouTube. We just wait. The OS will either:
-    //   - fire playingChange:true on its own when AUDIOFOCUS_GAIN comes in
-    //     (expo-video resumes us automatically with audioMixingMode 'auto'
-    //      + interruptionMode 'duckOthers'), or
-    //   - the user comes back to the app (AppState 'active') and we recreate.
-    // The only thing we do here is recreate the source after a LONG stale
-    // period (HLS sockets time out and would return 404 on a stale resume).
+    // If another app owns focus, do NOT probe, call play(), or recreate.
+    // Any of those would re-request audio focus and stop the other app.
+    // We just idle. The OS will fire playingChange:true via AUDIOFOCUS_GAIN
+    // (expo-video resumes us automatically with audioMixingMode 'auto' +
+    // interruptionMode 'duckOthers'), and that listener clears the flag and
+    // does any stale-stream refresh from a known-good "we have focus" state.
     if (refs.current.interruptedByOtherApp) {
-      const idleMs = Date.now() - refs.current.lastPlayingAtMs;
-      if (idleMs > 60000) {
-        console.log('[Radio] Watchdog: stream idle >60s while interrupted — refreshing source');
-        try {
-          playNativeRef.current?.();
-        } catch {}
-        refs.current.lastPlayingAtMs = Date.now();
-      }
-      // Slow heartbeat — just to refresh the socket eventually. NEVER calls
-      // play() while interrupted.
-      scheduleNextWatchdogTick(30000);
+      console.log('[Radio] Watchdog: idling in polite mode, waiting for OS to restore focus');
+      stopResumeWatchdog();
       return;
     }
 
@@ -544,20 +533,29 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         console.log('[Radio] playingChange:', playing);
         setIsPlaying(playing);
         if (playing) {
+          const wasInterrupted = refs.current.silentKeepalive || refs.current.interruptedByOtherApp;
+          const idleMs = refs.current.lastPlayingAtMs ? Date.now() - refs.current.lastPlayingAtMs : 0;
           refs.current.lastPlayingAtMs = Date.now();
           setIsLoading(false);
           setError(null);
           clearConnectTimer();
-          // If we were interrupted and just started playing again on our
-          // own, Android restored audio focus to us — the other app
-          // finished. Clear the interrupted flag.
-          if (refs.current.silentKeepalive || refs.current.interruptedByOtherApp) {
+          if (wasInterrupted) {
             console.log('[Radio] Audio focus restored by OS — resuming normally');
             refs.current.silentKeepalive = false;
             refs.current.interruptedByOtherApp = false;
             try {
               (sessionPlayer as any).volume = refs.current.restoreVolume || volume;
             } catch {}
+            // If the HLS socket was idle for a long time, the stream is
+            // likely stale (server may have closed the connection). Do a
+            // full recreate now that we have focus, so we don't get a 404
+            // mid-resume. This is the ONLY recreate path during recovery.
+            if (idleMs > 30000) {
+              console.log('[Radio] Stream was idle for', idleMs, 'ms — refreshing source on resume');
+              try {
+                playNativeRef.current?.();
+              } catch {}
+            }
           }
           stopResumeWatchdog();
         } else if (refs.current.desiredPlaying) {
@@ -570,9 +568,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           const playedForMs = refs.current.lastPlayingAtMs
             ? Date.now() - refs.current.lastPlayingAtMs
             : Number.MAX_SAFE_INTEGER;
-          if (playedForMs < 3000) {
+          if (playedForMs < 30000) {
+            // Treat almost any "stopped while desired" in the background as
+            // an external interruption. Better safe than starting a probe
+            // loop that fights another app. If it was truly a network blip,
+            // AUDIOFOCUS_GAIN will still hand focus back when nothing else
+            // is playing and expo-video will resume on its own.
             if (!refs.current.interruptedByOtherApp) {
-              console.log('[Radio] Another app took audio focus — waiting for OS to restore (no probing)');
+              console.log('[Radio] Playback stopped while desired — entering polite wait (no probing)');
             }
             refs.current.interruptedByOtherApp = true;
             // Keep player object alive so the OS can resume it, but do NOT
@@ -585,10 +588,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             refs.current.watchdogTimer = null;
           }
           if (refs.current.interruptedByOtherApp) {
-            // Slow heartbeat that ONLY refreshes a stale stream after >60s
-            // (never calls play()). Lets us avoid a 404 on a long-idle HLS
-            // socket when the OS eventually resumes us.
-            scheduleNextWatchdogTick(30000);
+            // Do nothing. Wait silently for AUDIOFOCUS_GAIN (fires
+            // playingChange:true). No timers, no probes.
           } else {
             startResumeWatchdog();
           }
@@ -862,14 +863,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     const onChange = async (s: AppStateStatus) => {
       console.log('[Radio] AppState change:', s, 'desired:', refs.current.desiredPlaying);
 
-      // Going to background while user wants playback — start the watchdog so
-      // that if an interrupting app (e.g. YouTube) stops, we attempt to take
-      // the audio session back automatically without requiring the user to
-      // return to Freedom FM first.
-      if ((s === 'background' || s === 'inactive') && refs.current.desiredPlaying) {
-        startResumeWatchdog();
-        return;
-      }
+      // Going to background is normal — do NOT start the watchdog here.
+      // Starting it would call player.play(), which on Android re-requests
+      // audio focus and stops whatever other app the user is about to use.
+      // The watchdog is only for true network blips (started from
+      // playingChange:false in the non-interrupted case).
+      if (s === 'background' || s === 'inactive') return;
 
       if (s !== 'active') return;
       if (!refs.current.desiredPlaying) return;
