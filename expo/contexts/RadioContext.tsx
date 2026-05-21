@@ -234,54 +234,19 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
     // POLITE MODE: another app owns audio focus.
     //
-    // Hard Android reality: Expo Go does NOT deliver AUDIOFOCUS_GAIN to JS
-    // reliably while backgrounded, so the only way to auto-resume without
-    // the user reopening the app is to *probe* periodically. Any probe
-    // briefly takes audio focus from the other app (~300ms blip on
-    // YouTube). We minimize this by:
-    //   1. Long interval between probes (30s) so blips are rare.
-    //   2. Silent probe (volume = 0).
-    //   3. Immediately pause again if the probe didn't stick within 600ms
-    //      — that's the signature that the other app still owns focus.
-    //   4. If it DID stick for 600ms+, the other app released focus → exit
-    //      polite mode and restore volume.
+    // TRUE polite behavior: do absolutely nothing. Any call to player.play()
+    // — even at volume 0 — re-requests Android audio focus and stops the
+    // other app (YouTube, video, call). So while interrupted we just idle.
+    //
+    // Two resume paths remain, neither of which steals focus:
+    //   1. expo-video's audioMixingMode='auto' lets the OS auto-resume us
+    //      via AUDIOFOCUS_GAIN when the other app releases focus, firing
+    //      playingChange:true on its own.
+    //   2. AppState→active (user returns to Freedom FM) triggers an
+    //      explicit resume in the AppState listener.
     if (refs.current.interruptedByOtherApp) {
-      const player = refs.current.player;
-      if (!player) {
-        scheduleNextWatchdogTick(30000);
-        return;
-      }
-      console.log('[Radio] Polite probe (silent, 30s interval)');
-      try {
-        refs.current.restoreVolume = refs.current.restoreVolume || volume || 1.0;
-        (player as any).volume = 0;
-        refs.current.silentKeepalive = true;
-        player.play();
-      } catch (e) {
-        console.warn('[Radio] Polite probe play() failed:', e);
-      }
-      // Check after 600ms: did focus stick?
-      setTimeout(() => {
-        if (!refs.current.desiredPlaying) return;
-        if (!refs.current.interruptedByOtherApp) return; // already recovered
-        let stuck = false;
-        try {
-          stuck = !!(refs.current.player as any)?.playing;
-        } catch {}
-        if (stuck) {
-          // Focus is ours — playingChange:true will fire and the handler
-          // will restore volume + exit polite mode. Nothing to do here.
-          console.log('[Radio] Polite probe stuck — focus returned');
-        } else {
-          // Other app still owns focus. Pause again immediately to release
-          // and schedule next probe.
-          console.log('[Radio] Polite probe did NOT stick — releasing and waiting');
-          try {
-            refs.current.player?.pause();
-          } catch {}
-          scheduleNextWatchdogTick(30000);
-        }
-      }, 600);
+      console.log('[Radio] Polite mode: idle, no probing (waiting for OS focus return or user to reopen app)');
+      stopResumeWatchdog();
       return;
     }
 
@@ -622,7 +587,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             // AUDIOFOCUS_GAIN will still hand focus back when nothing else
             // is playing and expo-video will resume on its own.
             if (!refs.current.interruptedByOtherApp) {
-              console.log('[Radio] Playback stopped while desired — entering polite mode (slow silent probe every 20s)');
+              console.log('[Radio] Playback stopped while desired — entering polite mode (idle, no probing)');
               // Switch to doNotMix so Android treats us as a media app that
               // wants AUDIOFOCUS_GAIN notifications.
               configureAudioMode('doNotMix');
@@ -636,10 +601,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             refs.current.watchdogTimer = null;
           }
           if (refs.current.interruptedByOtherApp) {
-            // Polite mode: do NOT probe immediately (that would steal focus
-            // right back from YouTube). Wait 30s, then start probing.
-            console.log('[Radio] Polite mode armed — first probe in 30s');
-            scheduleNextWatchdogTick(30000);
+            // Polite mode: do nothing. Rely on expo-video's audioMixingMode
+            // 'auto' to auto-resume on AUDIOFOCUS_GAIN, or on the user
+            // returning to the app to trigger an explicit resume.
+            console.log('[Radio] Polite mode armed — idling, will not probe');
           } else {
             // Non-polite (network blip): start fast soft-play/recreate path.
             startResumeWatchdog();
