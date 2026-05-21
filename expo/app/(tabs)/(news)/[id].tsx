@@ -606,9 +606,10 @@ export default function ArticleDetailScreen() {
 
   const handleBack = useCallback(() => {
     console.log('[NEWS][BACK] pressed');
-    if (router.canGoBack()) {
+    try {
       router.back();
-    } else {
+    } catch (e) {
+      console.log('[NEWS][BACK] fallback replace', e);
       router.replace('/(tabs)/(news)/news');
     }
   }, [router]);
