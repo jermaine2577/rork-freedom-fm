@@ -240,22 +240,35 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     console.log('[Radio] Watchdog attempt', attempt, polite ? '(polite probe)' : '');
 
     // POLITE STRATEGY:
-    // - If we believe another app currently owns audio focus, DO NOT probe
-    //   at all. Any player.play() call on Android grabs audio focus for ~1s
-    //   which stops the other app's video/audio. That's exactly what we are
-    //   trying to avoid.
-    // - Instead, we wait passively. The two real signals that the other app
-    //   stopped are:
-    //     1. AppState → 'active' (user returned to Freedom FM)
-    //     2. The user manually tapping Play again
-    //   Both are handled outside this watchdog and will reset polite mode.
-    // - As a last-resort safety net we still do ONE silent probe every 45s
-    //   in case the user left the app entirely and YouTube ended without
-    //   them returning. This is rare enough to not really interrupt video.
+    // There is no native "audio focus released" callback exposed in Expo Go,
+    // so the ONLY way to detect that the interrupting app (YouTube, a call,
+    // another audio app) has stopped is to occasionally probe with a soft
+    // player.play(). Each probe briefly takes audio focus (~1s blip on the
+    // other app). Probe every ~10s while in polite mode:
+    //   - If play() succeeds and stays playing for >3s, the other app is gone
+    //     and we exit polite mode automatically (handled in the stable check
+    //     above and in playingChange).
+    //   - If the other app reclaims focus immediately, we stay polite and try
+    //     again in another 10s.
+    // This trades a small periodic blip on the foreground app for fully
+    // automatic resume without the user ever returning to Freedom FM.
     if (polite) {
-      // Skip — don't disturb the other app. Just reschedule.
-      console.log('[Radio] Polite mode: waiting for other app to stop');
-      scheduleNextWatchdogTick(45000);
+      console.log('[Radio] Polite probe (attempt', attempt, ')');
+      try {
+        refs.current.player?.play();
+      } catch (e) {
+        console.warn('[Radio] Polite probe play failed:', e);
+      }
+      // Every 4th polite probe, do a full recreate in case the player
+      // session itself was killed by the OS while backgrounded.
+      if (attempt > 0 && attempt % 4 === 0) {
+        try {
+          playNativeRef.current?.();
+        } catch (e) {
+          console.warn('[Radio] Polite recreate failed:', e);
+        }
+      }
+      scheduleNextWatchdogTick(10000);
       return;
     } else if (attempt === 1 && refs.current.player) {
       try {
@@ -556,12 +569,13 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             clearTimeout(refs.current.watchdogTimer);
             refs.current.watchdogTimer = null;
           }
-          // In polite mode we DON'T probe — we'd just keep interrupting the
-          // other app's audio. Schedule a far-away safety probe and rely on
-          // AppState→active to resume when the user returns.
+          // In polite mode, schedule the next probe ~10s out (handled by
+          // the watchdog tick itself). Don't fire immediately — give the
+          // other app a moment to actually start a fresh audio segment so
+          // we don't ping-pong every single second.
           if (refs.current.interruptedByOtherApp) {
-            console.log('[Radio] Polite mode active — not probing, waiting for refocus');
-            scheduleNextWatchdogTick(45000);
+            console.log('[Radio] Polite mode active — next probe in 10s');
+            scheduleNextWatchdogTick(10000);
           } else {
             startResumeWatchdog();
           }
