@@ -244,7 +244,17 @@ const fetchViaWordPressApi = async (link: string, signal: AbortSignal): Promise<
       console.log('[ARTICLE] WP API non-ok:', res.status);
       return '';
     }
-    const data = await res.json();
+    // freedomfm1065.com serves wp-json with a UTF-8 BOM (EF BB BF) which makes
+    // res.json() throw on native. Read as text, strip BOM, then parse manually.
+    const raw = await res.text();
+    const cleaned = raw.replace(/^\uFEFF/, '').trim();
+    let data: any;
+    try {
+      data = JSON.parse(cleaned);
+    } catch (parseErr: any) {
+      console.log('[ARTICLE] WP API JSON parse failed:', parseErr?.message, 'first 60 chars:', cleaned.substring(0, 60));
+      return '';
+    }
     if (!Array.isArray(data) || data.length === 0) {
       console.log('[ARTICLE] WP API empty array');
       return '';
