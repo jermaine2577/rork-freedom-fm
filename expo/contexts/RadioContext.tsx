@@ -77,6 +77,10 @@ interface RadioRefs {
   lastPlayingAtMs: number;
   /** True when we suspect another app currently owns the audio focus. */
   interruptedByOtherApp: boolean;
+  /** True when polite-mode silent-keepalive (volume 0) is active. */
+  silentKeepalive: boolean;
+  /** Restore volume when leaving polite mode. */
+  restoreVolume: number;
 }
 
 const HLS_CDN_URL = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js';
@@ -129,6 +133,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     watchdogAttempts: 0,
     lastPlayingAtMs: 0,
     interruptedByOtherApp: false,
+    silentKeepalive: false,
+    restoreVolume: 1.0,
   });
 
   const fetchNowPlaying = useCallback(async () => {
@@ -222,10 +228,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     try {
       actuallyPlaying = !!(refs.current.player as any)?.playing;
     } catch {}
-    if (actuallyPlaying) {
-      // Already playing — if it's been stable for a few seconds we can stop
-      // the watchdog entirely. Otherwise leave it running in case the other
-      // app reclaims focus again.
+
+    const polite = refs.current.interruptedByOtherApp;
+
+    if (actuallyPlaying && !refs.current.silentKeepalive) {
+      // Player is audibly playing — if it's been stable for a few seconds we
+      // can stop the watchdog entirely.
       const stableMs = Date.now() - refs.current.lastPlayingAtMs;
       if (stableMs > 5000) {
         console.log('[Radio] Watchdog: playback stable, stopping');
@@ -234,43 +242,42 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         return;
       }
     }
+
     refs.current.watchdogAttempts += 1;
     const attempt = refs.current.watchdogAttempts;
-    const polite = refs.current.interruptedByOtherApp;
-    console.log('[Radio] Watchdog attempt', attempt, polite ? '(polite probe)' : '');
+    console.log('[Radio] Watchdog attempt', attempt, polite ? '(polite keepalive probe)' : '');
 
-    // POLITE STRATEGY:
-    // There is no native "audio focus released" callback exposed in Expo Go,
-    // so the ONLY way to detect that the interrupting app (YouTube, a call,
-    // another audio app) has stopped is to occasionally probe with a soft
-    // player.play(). Each probe briefly takes audio focus (~1s blip on the
-    // other app). Probe every ~10s while in polite mode:
-    //   - If play() succeeds and stays playing for >3s, the other app is gone
-    //     and we exit polite mode automatically (handled in the stable check
-    //     above and in playingChange).
-    //   - If the other app reclaims focus immediately, we stay polite and try
-    //     again in another 10s.
-    // This trades a small periodic blip on the foreground app for fully
-    // automatic resume without the user ever returning to Freedom FM.
+    // POLITE STRATEGY (silent keepalive):
+    // When another app (YouTube, a call) owns audio focus we don't pause our
+    // player — instead we keep it playing at volume 0. This has two crucial
+    // effects on Android:
+    //   1. The foreground media service stays alive, so JS timers keep firing
+    //      and we never get killed in the background.
+    //   2. Android's audio focus arbitration silences our stream while the
+    //      other app plays, then automatically restores it (and we hear it)
+    //      when the other app releases focus. We detect that via the
+    //      playingChange:true event firing again on its own — no probing
+    //      needed, no interruption of the foreground app's audio.
+    // The watchdog in polite mode just verifies that the player is still
+    // alive (calls play() to nudge it if it ever drops). It does NOT fight
+    // for focus.
     if (polite) {
-      console.log('[Radio] Polite probe (attempt', attempt, ')');
       try {
-        refs.current.player?.play();
-      } catch (e) {
-        console.warn('[Radio] Polite probe play failed:', e);
-      }
-      // Every 4th polite probe, do a full recreate in case the player
-      // session itself was killed by the OS while backgrounded.
-      if (attempt > 0 && attempt % 4 === 0) {
-        try {
-          playNativeRef.current?.();
-        } catch (e) {
-          console.warn('[Radio] Polite recreate failed:', e);
+        // Keep volume at 0 during polite keepalive so we never disturb the
+        // foreground app's audio.
+        if (refs.current.player) {
+          (refs.current.player as any).volume = 0;
+          refs.current.player.play();
         }
+      } catch (e) {
+        console.warn('[Radio] Polite keepalive nudge failed:', e);
       }
-      scheduleNextWatchdogTick(10000);
+      // Long interval — we're not probing, just keepalive.
+      scheduleNextWatchdogTick(15000);
       return;
-    } else if (attempt === 1 && refs.current.player) {
+    }
+
+    if (attempt === 1 && refs.current.player) {
       try {
         refs.current.player.play();
       } catch (e) {
@@ -284,11 +291,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       }
     }
 
-    // Backoff schedule:
-    // - Polite mode (another app owns focus): probe every 8s. Slow enough to
-    //   not disturb the other app's audio, fast enough to resume within a
-    //   few seconds of it ending.
-    // - Normal mode (just lost focus, no ping-pong yet): 1.5s, 2.5s, 4s.
     const nextDelay = attempt < 3 ? 1500 : attempt < 10 ? 2500 : 4000;
     scheduleNextWatchdogTick(nextDelay);
   }, [scheduleNextWatchdogTick, stopResumeWatchdog]);
@@ -543,39 +545,59 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           setIsLoading(false);
           setError(null);
           clearConnectTimer();
-          // If playback stays stable, the stable check inside the watchdog
-          // tick will stop it after ~5s. We deliberately do NOT stop it
-          // here, because in polite mode we might be ping-ponging and want
-          // to keep probing on a slow cadence.
-          if (!refs.current.interruptedByOtherApp) {
-            stopResumeWatchdog();
+          // If we were in silent keepalive (polite mode) and we just started
+          // playing again on our own, that means Android restored audio
+          // focus to us — the other app finished. Exit polite mode and
+          // restore audible volume.
+          if (refs.current.silentKeepalive || refs.current.interruptedByOtherApp) {
+            console.log('[Radio] Audio focus restored — exiting polite mode, restoring volume');
+            refs.current.silentKeepalive = false;
+            refs.current.interruptedByOtherApp = false;
+            try {
+              (sessionPlayer as any).volume = refs.current.restoreVolume;
+            } catch {}
           }
+          stopResumeWatchdog();
         } else if (refs.current.desiredPlaying) {
           // Stream stopped while user wants playback.
           // Detect ping-pong: if we were playing for less than 3 seconds,
           // another app has audio focus and is yanking it back from us.
-          // Switch to polite mode so we stop fighting and just probe slowly.
+          // Switch to silent-keepalive polite mode so we stop fighting.
           const playedForMs = refs.current.lastPlayingAtMs
             ? Date.now() - refs.current.lastPlayingAtMs
             : Number.MAX_SAFE_INTEGER;
           if (playedForMs < 3000) {
             if (!refs.current.interruptedByOtherApp) {
-              console.log('[Radio] Detected another app owns audio focus — entering polite mode');
+              console.log('[Radio] Detected another app owns audio focus — entering polite mode (silent keepalive)');
+              // Save current volume so we can restore it.
+              refs.current.restoreVolume = volume;
             }
             refs.current.interruptedByOtherApp = true;
+            refs.current.silentKeepalive = true;
+            // Drop our volume to 0 so when our player resumes (either via
+            // ducking or focus arbitration) we don't make any noise.
+            try {
+              (sessionPlayer as any).volume = 0;
+              // Re-issue play(): the player is paused now because Android
+              // took focus. Calling play() while silenced lets the OS
+              // manage focus — Android will not actually start our
+              // playback while another app owns focus, but will resume us
+              // when the other app releases it.
+              sessionPlayer.play();
+            } catch (e) {
+              console.warn('[Radio] Silent keepalive setup failed:', e);
+            }
           }
           refs.current.watchdogAttempts = 0;
           if (refs.current.watchdogTimer) {
             clearTimeout(refs.current.watchdogTimer);
             refs.current.watchdogTimer = null;
           }
-          // In polite mode, schedule the next probe ~10s out (handled by
-          // the watchdog tick itself). Don't fire immediately — give the
-          // other app a moment to actually start a fresh audio segment so
-          // we don't ping-pong every single second.
           if (refs.current.interruptedByOtherApp) {
-            console.log('[Radio] Polite mode active — next probe in 10s');
-            scheduleNextWatchdogTick(10000);
+            // Schedule periodic nudges so the player stays alive (keeps
+            // the foreground service running). No probing — focus return
+            // is detected automatically by playingChange:true.
+            scheduleNextWatchdogTick(15000);
           } else {
             startResumeWatchdog();
           }
@@ -638,7 +660,15 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     // User explicitly asked to play — reset polite mode so we make a real
     // attempt to take audio focus.
     refs.current.interruptedByOtherApp = false;
+    refs.current.silentKeepalive = false;
     refs.current.watchdogAttempts = 0;
+    refs.current.restoreVolume = volume;
+    // Make sure we're audible.
+    try {
+      if (refs.current.player) {
+        (refs.current.player as any).volume = volume;
+      }
+    } catch {}
     if (Platform.OS === 'web') {
       await playWeb();
     } else {
@@ -663,7 +693,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     console.log('[Radio] Pause requested');
     refs.current.desiredPlaying = false;
     refs.current.interruptedByOtherApp = false;
+    refs.current.silentKeepalive = false;
     stopResumeWatchdog();
+    // Restore audible volume in case we paused while silent-keepalive was on.
+    try {
+      if (refs.current.player) {
+        (refs.current.player as any).volume = refs.current.restoreVolume || volume;
+      }
+    } catch {}
 
     if (Platform.OS === 'web') {
       cleanupWebAudio();
@@ -689,6 +726,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     console.log('[Radio] Stop requested');
     refs.current.desiredPlaying = false;
     refs.current.interruptedByOtherApp = false;
+    refs.current.silentKeepalive = false;
     stopResumeWatchdog();
 
     if (Platform.OS === 'web') {
@@ -861,6 +899,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       // audio focus again. By the time they're back in our app, the other
       // app is almost certainly paused/closed.
       refs.current.interruptedByOtherApp = false;
+      refs.current.silentKeepalive = false;
       refs.current.watchdogAttempts = 0;
 
       // Auto-resume on refocus. The previous session was very likely killed
