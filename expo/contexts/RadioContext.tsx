@@ -185,64 +185,85 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
   const stopResumeWatchdog = useCallback(() => {
     if (refs.current.watchdogTimer) {
-      clearInterval(refs.current.watchdogTimer);
+      clearTimeout(refs.current.watchdogTimer);
       refs.current.watchdogTimer = null;
     }
     refs.current.watchdogAttempts = 0;
   }, []);
 
+  const runWatchdogTickRef = useRef<(() => void) | null>(null);
+
+  const scheduleNextWatchdogTick = useCallback((delayMs: number) => {
+    if (refs.current.watchdogTimer) {
+      clearTimeout(refs.current.watchdogTimer);
+      refs.current.watchdogTimer = null;
+    }
+    refs.current.watchdogTimer = setTimeout(() => {
+      refs.current.watchdogTimer = null;
+      runWatchdogTickRef.current?.();
+    }, delayMs);
+  }, []);
+
+  const runWatchdogTick = useCallback(() => {
+    // NOTE: deliberately NOT gating on refs.current.mounted — the provider
+    // may unmount when the app is backgrounded, but we still want to keep
+    // trying to reclaim the audio session so playback resumes when the
+    // interrupting app (YouTube, call, etc.) stops.
+    if (!refs.current.desiredPlaying) {
+      stopResumeWatchdog();
+      return;
+    }
+    let actuallyPlaying = false;
+    try {
+      actuallyPlaying = !!(refs.current.player as any)?.playing;
+    } catch {}
+    if (actuallyPlaying) {
+      console.log('[Radio] Watchdog: playing again, stopping');
+      stopResumeWatchdog();
+      return;
+    }
+    refs.current.watchdogAttempts += 1;
+    const attempt = refs.current.watchdogAttempts;
+    console.log('[Radio] Watchdog attempt', attempt);
+    // Strategy: first attempt soft play() on existing player (cheap, works
+    // if the audio session just needs a kick). From attempt 2 onward, do a
+    // full recreate every time — that's the only thing that recovers from
+    // an interrupting app (YouTube, call, etc.) that fully deactivated our
+    // audio session.
+    if (attempt === 1 && refs.current.player) {
+      try {
+        refs.current.player.play();
+      } catch (e) {
+        console.warn('[Radio] Watchdog soft play failed:', e);
+      }
+    } else {
+      try {
+        playNativeRef.current?.();
+      } catch (e) {
+        console.warn('[Radio] Watchdog recreate failed:', e);
+      }
+    }
+    // Schedule next attempt. Use shorter delay early, then back off slightly.
+    const nextDelay = attempt < 3 ? 1500 : attempt < 10 ? 2500 : 4000;
+    scheduleNextWatchdogTick(nextDelay);
+  }, [scheduleNextWatchdogTick, stopResumeWatchdog]);
+
+  useEffect(() => {
+    runWatchdogTickRef.current = runWatchdogTick;
+  }, [runWatchdogTick]);
+
   const startResumeWatchdog = useCallback(() => {
     if (Platform.OS === 'web') return;
     if (refs.current.watchdogTimer) return;
-    refs.current.watchdogAttempts = 0;
+    if (refs.current.watchdogAttempts > 0) {
+      // Already running through a tick; do nothing.
+      return;
+    }
     console.log('[Radio] Watchdog started');
-    refs.current.watchdogTimer = setInterval(() => {
-      // NOTE: deliberately NOT gating on refs.current.mounted — the provider
-      // may unmount when the app is backgrounded, but we still want to keep
-      // trying to reclaim the audio session so playback resumes when the
-      // interrupting app (YouTube, call, etc.) stops.
-      if (!refs.current.desiredPlaying) {
-        stopResumeWatchdog();
-        return;
-      }
-      let actuallyPlaying = false;
-      try {
-        actuallyPlaying = !!(refs.current.player as any)?.playing;
-      } catch {}
-      if (actuallyPlaying) {
-        console.log('[Radio] Watchdog: playing again, stopping');
-        stopResumeWatchdog();
-        return;
-      }
-      refs.current.watchdogAttempts += 1;
-      const attempt = refs.current.watchdogAttempts;
-      console.log('[Radio] Watchdog attempt', attempt);
-      // Never give up while the user still wants playback. Alternate between
-      // a soft play() on the existing player and a full recreate. After the
-      // first burst, recreate is the only thing that recovers from an
-      // interrupting app (YouTube, call, etc.) that deactivated our audio
-      // session.
-      if (attempt <= 2 && refs.current.player) {
-        try {
-          refs.current.player.play();
-        } catch (e) {
-          console.warn('[Radio] Watchdog soft play failed:', e);
-        }
-      } else {
-        // Try a soft play() first if we still have a player — cheaper than
-        // recreating — and recreate every other attempt.
-        if (refs.current.player && attempt % 2 === 1) {
-          try {
-            refs.current.player.play();
-          } catch (e) {
-            console.warn('[Radio] Watchdog soft play failed:', e);
-          }
-        } else {
-          playNativeRef.current?.();
-        }
-      }
-    }, 3000);
-  }, [stopResumeWatchdog]);
+    // Fire the first tick IMMEDIATELY — don't wait for the interval. This
+    // matters when the app is backgrounded and timers may be throttled.
+    runWatchdogTickRef.current?.();
+  }, []);
 
   const clearConnectTimer = useCallback(() => {
     if (refs.current.connectTimer) {
@@ -479,7 +500,13 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           stopResumeWatchdog();
         } else if (refs.current.desiredPlaying) {
           // Stream stopped while user wants playback — likely an interruption.
-          // Kick the watchdog so we auto-recover.
+          // Kick the watchdog so we auto-recover. Reset attempts so the first
+          // tick fires immediately.
+          refs.current.watchdogAttempts = 0;
+          if (refs.current.watchdogTimer) {
+            clearTimeout(refs.current.watchdogTimer);
+            refs.current.watchdogTimer = null;
+          }
           startResumeWatchdog();
         } else {
           setIsLoading(false);
