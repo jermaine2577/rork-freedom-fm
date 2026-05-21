@@ -557,7 +557,10 @@ const fetchFreshNews = async (): Promise<NewsArticle[]> => {
         html = await fetchWithProxy(proxy, targetUrl, controller.signal);
         if (html) {
           console.log('[NEWS] Got HTML via proxy, length:', html.length);
-          break;
+          const test = parseNewsFromHtml(html);
+          if (test.length > 0) break;
+          console.log('[NEWS] Proxy HTML had 0 articles, trying next proxy');
+          html = null;
         }
       }
     } else {
@@ -570,19 +573,44 @@ const fetchFreshNews = async (): Promise<NewsArticle[]> => {
         'Cache-Control': 'no-cache',
       };
 
-      const response = await fetchWithRetry(
-        targetUrl,
-        {
-          method: 'GET',
-          headers,
-          signal: controller.signal,
-        },
-        MAX_RETRIES,
-      );
+      try {
+        const response = await fetchWithRetry(
+          targetUrl,
+          {
+            method: 'GET',
+            headers,
+            signal: controller.signal,
+          },
+          MAX_RETRIES,
+        );
 
-      if (response.ok) {
-        html = await response.text();
-        console.log('[NEWS] Got HTML directly, length:', html?.length);
+        if (response.ok) {
+          html = await response.text();
+          console.log('[NEWS] Got HTML directly, length:', html?.length);
+        }
+      } catch (directErr: any) {
+        console.log('[NEWS] Direct fetch failed on native:', directErr?.message);
+      }
+
+      // If direct fetch failed or produced no parseable articles, fall back to CORS proxies on native too
+      let directArticles: NewsArticle[] = [];
+      if (html && html.length > 1000) {
+        directArticles = parseNewsFromHtml(html);
+      }
+      if (directArticles.length === 0) {
+        console.log('[NEWS] Native direct fetch yielded 0 articles, trying proxies...');
+        for (const proxy of CORS_PROXIES) {
+          if (controller.signal.aborted) break;
+          const proxied = await fetchWithProxy(proxy, targetUrl, controller.signal);
+          if (proxied && proxied.length > 1000) {
+            const test = parseNewsFromHtml(proxied);
+            if (test.length > 0) {
+              html = proxied;
+              console.log('[NEWS] Native proxy succeeded with', test.length, 'articles');
+              break;
+            }
+          }
+        }
       }
     }
 
