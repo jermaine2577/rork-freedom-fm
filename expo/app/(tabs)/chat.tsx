@@ -330,10 +330,12 @@ function ChatScreenContent() {
     true;
   `;
 
+  const headerPadTop = Math.max(insets.top, 44) + 8;
+
   if (Platform.OS === 'web') {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
+      <View style={styles.container}>
+        <View style={[styles.header, { paddingTop: headerPadTop }]}>
           <Text style={styles.headerTitle}>Freedom Wall</Text>
         </View>
 
@@ -438,7 +440,7 @@ function ChatScreenContent() {
         )}
         
         <TopButtons 
-          top={insets.top + 60}
+          top={headerPadTop - 4}
           onContactPress={handleContactPress}
           onRefreshPress={handleRefresh}
           showRefresh={!loading && !error}
@@ -448,8 +450,8 @@ function ChatScreenContent() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
+    <View style={styles.container}>
+      <View style={[styles.header, { paddingTop: headerPadTop }]}>
         <Text style={styles.headerTitle}>Freedom Wall</Text>
       </View>
 
@@ -547,7 +549,7 @@ function ChatScreenContent() {
       )}
       
       <TopButtons 
-        top={insets.top + 60}
+        top={headerPadTop - 4}
         onContactPress={handleContactPress}
         onRefreshPress={handleRefresh}
         showRefresh={!loading && !error}
@@ -563,7 +565,7 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#121212',
   },
   webview: {
     flex: 1,
@@ -808,15 +810,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   header: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: '#1a1a1a',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 107, 53, 0.3)',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: '#121212',
   },
   headerTitle: {
     fontSize: 17,
-    fontWeight: '600',
+    fontWeight: '700' as const,
     color: '#FFFFFF',
     textAlign: 'center',
   },
