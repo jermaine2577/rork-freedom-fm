@@ -677,8 +677,11 @@ function NewsCard({ item, onPress }: { item: NewsArticle; onPress: () => void })
 
   const excerpt = React.useMemo(() => {
     const content = data?.content ?? '';
-    return buildExcerptFromContent(content, '');
-  }, [data?.content]);
+    const built = buildExcerptFromContent(content, '');
+    if (built.length > 0) return built;
+    const fallbackSource = item.excerpt && item.excerpt !== item.title ? item.excerpt : '';
+    return buildExcerptFromContent(fallbackSource, '');
+  }, [data?.content, item.excerpt, item.title]);
 
   return (
     <TouchableOpacity
@@ -852,6 +855,27 @@ const fetchArticleContentForPrefetch = async (link: string): Promise<string> => 
           : 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) Safari/605.1.15';
       headers['Cache-Control'] = 'no-cache';
       html = await tryFetchHtml(link);
+
+      let directContent = '';
+      if (html) {
+        directContent = extractArticleContentFromHtml(html);
+      }
+      if (!directContent || directContent.length < 200) {
+        console.log('[NEWS][PREFETCH] Native direct article fetch yielded no content, trying proxies...');
+        for (const proxy of CORS_PROXIES) {
+          if (controller.signal.aborted) break;
+          const fetchUrl = proxy + encodeURIComponent(link);
+          const proxied = await tryFetchHtml(fetchUrl);
+          if (proxied) {
+            const test = extractArticleContentFromHtml(proxied);
+            if (test && test.length >= 200) {
+              html = proxied;
+              console.log('[NEWS][PREFETCH] Native article proxy succeeded');
+              break;
+            }
+          }
+        }
+      }
     }
 
     if (timeoutId) clearTimeout(timeoutId);
