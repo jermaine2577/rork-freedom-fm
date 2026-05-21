@@ -175,25 +175,29 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     };
   }, []);
 
-  const configureAudioMode = useCallback(async () => {
+  const configureAudioMode = useCallback(async (mode: 'duckOthers' | 'doNotMix' = 'duckOthers') => {
     if (Platform.OS === 'web') return;
     const expoAudio = loadExpoAudio();
     if (!expoAudio?.setAudioModeAsync) return;
     try {
-      // 'duckOthers' tells Android we're willing to share the audio session.
-      // When another app (YouTube, a call) takes focus, the OS will pause us
-      // gracefully and then send AUDIOFOCUS_GAIN when that app finishes —
-      // expo-video resumes playback on its own. This avoids the fight-for-
-      // focus loop that was stopping YouTube every time the watchdog probed.
+      // 'duckOthers' (default): we're willing to share the session. When
+      // another app takes focus, the OS pauses us gracefully and (in theory)
+      // sends AUDIOFOCUS_GAIN when that app finishes. In practice, Expo Go
+      // backgrounded JS doesn't reliably get the gain event, so polite mode
+      // also runs a slow silent probe as a fallback.
+      //
+      // 'doNotMix' (used during interruption): tells Android we're a high-
+      // priority media app and want to be notified when focus returns. This
+      // improves the chance that AUDIOFOCUS_GAIN actually delivers.
       await expoAudio.setAudioModeAsync({
         playsInSilentMode: true,
         shouldPlayInBackground: true,
-        interruptionMode: 'duckOthers',
-        interruptionModeAndroid: 'duckOthers',
+        interruptionMode: mode,
+        interruptionModeAndroid: mode,
         shouldRouteThroughEarpiece: false,
         allowsRecording: false,
       });
-      console.log('[Radio] Audio mode configured (duckOthers) for lock screen controls');
+      console.log('[Radio] Audio mode configured (' + mode + ')');
     } catch (e) {
       console.warn('[Radio] setAudioModeAsync failed:', e);
     }
@@ -228,15 +232,53 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       return;
     }
 
-    // If another app owns focus, do NOT probe, call play(), or recreate.
-    // Any of those would re-request audio focus and stop the other app.
-    // We just idle. The OS will fire playingChange:true via AUDIOFOCUS_GAIN
-    // (expo-video resumes us automatically with audioMixingMode 'auto' +
-    // interruptionMode 'duckOthers'), and that listener clears the flag and
-    // does any stale-stream refresh from a known-good "we have focus" state.
+    // POLITE MODE: another app owns focus. We can't reliably get
+    // AUDIOFOCUS_GAIN delivered to backgrounded JS in Expo Go, so we do a
+    // slow silent probe every 20s as a fallback. Each probe:
+    //   - sets volume to 0 (so even if we grab focus, no audio plays)
+    //   - calls player.play() (Android decides whether to give us focus)
+    //   - waits 1.2s, then checks if it stuck
+    //     * stuck: other app finished -> restore volume, exit polite mode
+    //     * not stuck: other app still owns focus -> pause, wait 20s
+    // The blip is ~1s of inaudible probe to YouTube every 20s.
     if (refs.current.interruptedByOtherApp) {
-      console.log('[Radio] Watchdog: idling in polite mode, waiting for OS to restore focus');
-      stopResumeWatchdog();
+      const player = refs.current.player;
+      if (!player) {
+        console.log('[Radio] Polite watchdog: no player, recreating');
+        try { playNativeRef.current?.(); } catch {}
+        scheduleNextWatchdogTick(20000);
+        return;
+      }
+      console.log('[Radio] Polite probe: silent play() to check if focus is available');
+      try {
+        refs.current.restoreVolume = refs.current.restoreVolume || volume || 1.0;
+        (player as any).volume = 0;
+        player.play();
+      } catch (e) {
+        console.warn('[Radio] Polite probe play failed:', e);
+      }
+      // Check 1.5s later whether we actually kept focus.
+      setTimeout(() => {
+        if (!refs.current.desiredPlaying) return;
+        if (!refs.current.interruptedByOtherApp) return; // already recovered
+        let stillPlaying = false;
+        try { stillPlaying = !!(refs.current.player as any)?.playing; } catch {}
+        if (stillPlaying) {
+          console.log('[Radio] Polite probe succeeded — other app released focus, restoring volume');
+          refs.current.interruptedByOtherApp = false;
+          refs.current.silentKeepalive = false;
+          try {
+            (refs.current.player as any).volume = refs.current.restoreVolume || volume || 1.0;
+          } catch {}
+          // Re-arm normal duckOthers mode for next interruption.
+          configureAudioMode('duckOthers');
+          stopResumeWatchdog();
+        } else {
+          // Pause silently so we don't keep an inaudible session running.
+          try { refs.current.player?.pause(); } catch {}
+        }
+      }, 1500);
+      scheduleNextWatchdogTick(20000);
       return;
     }
 
@@ -540,12 +582,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           setError(null);
           clearConnectTimer();
           if (wasInterrupted) {
-            console.log('[Radio] Audio focus restored by OS — resuming normally');
+            console.log('[Radio] Audio focus restored — resuming normally');
             refs.current.silentKeepalive = false;
             refs.current.interruptedByOtherApp = false;
             try {
-              (sessionPlayer as any).volume = refs.current.restoreVolume || volume;
+              (sessionPlayer as any).volume = refs.current.restoreVolume || volume || 1.0;
             } catch {}
+            // Restore duckOthers for future cooperative behavior.
+            configureAudioMode('duckOthers');
             // If the HLS socket was idle for a long time, the stream is
             // likely stale (server may have closed the connection). Do a
             // full recreate now that we have focus, so we don't get a 404
@@ -575,7 +619,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             // AUDIOFOCUS_GAIN will still hand focus back when nothing else
             // is playing and expo-video will resume on its own.
             if (!refs.current.interruptedByOtherApp) {
-              console.log('[Radio] Playback stopped while desired — entering polite wait (no probing)');
+              console.log('[Radio] Playback stopped while desired — entering polite mode (slow silent probe every 20s)');
+              // Switch to doNotMix so Android treats us as a media app that
+              // wants AUDIOFOCUS_GAIN notifications.
+              configureAudioMode('doNotMix');
             }
             refs.current.interruptedByOtherApp = true;
             // Keep player object alive so the OS can resume it, but do NOT
@@ -587,12 +634,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             clearTimeout(refs.current.watchdogTimer);
             refs.current.watchdogTimer = null;
           }
-          if (refs.current.interruptedByOtherApp) {
-            // Do nothing. Wait silently for AUDIOFOCUS_GAIN (fires
-            // playingChange:true). No timers, no probes.
-          } else {
-            startResumeWatchdog();
-          }
+          // Start the watchdog regardless — in polite mode it will run the
+          // slow silent-probe loop; in non-polite mode it does the fast soft
+          // play / recreate path for network blips.
+          startResumeWatchdog();
         } else {
           setIsLoading(false);
         }
