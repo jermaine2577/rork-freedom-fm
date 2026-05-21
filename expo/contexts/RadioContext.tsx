@@ -433,12 +433,17 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
     refs.current.player = player;
 
+    // IMPORTANT: set sticky/background flags BEFORE play() so the foreground
+    // service is started with the correct type and the notification persists.
     try {
       (player as any).staysActiveInBackground = true;
       (player as any).showNowPlayingNotification = true;
       (player as any).audioMixingMode = 'doNotMix';
+      (player as any).allowsExternalPlayback = true;
       (player as any).volume = volume;
       (player as any).loop = false;
+      // expo-video Android: keep service alive when app task is removed.
+      (player as any).stayActiveInBackground = true;
     } catch (e) {
       console.warn('[Radio] Setting player flags failed:', e);
     }
@@ -669,15 +674,23 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     };
   }, [startListenerPolling, stopListenerPolling]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount.
+  // IMPORTANT: do NOT dispose the native player if the user still wants
+  // playback. The foreground media service must remain sticky across
+  // provider remounts (hot reload, navigation churn, brief task trims) so
+  // audio keeps playing and the lock-screen notification doesn't disappear.
   useEffect(() => {
     return () => {
       stopResumeWatchdog();
       if (Platform.OS === 'web') {
         cleanupWebAudio();
-      } else {
-        disposePlayer();
+        return;
       }
+      if (refs.current.desiredPlaying) {
+        console.log('[Radio] Provider unmount with desiredPlaying=true — keeping service alive');
+        return;
+      }
+      disposePlayer();
     };
   }, [cleanupWebAudio, disposePlayer, stopResumeWatchdog]);
 
