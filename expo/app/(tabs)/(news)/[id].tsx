@@ -222,6 +222,57 @@ const extractContentBetweenTags = (html: string, startPattern: RegExp): string =
   return html.substring(startIndex, Math.min(startIndex + 50000, html.length));
 };
 
+const fetchViaJinaReader = async (link: string, signal: AbortSignal): Promise<string> => {
+  // Jina Reader returns clean markdown of any URL with permissive CORS.
+  // Works on both web and native, no API key needed for low volume.
+  const url = `https://r.jina.ai/${link}`;
+  console.log('[ARTICLE] Trying Jina Reader:', url.substring(0, 80));
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'text/plain, text/markdown, */*' },
+      signal,
+    });
+    if (!res.ok) {
+      console.log('[ARTICLE] Jina Reader non-ok:', res.status);
+      return '';
+    }
+    const text = await res.text();
+    if (!text || text.length < 200) {
+      console.log('[ARTICLE] Jina Reader returned too little, length:', text?.length);
+      return '';
+    }
+    // Strip Jina's metadata header (Title:, URL Source:, Markdown Content:)
+    let body = text;
+    const marker = /Markdown Content:\s*/i;
+    const m = body.match(marker);
+    if (m && m.index !== undefined) {
+      body = body.substring(m.index + m[0].length);
+    }
+    // Convert markdown to plain-text-ish HTML so cleanHtmlContent works.
+    // Drop image lines, link wrappers -> just text.
+    body = body
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, '') // images
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1') // links -> text
+      .replace(/^#{1,6}\s+/gm, '') // headings
+      .replace(/\*\*([^*]+)\*\*/g, '$1') // bold
+      .replace(/\*([^*]+)\*/g, '$1') // italic
+      .replace(/`([^`]+)`/g, '$1'); // code
+    // Wrap paragraphs in <p> so the existing cleaner produces nice line breaks.
+    const paragraphs = body
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)
+      .map((p) => `<p>${p}</p>`)
+      .join('\n');
+    console.log('[ARTICLE] Jina Reader succeeded, length:', paragraphs.length);
+    return paragraphs;
+  } catch (e: any) {
+    console.log('[ARTICLE] Jina Reader failed:', e?.message);
+    return '';
+  }
+};
+
 const fetchArticleContent = async (link: string): Promise<string> => {
   console.log('[ARTICLE] Fetching full content from:', link);
   
@@ -234,6 +285,13 @@ const fetchArticleContent = async (link: string): Promise<string> => {
       console.log('[ARTICLE] Request timeout, aborting...');
       controller.abort();
     }, timeoutDuration);
+
+    // Try Jina Reader first — it bypasses CORS and HTML structure issues entirely.
+    const jinaContent = await fetchViaJinaReader(link, controller.signal);
+    if (jinaContent && jinaContent.length > 200) {
+      if (timeoutId) clearTimeout(timeoutId);
+      return jinaContent;
+    }
     
     const headers: Record<string, string> = {
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
