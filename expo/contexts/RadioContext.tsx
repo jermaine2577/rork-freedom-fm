@@ -58,14 +58,50 @@ interface NowPlayingData {
   station: { name: string; description: string };
 }
 
+interface HlsLike {
+  loadSource: (url: string) => void;
+  attachMedia: (el: HTMLMediaElement) => void;
+  destroy: () => void;
+  on: (event: string, cb: (...args: unknown[]) => void) => void;
+}
+
 interface RadioRefs {
   mounted: boolean;
   player: VideoPlayer | null;
   subs: { remove: () => void }[];
   webAudio: HTMLAudioElement | null;
+  webHls: HlsLike | null;
   desiredPlaying: boolean;
   connectTimer: ReturnType<typeof setTimeout> | null;
 }
+
+const HLS_CDN_URL = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js';
+
+const loadHlsJs = async (): Promise<unknown | null> => {
+  if (Platform.OS !== 'web') return null;
+  if (typeof window === 'undefined') return null;
+  const w = window as unknown as { Hls?: unknown };
+  if (w.Hls) return w.Hls;
+  return new Promise((resolve) => {
+    try {
+      const existing = document.querySelector<HTMLScriptElement>(`script[src="${HLS_CDN_URL}"]`);
+      if (existing) {
+        existing.addEventListener('load', () => resolve(w.Hls ?? null));
+        existing.addEventListener('error', () => resolve(null));
+        if (w.Hls) resolve(w.Hls);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = HLS_CDN_URL;
+      script.async = true;
+      script.onload = () => resolve((window as unknown as { Hls?: unknown }).Hls ?? null);
+      script.onerror = () => resolve(null);
+      document.head.appendChild(script);
+    } catch {
+      resolve(null);
+    }
+  });
+};
 
 export const [RadioProvider, useRadio] = createContextHook(() => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -82,6 +118,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     player: null,
     subs: [],
     webAudio: null,
+    webHls: null,
     desiredPlaying: false,
     connectTimer: null,
   });
@@ -171,6 +208,13 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   }, [clearConnectTimer]);
 
   const cleanupWebAudio = useCallback(() => {
+    const hls = refs.current.webHls;
+    if (hls) {
+      refs.current.webHls = null;
+      try {
+        hls.destroy();
+      } catch {}
+    }
     const audio = refs.current.webAudio;
     if (!audio) return;
     refs.current.webAudio = null;
@@ -220,9 +264,44 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     const audio = new Audio();
     audio.crossOrigin = 'anonymous';
     audio.preload = 'auto';
-    audio.src = STREAM_URL;
     audio.volume = volume;
     refs.current.webAudio = audio;
+
+    const isHls = STREAM_URL.includes('.m3u8');
+    const canPlayNativeHls =
+      isHls && typeof audio.canPlayType === 'function'
+        ? audio.canPlayType('application/vnd.apple.mpegurl') !== ''
+        : false;
+
+    if (isHls && !canPlayNativeHls) {
+      console.log('[Radio] Loading hls.js for web HLS playback');
+      const HlsCtor = (await loadHlsJs()) as
+        | (new (config?: unknown) => HlsLike & { static?: unknown })
+        | null
+        | undefined;
+      const HlsStatic = HlsCtor as unknown as { isSupported?: () => boolean } | null;
+      if (HlsCtor && HlsStatic?.isSupported?.()) {
+        try {
+          const hls = new HlsCtor({ enableWorker: true, lowLatencyMode: false });
+          refs.current.webHls = hls;
+          hls.on('hlsError', () => {});
+          hls.loadSource(STREAM_URL);
+          hls.attachMedia(audio);
+        } catch (e) {
+          console.warn('[Radio] hls.js attach failed:', e);
+          setIsPlaying(false);
+          setIsLoading(false);
+          setError('Unable to play stream. Please try again.');
+          cleanupWebAudio();
+          return;
+        }
+      } else {
+        console.warn('[Radio] hls.js not available, falling back to direct src');
+        audio.src = STREAM_URL;
+      }
+    } else {
+      audio.src = STREAM_URL;
+    }
 
     audio.onplaying = () => {
       if (!refs.current.mounted) return;
