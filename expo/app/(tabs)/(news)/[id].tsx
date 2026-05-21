@@ -276,7 +276,48 @@ const fetchArticleContent = async (link: string): Promise<string> => {
         if (response) break;
       }
     } else {
+      // Try direct first on native
       response = await tryFetch(fetchUrl);
+      // Validate the direct response actually contains article markup; if not, fall through to proxies
+      if (response) {
+        try {
+          const cloned = response.clone();
+          const peek = await cloned.text();
+          const hasArticleMarkup =
+            /entry-content|<article[\s>]|post-content|the-content|content-area/i.test(peek);
+          if (!hasArticleMarkup || peek.length < 500) {
+            console.log('[ARTICLE] Native direct fetch missing article markup, will try proxies. length=', peek.length);
+            response = null;
+          }
+        } catch (e) {
+          console.log('[ARTICLE] peek failed', (e as any)?.message);
+        }
+      }
+      // Proxy fallback on native
+      if (!response) {
+        const nativeHeaders: Record<string, string> = {
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        };
+        for (const proxy of CORS_PROXIES) {
+          if (controller.signal.aborted) break;
+          const attemptUrl = proxy + encodeURIComponent(link);
+          console.log('[ARTICLE] Native trying proxy:', proxy.substring(0, 30));
+          try {
+            const res = await fetch(attemptUrl, {
+              method: 'GET',
+              headers: nativeHeaders,
+              signal: controller.signal,
+            });
+            if (res.ok) {
+              response = res;
+              console.log('[ARTICLE] Native proxy succeeded');
+              break;
+            }
+          } catch (e: any) {
+            console.log('[ARTICLE] Native proxy failed:', e?.message);
+          }
+        }
+      }
     }
 
     if (!response) {
