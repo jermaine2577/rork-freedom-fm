@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, Image, StyleSheet, View } from "react-native";
+import { Animated, Image, StyleSheet } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import * as SplashScreen from "expo-splash-screen";
+import colors from "@/constants/colors";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -76,6 +78,11 @@ function AnimatedSplash({ onFinish }: { onFinish: () => void }) {
       pointerEvents="none"
       style={[styles.splashContainer, { opacity: containerOpacity }]}
     >
+      <LinearGradient
+        colors={[colors.gradientStart, colors.gradientMiddle, colors.gradientEnd]}
+        locations={[0, 0.5, 1]}
+        style={StyleSheet.absoluteFill}
+      />
       <Animated.View style={{ opacity }}>
         <Image
           source={{ uri: RADIO_LOGO_URI }}
@@ -116,7 +123,6 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   splashContainer: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
     zIndex: 9999,
