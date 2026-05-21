@@ -618,26 +618,63 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     };
   }, [cleanupWebAudio, disposePlayer]);
 
-  // Reconnect on returning to foreground if user wanted playback
+  // Reconnect on returning to foreground if user wanted playback.
+  // This is what makes the app behave like TuneIn: if another app interrupted
+  // our audio (e.g. by playing a video), we recover the stream automatically
+  // when the user comes back to Freedom FM.
   useEffect(() => {
     if (Platform.OS === 'web') return;
-    const onChange = (s: AppStateStatus) => {
+    const onChange = async (s: AppStateStatus) => {
+      console.log('[Radio] AppState change:', s, 'desired:', refs.current.desiredPlaying);
       if (s !== 'active') return;
       if (!refs.current.desiredPlaying) return;
+
+      // Re-assert audio session (some OEMs drop it after interruption)
+      await configureAudioMode();
+
       const player = refs.current.player;
       if (!player) {
+        console.log('[Radio] No player on foreground, recreating');
         play();
         return;
       }
+
+      // Try to read playing state; if it's playing already, nothing to do.
+      let stillPlaying = false;
       try {
-        if (!(player as any).playing) {
-          player.play();
-        }
+        stillPlaying = !!(player as any).playing;
       } catch {}
+      if (stillPlaying) return;
+
+      // First try a soft resume.
+      try {
+        setIsLoading(true);
+        setError(null);
+        player.play();
+      } catch (e) {
+        console.warn('[Radio] Soft resume failed:', e);
+      }
+
+      // If after a short delay we're still not playing, fully recreate the
+      // player. This is the path that recovers from a stale session left
+      // behind by a video-playing app.
+      setTimeout(() => {
+        if (!refs.current.mounted) return;
+        if (!refs.current.desiredPlaying) return;
+        const p = refs.current.player;
+        let playing = false;
+        try {
+          playing = !!(p as any)?.playing;
+        } catch {}
+        if (!playing) {
+          console.log('[Radio] Soft resume did not take, recreating player');
+          playNative();
+        }
+      }, 1500);
     };
     const sub = AppState.addEventListener('change', onChange);
     return () => sub.remove();
-  }, [play]);
+  }, [configureAudioMode, play, playNative]);
 
   return useMemo(
     () => ({
