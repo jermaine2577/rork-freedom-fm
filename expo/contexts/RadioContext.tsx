@@ -197,7 +197,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     refs.current.watchdogAttempts = 0;
     console.log('[Radio] Watchdog started');
     refs.current.watchdogTimer = setInterval(() => {
-      if (!refs.current.mounted) return;
+      // NOTE: deliberately NOT gating on refs.current.mounted — the provider
+      // may unmount when the app is backgrounded, but we still want to keep
+      // trying to reclaim the audio session so playback resumes when the
+      // interrupting app (YouTube, call, etc.) stops.
       if (!refs.current.desiredPlaying) {
         stopResumeWatchdog();
         return;
@@ -681,7 +684,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     refs.current.mounted = true;
     startListenerPolling();
     return () => {
-      refs.current.mounted = false;
+      // Only mark unmounted if the user isn't still expecting playback.
+      // Keeping `mounted = true` lets the watchdog and player keep operating
+      // across provider remounts and while the app is backgrounded. The
+      // `mounted` flag is only used to guard React state updates, which are
+      // harmless to attempt after unmount in React 18+.
+      if (!refs.current.desiredPlaying) {
+        refs.current.mounted = false;
+      }
       stopListenerPolling();
     };
   }, [startListenerPolling, stopListenerPolling]);
