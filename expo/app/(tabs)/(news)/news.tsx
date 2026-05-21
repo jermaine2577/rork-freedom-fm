@@ -15,6 +15,23 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Tag, AlertCircle } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+
+const buildExcerptFromContent = (content: string, fallback: string): string => {
+  const stripped = decodeHtmlEntities(
+    (content ?? '')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  );
+  const source = stripped.length > 0 ? stripped : (fallback ?? '');
+  const words = source.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '';
+  const MAX_WORDS = 20;
+  if (words.length <= MAX_WORDS) return source;
+  return `${words.slice(0, MAX_WORDS).join(' ')}\u2026`;
+};
 import { useRouter } from 'expo-router';
 import colors from '@/constants/colors';
 import { NewsArticle } from '@/types';
@@ -622,6 +639,46 @@ const fetchNewsWithCache = async (): Promise<NewsArticle[]> => {
   }
 };
 
+function NewsCard({ item, onPress }: { item: NewsArticle; onPress: () => void }) {
+  const { data } = useQuery<NewsArticle>({
+    queryKey: ['article', item.id],
+    enabled: false,
+    initialData: item,
+  });
+
+  const excerpt = React.useMemo(() => {
+    const content = data?.content ?? '';
+    return buildExcerptFromContent(content, '');
+  }, [data?.content]);
+
+  return (
+    <TouchableOpacity
+      style={styles.card}
+      activeOpacity={0.8}
+      testID={`news-card-${item.id}`}
+      onPress={onPress}
+    >
+      <View style={styles.imageContainer}>
+        <Image source={{ uri: item.imageUrl }} style={styles.image} resizeMode="cover" />
+      </View>
+      <View style={styles.cardContent}>
+        {item.category?.trim().toLowerCase() !== 'news' && (
+          <View style={styles.categoryBadge} testID="news-category-badge">
+            <Tag size={12} color={colors.text} style={{ marginRight: 4 }} />
+            <Text style={styles.categoryText}>{item.category}</Text>
+          </View>
+        )}
+        <Text style={styles.title}>{item.title}</Text>
+        {excerpt.length > 0 && (
+          <Text style={styles.excerpt} numberOfLines={2}>
+            {excerpt}
+          </Text>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 const SkeletonCard = () => {
   const fadeAnim = React.useRef(new Animated.Value(0.3)).current;
 
@@ -848,7 +905,7 @@ export default function NewsScreen() {
         visibleCount,
       });
 
-      const firstBatch = list.slice(0, Math.min(INITIAL_VISIBLE_COUNT, list.length));
+      const firstBatch = list.slice(0, Math.min(visibleCount, list.length));
 
       const tasks = firstBatch
         .filter((a) => !!a && !!a.link)
@@ -902,10 +959,8 @@ export default function NewsScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: NewsArticle }) => (
-      <TouchableOpacity
-        style={styles.card}
-        activeOpacity={0.8}
-        testID={`news-card-${item.id}`}
+      <NewsCard
+        item={item}
         onPress={() => {
           console.log('[NEWS] open article', { id: item.id, title: item.title?.substring(0, 60) });
           router.push({
@@ -920,24 +975,7 @@ export default function NewsScreen() {
             },
           } as any);
         }}
-      >
-        <View style={styles.imageContainer}>
-          <Image source={{ uri: item.imageUrl }} style={styles.image} resizeMode="cover" />
-        </View>
-        <View style={styles.cardContent}>
-          {item.category?.trim().toLowerCase() !== 'news' && (
-            <View style={styles.categoryBadge} testID="news-category-badge">
-              <Tag size={12} color={colors.text} style={{ marginRight: 4 }} />
-              <Text style={styles.categoryText}>{item.category}</Text>
-            </View>
-          )}
-          <Text style={styles.title}>{item.title}</Text>
-          <Text style={styles.excerpt} numberOfLines={2}>
-            {item.excerpt}
-          </Text>
-
-        </View>
-      </TouchableOpacity>
+      />
     ),
     [router],
   );
