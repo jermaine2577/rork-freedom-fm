@@ -9,9 +9,10 @@ import colors from '@/constants/colors';
 function NewsHeader({ title, showBack }: { title: string; showBack: boolean }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const topPad = Math.max(insets.top, 44) + 8;
 
   return (
-    <View style={[styles.headerContainer, { paddingTop: insets.top + 8 }]}>
+    <View style={[styles.headerContainer, { paddingTop: topPad }]}>
       {showBack ? (
         <TouchableOpacity
           testID="news-header-back"

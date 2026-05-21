@@ -459,7 +459,9 @@ export default function ArticleDetailScreen() {
   const id = params?.id;
   const insets = useSafeAreaInsets();
   const androidStatusBar = Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 0) : 0;
-  const topInset = Math.max(insets.top, androidStatusBar);
+  // Ensure the header clears the device status bar even when safe-area insets
+  // are 0 (e.g. inside the Rork web preview, where useSafeAreaInsets returns 0).
+  const topInset = Math.max(insets.top, androidStatusBar, 44);
   const headerPadTop = topInset + 12;
   const router = useRouter();
   const queryClient = useQueryClient();
