@@ -232,15 +232,56 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       return;
     }
 
-    // POLITE MODE: another app owns audio focus. ANY call to player.play()
-    // here would re-request focus from Android and stop the other app — even
-    // at volume 0. So we do NOTHING. We rely on expo-video's
-    // audioMixingMode='auto' to receive AUDIOFOCUS_GAIN from the OS and
-    // auto-resume via playingChange:true. AppState→active is the secondary
-    // fallback. The watchdog simply idles until one of those fires.
+    // POLITE MODE: another app owns audio focus.
+    //
+    // Hard Android reality: Expo Go does NOT deliver AUDIOFOCUS_GAIN to JS
+    // reliably while backgrounded, so the only way to auto-resume without
+    // the user reopening the app is to *probe* periodically. Any probe
+    // briefly takes audio focus from the other app (~300ms blip on
+    // YouTube). We minimize this by:
+    //   1. Long interval between probes (30s) so blips are rare.
+    //   2. Silent probe (volume = 0).
+    //   3. Immediately pause again if the probe didn't stick within 600ms
+    //      — that's the signature that the other app still owns focus.
+    //   4. If it DID stick for 600ms+, the other app released focus → exit
+    //      polite mode and restore volume.
     if (refs.current.interruptedByOtherApp) {
-      console.log('[Radio] Polite mode: idle, waiting for OS to hand focus back (no probing)');
-      stopResumeWatchdog();
+      const player = refs.current.player;
+      if (!player) {
+        scheduleNextWatchdogTick(30000);
+        return;
+      }
+      console.log('[Radio] Polite probe (silent, 30s interval)');
+      try {
+        refs.current.restoreVolume = refs.current.restoreVolume || volume || 1.0;
+        (player as any).volume = 0;
+        refs.current.silentKeepalive = true;
+        player.play();
+      } catch (e) {
+        console.warn('[Radio] Polite probe play() failed:', e);
+      }
+      // Check after 600ms: did focus stick?
+      setTimeout(() => {
+        if (!refs.current.desiredPlaying) return;
+        if (!refs.current.interruptedByOtherApp) return; // already recovered
+        let stuck = false;
+        try {
+          stuck = !!(refs.current.player as any)?.playing;
+        } catch {}
+        if (stuck) {
+          // Focus is ours — playingChange:true will fire and the handler
+          // will restore volume + exit polite mode. Nothing to do here.
+          console.log('[Radio] Polite probe stuck — focus returned');
+        } else {
+          // Other app still owns focus. Pause again immediately to release
+          // and schedule next probe.
+          console.log('[Radio] Polite probe did NOT stick — releasing and waiting');
+          try {
+            refs.current.player?.pause();
+          } catch {}
+          scheduleNextWatchdogTick(30000);
+        }
+      }, 600);
       return;
     }
 
@@ -587,19 +628,22 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
               configureAudioMode('doNotMix');
             }
             refs.current.interruptedByOtherApp = true;
-            // Keep player object alive so the OS can resume it, but do NOT
-            // call play() and do NOT touch volume. The OS will hand us
-            // focus back automatically when the other app releases it.
+            // Keep player object alive so the OS can resume it later.
           }
           refs.current.watchdogAttempts = 0;
           if (refs.current.watchdogTimer) {
             clearTimeout(refs.current.watchdogTimer);
             refs.current.watchdogTimer = null;
           }
-          // Start the watchdog regardless — in polite mode it will run the
-          // slow silent-probe loop; in non-polite mode it does the fast soft
-          // play / recreate path for network blips.
-          startResumeWatchdog();
+          if (refs.current.interruptedByOtherApp) {
+            // Polite mode: do NOT probe immediately (that would steal focus
+            // right back from YouTube). Wait 30s, then start probing.
+            console.log('[Radio] Polite mode armed — first probe in 30s');
+            scheduleNextWatchdogTick(30000);
+          } else {
+            // Non-polite (network blip): start fast soft-play/recreate path.
+            startResumeWatchdog();
+          }
         } else {
           setIsLoading(false);
         }
