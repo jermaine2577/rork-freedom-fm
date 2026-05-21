@@ -642,6 +642,7 @@ const fetchNewsWithCache = async (): Promise<NewsArticle[]> => {
 function NewsCard({ item, onPress }: { item: NewsArticle; onPress: () => void }) {
   const { data } = useQuery<NewsArticle>({
     queryKey: ['article', item.id],
+    queryFn: async () => item,
     enabled: false,
     initialData: item,
   });
