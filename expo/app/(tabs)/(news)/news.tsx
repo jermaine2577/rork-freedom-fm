@@ -669,7 +669,7 @@ function NewsCard({ item, onPress }: { item: NewsArticle; onPress: () => void })
             <Text style={styles.categoryText}>{item.category}</Text>
           </View>
         )}
-        <Text style={styles.title}>{item.title}</Text>
+        <Text style={styles.title} numberOfLines={3}>{item.title}</Text>
         {excerpt.length > 0 && (
           <Text style={styles.excerpt} numberOfLines={2}>
             {excerpt}
@@ -1133,16 +1133,18 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   title: {
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: '700' as const,
     color: colors.text,
-    marginBottom: 8,
+    lineHeight: 23,
+    letterSpacing: -0.2,
+    marginBottom: 6,
   },
   excerpt: {
-    fontSize: 14,
+    fontSize: 13.5,
     color: colors.textSecondary,
-    lineHeight: 20,
-    marginBottom: 12,
+    lineHeight: 19,
+    marginBottom: 4,
   },
   dateContainer: {
     flexDirection: 'row',
