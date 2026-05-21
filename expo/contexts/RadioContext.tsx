@@ -73,6 +73,10 @@ interface RadioRefs {
   connectTimer: ReturnType<typeof setTimeout> | null;
   watchdogTimer: ReturnType<typeof setInterval> | null;
   watchdogAttempts: number;
+  /** Timestamp (ms) of the last successful playingChange:true. */
+  lastPlayingAtMs: number;
+  /** True when we suspect another app currently owns the audio focus. */
+  interruptedByOtherApp: boolean;
 }
 
 const HLS_CDN_URL = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js';
@@ -123,6 +127,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     connectTimer: null,
     watchdogTimer: null,
     watchdogAttempts: 0,
+    lastPlayingAtMs: 0,
+    interruptedByOtherApp: false,
   });
 
   const fetchNowPlaying = useCallback(async () => {
@@ -207,8 +213,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   const runWatchdogTick = useCallback(() => {
     // NOTE: deliberately NOT gating on refs.current.mounted — the provider
     // may unmount when the app is backgrounded, but we still want to keep
-    // trying to reclaim the audio session so playback resumes when the
-    // interrupting app (YouTube, call, etc.) stops.
+    // probing so playback resumes when the interrupting app stops.
     if (!refs.current.desiredPlaying) {
       stopResumeWatchdog();
       return;
@@ -218,19 +223,38 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       actuallyPlaying = !!(refs.current.player as any)?.playing;
     } catch {}
     if (actuallyPlaying) {
-      console.log('[Radio] Watchdog: playing again, stopping');
-      stopResumeWatchdog();
-      return;
+      // Already playing — if it's been stable for a few seconds we can stop
+      // the watchdog entirely. Otherwise leave it running in case the other
+      // app reclaims focus again.
+      const stableMs = Date.now() - refs.current.lastPlayingAtMs;
+      if (stableMs > 5000) {
+        console.log('[Radio] Watchdog: playback stable, stopping');
+        refs.current.interruptedByOtherApp = false;
+        stopResumeWatchdog();
+        return;
+      }
     }
     refs.current.watchdogAttempts += 1;
     const attempt = refs.current.watchdogAttempts;
-    console.log('[Radio] Watchdog attempt', attempt);
-    // Strategy: first attempt soft play() on existing player (cheap, works
-    // if the audio session just needs a kick). From attempt 2 onward, do a
-    // full recreate every time — that's the only thing that recovers from
-    // an interrupting app (YouTube, call, etc.) that fully deactivated our
-    // audio session.
-    if (attempt === 1 && refs.current.player) {
+    const polite = refs.current.interruptedByOtherApp;
+    console.log('[Radio] Watchdog attempt', attempt, polite ? '(polite probe)' : '');
+
+    // POLITE STRATEGY:
+    // - If we believe another app currently owns audio focus (we ping-ponged
+    //   between playing/paused), do ONLY a soft player.play() probe. Never
+    //   recreate the player — recreating aggressively steals focus from the
+    //   foreground media app (YouTube, etc.).
+    // - Soft play() on Android/iOS while another app has focus will simply
+    //   no-op (or be denied), so it doesn't disturb the other app's audio.
+    // - When the other app finishes, our next probe will actually take and
+    //   stay (playingChange:true stays true), and we'll go stable.
+    if (polite) {
+      try {
+        refs.current.player?.play();
+      } catch (e) {
+        console.warn('[Radio] Polite probe failed:', e);
+      }
+    } else if (attempt === 1 && refs.current.player) {
       try {
         refs.current.player.play();
       } catch (e) {
@@ -243,8 +267,19 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         console.warn('[Radio] Watchdog recreate failed:', e);
       }
     }
-    // Schedule next attempt. Use shorter delay early, then back off slightly.
-    const nextDelay = attempt < 3 ? 1500 : attempt < 10 ? 2500 : 4000;
+
+    // Backoff schedule:
+    // - Polite mode (another app owns focus): probe every 8s. Slow enough to
+    //   not disturb the other app's audio, fast enough to resume within a
+    //   few seconds of it ending.
+    // - Normal mode (just lost focus, no ping-pong yet): 1.5s, 2.5s, 4s.
+    const nextDelay = polite
+      ? 8000
+      : attempt < 3
+      ? 1500
+      : attempt < 10
+      ? 2500
+      : 4000;
     scheduleNextWatchdogTick(nextDelay);
   }, [scheduleNextWatchdogTick, stopResumeWatchdog]);
 
@@ -494,20 +529,43 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         console.log('[Radio] playingChange:', playing);
         setIsPlaying(playing);
         if (playing) {
+          refs.current.lastPlayingAtMs = Date.now();
           setIsLoading(false);
           setError(null);
           clearConnectTimer();
-          stopResumeWatchdog();
+          // If playback stays stable, the stable check inside the watchdog
+          // tick will stop it after ~5s. We deliberately do NOT stop it
+          // here, because in polite mode we might be ping-ponging and want
+          // to keep probing on a slow cadence.
+          if (!refs.current.interruptedByOtherApp) {
+            stopResumeWatchdog();
+          }
         } else if (refs.current.desiredPlaying) {
-          // Stream stopped while user wants playback — likely an interruption.
-          // Kick the watchdog so we auto-recover. Reset attempts so the first
-          // tick fires immediately.
+          // Stream stopped while user wants playback.
+          // Detect ping-pong: if we were playing for less than 3 seconds,
+          // another app has audio focus and is yanking it back from us.
+          // Switch to polite mode so we stop fighting and just probe slowly.
+          const playedForMs = refs.current.lastPlayingAtMs
+            ? Date.now() - refs.current.lastPlayingAtMs
+            : Number.MAX_SAFE_INTEGER;
+          if (playedForMs < 3000) {
+            if (!refs.current.interruptedByOtherApp) {
+              console.log('[Radio] Detected another app owns audio focus — entering polite mode');
+            }
+            refs.current.interruptedByOtherApp = true;
+          }
           refs.current.watchdogAttempts = 0;
           if (refs.current.watchdogTimer) {
             clearTimeout(refs.current.watchdogTimer);
             refs.current.watchdogTimer = null;
           }
-          startResumeWatchdog();
+          // In polite mode wait 8s before next probe (don't immediately fight).
+          if (refs.current.interruptedByOtherApp) {
+            scheduleNextWatchdogTick(8000);
+            console.log('[Radio] Polite watchdog scheduled in 8s');
+          } else {
+            startResumeWatchdog();
+          }
         } else {
           setIsLoading(false);
         }
@@ -555,7 +613,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       setError('Unable to play stream. Please try again.');
       setIsLoading(false);
     }
-  }, [buildMetadata, clearConnectTimer, configureAudioMode, disposePlayer, isPlaying, startResumeWatchdog, stopResumeWatchdog, volume]);
+  }, [buildMetadata, clearConnectTimer, configureAudioMode, disposePlayer, isPlaying, scheduleNextWatchdogTick, startResumeWatchdog, stopResumeWatchdog, volume]);
 
   useEffect(() => {
     playNativeRef.current = playNative;
@@ -564,6 +622,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   const play = useCallback(async () => {
     console.log('[Radio] Play requested');
     refs.current.desiredPlaying = true;
+    // User explicitly asked to play — reset polite mode so we make a real
+    // attempt to take audio focus.
+    refs.current.interruptedByOtherApp = false;
+    refs.current.watchdogAttempts = 0;
     if (Platform.OS === 'web') {
       await playWeb();
     } else {
@@ -587,6 +649,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   const pause = useCallback(async () => {
     console.log('[Radio] Pause requested');
     refs.current.desiredPlaying = false;
+    refs.current.interruptedByOtherApp = false;
     stopResumeWatchdog();
 
     if (Platform.OS === 'web') {
@@ -612,6 +675,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   const stop = useCallback(async () => {
     console.log('[Radio] Stop requested');
     refs.current.desiredPlaying = false;
+    refs.current.interruptedByOtherApp = false;
     stopResumeWatchdog();
 
     if (Platform.OS === 'web') {
