@@ -222,6 +222,46 @@ const extractContentBetweenTags = (html: string, startPattern: RegExp): string =
   return html.substring(startIndex, Math.min(startIndex + 50000, html.length));
 };
 
+const fetchViaWordPressApi = async (link: string, signal: AbortSignal): Promise<string> => {
+  // FreedomFM runs WordPress; the REST API is far more reliable than HTML scraping.
+  // Extract a slug from the URL (last non-empty path segment) and query /wp-json/wp/v2/posts?slug=...
+  try {
+    const url = new URL(link);
+    const segments = url.pathname.split('/').filter((s) => s.length > 0);
+    const slug = segments[segments.length - 1];
+    if (!slug) {
+      console.log('[ARTICLE] WP API: no slug found in URL');
+      return '';
+    }
+    const apiUrl = `${url.origin}/wp-json/wp/v2/posts?slug=${encodeURIComponent(slug)}&_fields=content,excerpt,title`;
+    console.log('[ARTICLE] Trying WP REST API:', apiUrl.substring(0, 120));
+    const res = await fetch(apiUrl, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal,
+    });
+    if (!res.ok) {
+      console.log('[ARTICLE] WP API non-ok:', res.status);
+      return '';
+    }
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) {
+      console.log('[ARTICLE] WP API empty array');
+      return '';
+    }
+    const rendered = data[0]?.content?.rendered as string | undefined;
+    if (!rendered || rendered.length < 100) {
+      console.log('[ARTICLE] WP API content too short:', rendered?.length);
+      return '';
+    }
+    console.log('[ARTICLE] WP API succeeded, length:', rendered.length);
+    return rendered;
+  } catch (e: any) {
+    console.log('[ARTICLE] WP API failed:', e?.message);
+    return '';
+  }
+};
+
 const fetchViaJinaReader = async (link: string, signal: AbortSignal): Promise<string> => {
   // Jina Reader returns clean markdown of any URL with permissive CORS.
   // Works on both web and native, no API key needed for low volume.
@@ -286,7 +326,14 @@ const fetchArticleContent = async (link: string): Promise<string> => {
       controller.abort();
     }, timeoutDuration);
 
-    // Try Jina Reader first — it bypasses CORS and HTML structure issues entirely.
+    // Try WordPress REST API first — most reliable for WP sites like freedomfm1065.com.
+    const wpContent = await fetchViaWordPressApi(link, controller.signal);
+    if (wpContent && wpContent.length > 200) {
+      if (timeoutId) clearTimeout(timeoutId);
+      return wpContent;
+    }
+
+    // Try Jina Reader next — it bypasses CORS and HTML structure issues entirely.
     const jinaContent = await fetchViaJinaReader(link, controller.signal);
     if (jinaContent && jinaContent.length > 200) {
       if (timeoutId) clearTimeout(timeoutId);
