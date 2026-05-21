@@ -533,7 +533,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       setIsLoading(false);
       setError(null);
     }
-  }, [cleanupWebAudio, disposePlayer, stopResumeWatchdog]);
+  }, [cleanupWebAudio, disposePlayer]);
 
   const toggle = useCallback(async () => {
     if (isPlaying || isLoading) {
