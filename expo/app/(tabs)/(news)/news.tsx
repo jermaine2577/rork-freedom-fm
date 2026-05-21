@@ -37,6 +37,83 @@ import colors from '@/constants/colors';
 import { NewsArticle } from '@/types';
 
 const NEWS_PAGE_URL = 'https://freedomfm1065.com/news/';
+const WP_API_BASE = 'https://freedomfm1065.com/wp-json/wp/v2';
+
+// Parse a JSON response that may begin with a UTF-8 BOM (which trips res.json()).
+const parseJsonWithBom = async (res: Response): Promise<any | null> => {
+  try {
+    const raw = await res.text();
+    const cleaned = raw.replace(/^\uFEFF/, '').trim();
+    if (!cleaned) return null;
+    return JSON.parse(cleaned);
+  } catch (e: any) {
+    console.log('[NEWS][WP] JSON parse failed:', e?.message);
+    return null;
+  }
+};
+
+const fetchNewsFromWordPressApi = async (signal: AbortSignal): Promise<NewsArticle[]> => {
+  const url = `${WP_API_BASE}/posts?per_page=30&_embed=wp:featuredmedia,wp:term&_fields=id,date,link,slug,title,excerpt,content,_links,_embedded`;
+  console.log('[NEWS][WP] Fetching:', url.substring(0, 120));
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal,
+    });
+    if (!res.ok) {
+      console.log('[NEWS][WP] non-ok:', res.status);
+      return [];
+    }
+    const data = await parseJsonWithBom(res);
+    if (!Array.isArray(data) || data.length === 0) {
+      console.log('[NEWS][WP] empty or invalid array');
+      return [];
+    }
+    const defaultImage = 'https://freedomfm1065.com/wp-content/uploads/2024/01/freedom-fm-logo.png';
+    const articles: NewsArticle[] = data
+      .map((p: any): NewsArticle | null => {
+        try {
+          const link = (p?.link ?? '').toString();
+          const title = decodeHtmlEntities((p?.title?.rendered ?? '').toString().trim());
+          if (!title || !link) return null;
+          const content = (p?.content?.rendered ?? '').toString();
+          const excerptRendered = (p?.excerpt?.rendered ?? '').toString();
+          const excerpt = decodeHtmlEntities(excerptRendered.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()) || title;
+          const featured = p?._embedded?.['wp:featuredmedia']?.[0];
+          const imageUrl =
+            featured?.source_url ||
+            featured?.media_details?.sizes?.large?.source_url ||
+            featured?.media_details?.sizes?.medium_large?.source_url ||
+            featured?.media_details?.sizes?.medium?.source_url ||
+            defaultImage;
+          const terms: any[] = p?._embedded?.['wp:term']?.flat?.() ?? [];
+          const category = terms.find((t) => t?.taxonomy === 'category')?.name || 'News';
+          const date = p?.date ? new Date(p.date).toISOString() : '';
+          return {
+            id: stableIdFromLink(link),
+            title,
+            excerpt,
+            imageUrl,
+            date,
+            category,
+            link,
+            content,
+          };
+        } catch (e) {
+          console.log('[NEWS][WP] map item error:', (e as any)?.message);
+          return null;
+        }
+      })
+      .filter((a): a is NewsArticle => !!a);
+    console.log('[NEWS][WP] mapped articles:', articles.length);
+    return articles;
+  } catch (e: any) {
+    console.log('[NEWS][WP] fetch failed:', e?.message);
+    return [];
+  }
+};
+
 const CORS_PROXIES = [
   'https://corsproxy.io/?',
   'https://api.allorigins.win/raw?url=',
@@ -57,8 +134,8 @@ const stableIdFromLink = (link?: string): string => {
   return `news-${normalized}`;
 };
 const MAX_RETRIES = 2;
-const NEWS_CACHE_KEY = 'freedomfm_news_cache_v3';
-const NEWS_CACHE_TIME_KEY = 'freedomfm_news_cache_time_v3';
+const NEWS_CACHE_KEY = 'freedomfm_news_cache_v4';
+const NEWS_CACHE_TIME_KEY = 'freedomfm_news_cache_time_v4';
 const CACHE_DURATION = 24 * 60 * 60 * 1000;
 
 const decodeHtmlEntities = (text: string): string => {
@@ -548,6 +625,16 @@ const fetchFreshNews = async (): Promise<NewsArticle[]> => {
 
   try {
     console.log('[NEWS] Fetching news...', Platform.OS);
+
+    // Try WordPress REST API first — returns full content for every article, no HTML scraping needed.
+    const wpArticles = await fetchNewsFromWordPressApi(controller.signal);
+    if (wpArticles.length > 0) {
+      clearTimeout(timeoutId);
+      console.log('[NEWS] WP API returned', wpArticles.length, 'articles');
+      await setCachedNews(wpArticles);
+      return wpArticles;
+    }
+
     const targetUrl = NEWS_PAGE_URL;
     let html: string | null = null;
 
