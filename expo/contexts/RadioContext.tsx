@@ -71,6 +71,8 @@ interface RadioRefs {
   webHls: HlsLike | null;
   desiredPlaying: boolean;
   connectTimer: ReturnType<typeof setTimeout> | null;
+  watchdogTimer: ReturnType<typeof setInterval> | null;
+  watchdogAttempts: number;
 }
 
 const HLS_CDN_URL = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js';
@@ -119,6 +121,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     webHls: null,
     desiredPlaying: false,
     connectTimer: null,
+    watchdogTimer: null,
+    watchdogAttempts: 0,
   });
 
   const fetchNowPlaying = useCallback(async () => {
@@ -176,6 +180,54 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       console.warn('[Radio] setAudioModeAsync failed:', e);
     }
   }, []);
+
+  const playNativeRef = useRef<(() => Promise<void>) | null>(null);
+
+  const stopResumeWatchdog = useCallback(() => {
+    if (refs.current.watchdogTimer) {
+      clearInterval(refs.current.watchdogTimer);
+      refs.current.watchdogTimer = null;
+    }
+    refs.current.watchdogAttempts = 0;
+  }, []);
+
+  const startResumeWatchdog = useCallback(() => {
+    if (Platform.OS === 'web') return;
+    if (refs.current.watchdogTimer) return;
+    refs.current.watchdogAttempts = 0;
+    console.log('[Radio] Watchdog started');
+    refs.current.watchdogTimer = setInterval(() => {
+      if (!refs.current.mounted) return;
+      if (!refs.current.desiredPlaying) {
+        stopResumeWatchdog();
+        return;
+      }
+      let actuallyPlaying = false;
+      try {
+        actuallyPlaying = !!(refs.current.player as any)?.playing;
+      } catch {}
+      if (actuallyPlaying) {
+        console.log('[Radio] Watchdog: playing again, stopping');
+        stopResumeWatchdog();
+        return;
+      }
+      refs.current.watchdogAttempts += 1;
+      const attempt = refs.current.watchdogAttempts;
+      console.log('[Radio] Watchdog attempt', attempt);
+      if (attempt <= 2 && refs.current.player) {
+        try {
+          refs.current.player.play();
+        } catch (e) {
+          console.warn('[Radio] Watchdog soft play failed:', e);
+        }
+      } else if (attempt <= 10) {
+        playNativeRef.current?.();
+      } else {
+        console.log('[Radio] Watchdog giving up after', attempt, 'attempts');
+        stopResumeWatchdog();
+      }
+    }, 3000);
+  }, [stopResumeWatchdog]);
 
   const clearConnectTimer = useCallback(() => {
     if (refs.current.connectTimer) {
@@ -404,8 +456,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           setIsLoading(false);
           setError(null);
           clearConnectTimer();
+          stopResumeWatchdog();
         } else if (refs.current.desiredPlaying) {
-          // keep loading true while reconnecting
+          // Stream stopped while user wants playback — likely an interruption.
+          // Kick the watchdog so we auto-recover.
+          startResumeWatchdog();
         } else {
           setIsLoading(false);
         }
@@ -453,7 +508,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       setError('Unable to play stream. Please try again.');
       setIsLoading(false);
     }
-  }, [buildMetadata, clearConnectTimer, configureAudioMode, disposePlayer, isPlaying, volume]);
+  }, [buildMetadata, clearConnectTimer, configureAudioMode, disposePlayer, isPlaying, startResumeWatchdog, stopResumeWatchdog, volume]);
+
+  useEffect(() => {
+    playNativeRef.current = playNative;
+  }, [playNative]);
 
   const play = useCallback(async () => {
     console.log('[Radio] Play requested');
@@ -481,6 +540,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   const pause = useCallback(async () => {
     console.log('[Radio] Pause requested');
     refs.current.desiredPlaying = false;
+    stopResumeWatchdog();
 
     if (Platform.OS === 'web') {
       cleanupWebAudio();
@@ -500,11 +560,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       setIsLoading(false);
       setError(null);
     }
-  }, [cleanupWebAudio, updateMediaSessionWeb]);
+  }, [cleanupWebAudio, stopResumeWatchdog, updateMediaSessionWeb]);
 
   const stop = useCallback(async () => {
     console.log('[Radio] Stop requested');
     refs.current.desiredPlaying = false;
+    stopResumeWatchdog();
 
     if (Platform.OS === 'web') {
       cleanupWebAudio();
@@ -518,11 +579,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       setIsLoading(false);
       setError(null);
     }
-  }, [cleanupWebAudio, disposePlayer, updateMediaSessionWeb]);
+  }, [cleanupWebAudio, disposePlayer, stopResumeWatchdog, updateMediaSessionWeb]);
 
   const forceReset = useCallback(async () => {
     console.log('[Radio] Force reset');
     refs.current.desiredPlaying = false;
+    stopResumeWatchdog();
     if (Platform.OS === 'web') {
       cleanupWebAudio();
     } else {
@@ -610,13 +672,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      stopResumeWatchdog();
       if (Platform.OS === 'web') {
         cleanupWebAudio();
       } else {
         disposePlayer();
       }
     };
-  }, [cleanupWebAudio, disposePlayer]);
+  }, [cleanupWebAudio, disposePlayer, stopResumeWatchdog]);
 
   // Reconnect on returning to foreground if user wanted playback.
   // This is what makes the app behave like TuneIn: if another app interrupted
@@ -632,49 +695,29 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       // Re-assert audio session (some OEMs drop it after interruption)
       await configureAudioMode();
 
-      const player = refs.current.player;
-      if (!player) {
-        console.log('[Radio] No player on foreground, recreating');
-        play();
+      let stillPlaying = false;
+      try {
+        stillPlaying = !!(refs.current.player as any)?.playing;
+      } catch {}
+      if (stillPlaying) {
+        console.log('[Radio] Foreground: already playing');
         return;
       }
 
-      // Try to read playing state; if it's playing already, nothing to do.
-      let stillPlaying = false;
-      try {
-        stillPlaying = !!(player as any).playing;
-      } catch {}
-      if (stillPlaying) return;
+      // Auto-resume on refocus. The previous session was very likely killed
+      // by the interrupting app, so we do a full recreate rather than a soft
+      // play() on a stale player (which tends to silently fail).
+      console.log('[Radio] Foreground: auto-resuming playback');
+      setIsLoading(true);
+      setError(null);
+      playNative();
 
-      // First try a soft resume.
-      try {
-        setIsLoading(true);
-        setError(null);
-        player.play();
-      } catch (e) {
-        console.warn('[Radio] Soft resume failed:', e);
-      }
-
-      // If after a short delay we're still not playing, fully recreate the
-      // player. This is the path that recovers from a stale session left
-      // behind by a video-playing app.
-      setTimeout(() => {
-        if (!refs.current.mounted) return;
-        if (!refs.current.desiredPlaying) return;
-        const p = refs.current.player;
-        let playing = false;
-        try {
-          playing = !!(p as any)?.playing;
-        } catch {}
-        if (!playing) {
-          console.log('[Radio] Soft resume did not take, recreating player');
-          playNative();
-        }
-      }, 1500);
+      // Safety net in case the recreate also gets blocked.
+      startResumeWatchdog();
     };
     const sub = AppState.addEventListener('change', onChange);
     return () => sub.remove();
-  }, [configureAudioMode, play, playNative]);
+  }, [configureAudioMode, playNative, startResumeWatchdog]);
 
   return useMemo(
     () => ({
