@@ -240,20 +240,23 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     console.log('[Radio] Watchdog attempt', attempt, polite ? '(polite probe)' : '');
 
     // POLITE STRATEGY:
-    // - If we believe another app currently owns audio focus (we ping-ponged
-    //   between playing/paused), do ONLY a soft player.play() probe. Never
-    //   recreate the player — recreating aggressively steals focus from the
-    //   foreground media app (YouTube, etc.).
-    // - Soft play() on Android/iOS while another app has focus will simply
-    //   no-op (or be denied), so it doesn't disturb the other app's audio.
-    // - When the other app finishes, our next probe will actually take and
-    //   stay (playingChange:true stays true), and we'll go stable.
+    // - If we believe another app currently owns audio focus, DO NOT probe
+    //   at all. Any player.play() call on Android grabs audio focus for ~1s
+    //   which stops the other app's video/audio. That's exactly what we are
+    //   trying to avoid.
+    // - Instead, we wait passively. The two real signals that the other app
+    //   stopped are:
+    //     1. AppState → 'active' (user returned to Freedom FM)
+    //     2. The user manually tapping Play again
+    //   Both are handled outside this watchdog and will reset polite mode.
+    // - As a last-resort safety net we still do ONE silent probe every 45s
+    //   in case the user left the app entirely and YouTube ended without
+    //   them returning. This is rare enough to not really interrupt video.
     if (polite) {
-      try {
-        refs.current.player?.play();
-      } catch (e) {
-        console.warn('[Radio] Polite probe failed:', e);
-      }
+      // Skip — don't disturb the other app. Just reschedule.
+      console.log('[Radio] Polite mode: waiting for other app to stop');
+      scheduleNextWatchdogTick(45000);
+      return;
     } else if (attempt === 1 && refs.current.player) {
       try {
         refs.current.player.play();
@@ -273,13 +276,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     //   not disturb the other app's audio, fast enough to resume within a
     //   few seconds of it ending.
     // - Normal mode (just lost focus, no ping-pong yet): 1.5s, 2.5s, 4s.
-    const nextDelay = polite
-      ? 8000
-      : attempt < 3
-      ? 1500
-      : attempt < 10
-      ? 2500
-      : 4000;
+    const nextDelay = attempt < 3 ? 1500 : attempt < 10 ? 2500 : 4000;
     scheduleNextWatchdogTick(nextDelay);
   }, [scheduleNextWatchdogTick, stopResumeWatchdog]);
 
@@ -559,10 +556,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             clearTimeout(refs.current.watchdogTimer);
             refs.current.watchdogTimer = null;
           }
-          // In polite mode wait 8s before next probe (don't immediately fight).
+          // In polite mode we DON'T probe — we'd just keep interrupting the
+          // other app's audio. Schedule a far-away safety probe and rely on
+          // AppState→active to resume when the user returns.
           if (refs.current.interruptedByOtherApp) {
-            scheduleNextWatchdogTick(8000);
-            console.log('[Radio] Polite watchdog scheduled in 8s');
+            console.log('[Radio] Polite mode active — not probing, waiting for refocus');
+            scheduleNextWatchdogTick(45000);
           } else {
             startResumeWatchdog();
           }
@@ -843,6 +842,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         console.log('[Radio] Foreground: already playing');
         return;
       }
+
+      // User came back — reset polite mode so we make a real attempt to take
+      // audio focus again. By the time they're back in our app, the other
+      // app is almost certainly paused/closed.
+      refs.current.interruptedByOtherApp = false;
+      refs.current.watchdogAttempts = 0;
 
       // Auto-resume on refocus. The previous session was very likely killed
       // by the interrupting app, so we do a full recreate rather than a soft
