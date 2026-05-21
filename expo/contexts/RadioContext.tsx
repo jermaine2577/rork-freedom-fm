@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
-import { AppState, AppStateStatus, Image, Platform } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const APP_ICON = require('../assets/images/icon.png');
-const ARTWORK_URI: string | undefined =
-  Platform.OS === 'web' ? undefined : Image.resolveAssetSource(APP_ICON)?.uri;
+const ARTWORK_URI: string =
+  'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/b3vamp0ku602q6ojiaqvd';
 
 const STREAM_URL = 'https://castpanel.freedomfm1065.com/hls/freedom_fm_106.5/live.m3u8';
 const NOW_PLAYING_API = 'https://castpanel.freedomfm1065.com/api/nowplaying/freedom_fm_106.5';
@@ -245,7 +243,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             title: meta.title,
             artist: meta.artist,
             album: 'Freedom FM 106.5',
-            artwork: meta.artwork ? [{ src: meta.artwork, sizes: '512x512', type: 'image/jpeg' }] : [],
+            artwork: meta.artwork
+              ? [
+                  { src: meta.artwork, sizes: '256x256', type: 'image/png' },
+                  { src: meta.artwork, sizes: '512x512', type: 'image/png' },
+                ]
+              : [],
           });
         }
         ms.playbackState = playing ? 'playing' : 'paused';
