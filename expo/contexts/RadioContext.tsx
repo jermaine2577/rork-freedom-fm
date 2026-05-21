@@ -232,53 +232,15 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       return;
     }
 
-    // POLITE MODE: another app owns focus. We can't reliably get
-    // AUDIOFOCUS_GAIN delivered to backgrounded JS in Expo Go, so we do a
-    // slow silent probe every 20s as a fallback. Each probe:
-    //   - sets volume to 0 (so even if we grab focus, no audio plays)
-    //   - calls player.play() (Android decides whether to give us focus)
-    //   - waits 1.2s, then checks if it stuck
-    //     * stuck: other app finished -> restore volume, exit polite mode
-    //     * not stuck: other app still owns focus -> pause, wait 20s
-    // The blip is ~1s of inaudible probe to YouTube every 20s.
+    // POLITE MODE: another app owns audio focus. ANY call to player.play()
+    // here would re-request focus from Android and stop the other app — even
+    // at volume 0. So we do NOTHING. We rely on expo-video's
+    // audioMixingMode='auto' to receive AUDIOFOCUS_GAIN from the OS and
+    // auto-resume via playingChange:true. AppState→active is the secondary
+    // fallback. The watchdog simply idles until one of those fires.
     if (refs.current.interruptedByOtherApp) {
-      const player = refs.current.player;
-      if (!player) {
-        console.log('[Radio] Polite watchdog: no player, recreating');
-        try { playNativeRef.current?.(); } catch {}
-        scheduleNextWatchdogTick(20000);
-        return;
-      }
-      console.log('[Radio] Polite probe: silent play() to check if focus is available');
-      try {
-        refs.current.restoreVolume = refs.current.restoreVolume || volume || 1.0;
-        (player as any).volume = 0;
-        player.play();
-      } catch (e) {
-        console.warn('[Radio] Polite probe play failed:', e);
-      }
-      // Check 1.5s later whether we actually kept focus.
-      setTimeout(() => {
-        if (!refs.current.desiredPlaying) return;
-        if (!refs.current.interruptedByOtherApp) return; // already recovered
-        let stillPlaying = false;
-        try { stillPlaying = !!(refs.current.player as any)?.playing; } catch {}
-        if (stillPlaying) {
-          console.log('[Radio] Polite probe succeeded — other app released focus, restoring volume');
-          refs.current.interruptedByOtherApp = false;
-          refs.current.silentKeepalive = false;
-          try {
-            (refs.current.player as any).volume = refs.current.restoreVolume || volume || 1.0;
-          } catch {}
-          // Re-arm normal duckOthers mode for next interruption.
-          configureAudioMode('duckOthers');
-          stopResumeWatchdog();
-        } else {
-          // Pause silently so we don't keep an inaudible session running.
-          try { refs.current.player?.pause(); } catch {}
-        }
-      }, 1500);
-      scheduleNextWatchdogTick(20000);
+      console.log('[Radio] Polite mode: idle, waiting for OS to hand focus back (no probing)');
+      stopResumeWatchdog();
       return;
     }
 
@@ -917,6 +879,15 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
 
       if (s !== 'active') return;
       if (!refs.current.desiredPlaying) return;
+
+      // If we're in polite mode (another app interrupted us), the user has
+      // explicitly returned to Freedom FM. This is now an explicit signal to
+      // resume — even if the other app is still running, the user wants us
+      // back. Reset polite flags so the recreate below isn't blocked.
+      const wasInterrupted = refs.current.interruptedByOtherApp;
+      if (wasInterrupted) {
+        console.log('[Radio] Foreground: user returned while interrupted — taking focus back');
+      }
 
       // Re-assert audio session (some OEMs drop it after interruption)
       await configureAudioMode();
