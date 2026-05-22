@@ -22,6 +22,7 @@ import colors from '@/constants/colors';
 import { NewsArticle } from '@/types';
 
 const { width } = Dimensions.get('window');
+const DEFAULT_ARTICLE_IMAGE = 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/b3vamp0ku602q6ojiaqvd';
 
 const SkeletonArticle = () => {
   const fadeAnim = React.useRef(new Animated.Value(0.3)).current;
@@ -192,6 +193,49 @@ const CORS_PROXIES = [
   'https://proxy.cors.sh/',
 ] as const;
 
+const makeProxiedUrl = (proxyUrl: string, targetUrl: string): string => `${proxyUrl}${encodeURIComponent(targetUrl)}`;
+
+const normalizeRemoteUrl = (value: unknown, fallback: string = DEFAULT_ARTICLE_IMAGE): string => {
+  const raw = typeof value === 'string' ? decodeHtmlEntities(value).trim() : '';
+  if (!raw || raw.startsWith('data:')) return fallback;
+  if (raw.startsWith('//')) return `https:${raw}`;
+  if (raw.startsWith('/')) return `https://freedomfm1065.com${raw}`;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return fallback;
+};
+
+const fetchTextWithCorsFallback = async (
+  targetUrl: string,
+  signal: AbortSignal,
+  accept: string = 'text/html,application/xhtml+xml,*/*',
+): Promise<string | null> => {
+  const urls = Platform.OS === 'web'
+    ? CORS_PROXIES.map((proxy) => makeProxiedUrl(proxy, targetUrl))
+    : [targetUrl, ...CORS_PROXIES.map((proxy) => makeProxiedUrl(proxy, targetUrl))];
+
+  for (const url of urls) {
+    if (signal.aborted) break;
+    try {
+      console.log('[ARTICLE] Fetching via', url === targetUrl ? 'direct' : 'proxy');
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: accept },
+        signal,
+      });
+      if (!res.ok) {
+        console.log('[ARTICLE] Fetch returned status:', res.status);
+        continue;
+      }
+      const text = await res.text();
+      if (text && text.trim().length > 0) return text;
+    } catch (e: any) {
+      console.log('[ARTICLE] Fetch option failed:', e?.message?.substring?.(0, 80) ?? e?.message);
+    }
+  }
+
+  return null;
+};
+
 const extractContentBetweenTags = (html: string, startPattern: RegExp): string => {
   const match = html.match(startPattern);
   if (!match) return '';
@@ -235,18 +279,13 @@ const fetchViaWordPressApi = async (link: string, signal: AbortSignal): Promise<
     }
     const apiUrl = `${url.origin}/wp-json/wp/v2/posts?slug=${encodeURIComponent(slug)}&_fields=content,excerpt,title`;
     console.log('[ARTICLE] Trying WP REST API:', apiUrl.substring(0, 120));
-    const res = await fetch(apiUrl, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      signal,
-    });
-    if (!res.ok) {
-      console.log('[ARTICLE] WP API non-ok:', res.status);
+    const raw = await fetchTextWithCorsFallback(apiUrl, signal, 'application/json');
+    if (!raw) {
+      console.log('[ARTICLE] WP API no response body');
       return '';
     }
     // freedomfm1065.com serves wp-json with a UTF-8 BOM (EF BB BF) which makes
     // res.json() throw on native. Read as text, strip BOM, then parse manually.
-    const raw = await res.text();
     const cleaned = raw.replace(/^\uFEFF/, '').trim();
     let data: any;
     try {
@@ -415,7 +454,7 @@ const fetchArticleContent = async (link: string): Promise<string> => {
         };
         for (const proxy of CORS_PROXIES) {
           if (controller.signal.aborted) break;
-          const attemptUrl = proxy + encodeURIComponent(link);
+          const attemptUrl = makeProxiedUrl(proxy, link);
           console.log('[ARTICLE] Native trying proxy:', proxy.substring(0, 30));
           try {
             const res = await fetch(attemptUrl, {
@@ -646,8 +685,7 @@ export default function ArticleDetailScreen() {
       id,
       title,
       excerpt: (params?.excerpt ?? title).toString(),
-      imageUrl:
-        (params?.imageUrl ?? '').trim() || 'https://freedomfm1065.com/wp-content/uploads/2024/01/freedom-fm-logo.png',
+      imageUrl: normalizeRemoteUrl(params?.imageUrl),
       date: (params?.date ?? new Date().toISOString()).toString(),
       category: (params?.category ?? 'News').toString(),
       link: link.length > 0 ? link : undefined,
@@ -672,6 +710,11 @@ export default function ArticleDetailScreen() {
   });
 
   const displayArticle = article || initialArticle;
+  const [heroImageUri, setHeroImageUri] = React.useState<string>(normalizeRemoteUrl(displayArticle?.imageUrl));
+
+  React.useEffect(() => {
+    setHeroImageUri(normalizeRemoteUrl(displayArticle?.imageUrl));
+  }, [displayArticle?.imageUrl]);
 
   const handleShare = useCallback(async () => {
     if (!displayArticle) {
@@ -857,7 +900,14 @@ export default function ArticleDetailScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
       >
-      <Image source={{ uri: displayArticle.imageUrl }} style={styles.heroImage} />
+      <Image
+        source={{ uri: heroImageUri }}
+        style={styles.heroImage}
+        resizeMode="cover"
+        onError={() => {
+          if (heroImageUri !== DEFAULT_ARTICLE_IMAGE) setHeroImageUri(DEFAULT_ARTICLE_IMAGE);
+        }}
+      />
       
       <View style={styles.content}>
         {displayArticle.category?.trim().toLowerCase() !== 'news' && (
