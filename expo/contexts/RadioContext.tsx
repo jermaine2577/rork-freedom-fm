@@ -618,6 +618,18 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             setIsPlaying(false);
             setIsLoading(false);
             setError(event?.error?.message ?? 'Stream error. Please try again.');
+            // On a real error AND the user still wants playback, do a full
+            // recreate — but only here, never from the watchdog. This is the
+            // single recreate path during background recovery, so the
+            // notification only rebuilds when absolutely necessary.
+            if (refs.current.desiredPlaying) {
+              console.log('[Radio] Hard error while desired — recreating once');
+              try {
+                playNativeRef.current?.();
+              } catch (e) {
+                console.warn('[Radio] Recreate after error failed:', e);
+              }
+            }
           }
         }
       );
