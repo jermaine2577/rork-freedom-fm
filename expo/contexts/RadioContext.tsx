@@ -3,7 +3,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { AppState, AppStateStatus, Platform } from 'react-native';
 
 const ARTWORK_URI: string =
-  'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/b3vamp0ku602q6ojiaqvd';
+  'https://r2-pub.rork.com/generated-images/1d85f2e0-ed62-4f47-9f88-65be8a368811.png';
 
 const STREAM_URL = 'https://castpanel.freedomfm1065.com/hls/freedom_fm_106.5/live.m3u8';
 const NOW_PLAYING_API = 'https://castpanel.freedomfm1065.com/api/nowplaying/freedom_fm_106.5';
