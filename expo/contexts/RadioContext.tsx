@@ -183,17 +183,19 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     const expoAudio = loadExpoAudio();
     if (!expoAudio?.setAudioModeAsync) return;
     try {
-      // Both platforms: 'mixWithOthers' so we never stop or duck other apps
-      // (YouTube, video, music). The user can pause via in-app controls or
-      // the lock-screen / Control Center notification.
+      // TuneIn-like behavior: be a PRIMARY playback app so the OS routes
+      // phone calls, FaceTime, WhatsApp/VoIP calls, Siri, etc. through the
+      // normal interruption pipeline — radio pauses on call begin and
+      // resumes on call end automatically.
       //
-      // Now Playing controls on iOS: showing them does NOT require being the
-      // primary audio source. With category = .playback (set by
-      // shouldPlayInBackground + playsInSilentMode) and
-      // showNowPlayingNotification = true on the player, iOS displays the
-      // Now Playing info even when mixing with others.
-      const iosMode = 'mixWithOthers' as const;
-      const androidMode = 'mixWithOthers' as const;
+      // With 'mixWithOthers' the audio session opts out of interruptions,
+      // which is why incoming calls were playing on top of the stream.
+      //
+      // 'duckOthers' (iOS) / 'doNotMix' (Android) makes us the active
+      // audio session; calls take priority; resume is handled by
+      // audioMixingMode='auto' on the expo-video player.
+      const iosMode = 'duckOthers' as const;
+      const androidMode = 'doNotMix' as const;
       await expoAudio.setAudioModeAsync({
         playsInSilentMode: true,
         shouldPlayInBackground: true,
@@ -202,7 +204,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         shouldRouteThroughEarpiece: false,
         allowsRecording: false,
       });
-      console.log('[Radio] Audio mode configured (mixWithOthers on both platforms)');
+      console.log('[Radio] Audio mode configured (primary playback — calls interrupt)');
     } catch (e) {
       console.warn('[Radio] setAudioModeAsync failed:', e);
     }
@@ -520,11 +522,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       // paused, and AUDIOFOCUS_GAIN auto-resumes us. This is the key to
       // "wait for the user to stop the other app, then play again" without
       // the JS layer having to fight for focus.
-      // 'mixWithOthers' on both platforms: never interrupt other apps.
-      // Now Playing controls still appear on iOS because
-      // showNowPlayingNotification is true and the audio session category
-      // is .playback (set by expo-audio above).
-      (player as any).audioMixingMode = 'mixWithOthers';
+      // 'auto' lets the OS arbitrate focus. When a phone/VoIP call comes
+      // in, the OS sends an interruption-begin and expo-video pauses us;
+      // on interruption-end (AUDIOFOCUS_GAIN on Android), it resumes
+      // automatically — exactly like TuneIn.
+      (player as any).audioMixingMode = 'auto';
       (player as any).allowsExternalPlayback = true;
       (player as any).volume = volume;
       (player as any).loop = false;
