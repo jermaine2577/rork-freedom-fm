@@ -1,8 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, Platform, Text, TouchableOpacity, Animated } from 'react-native';
-import WebView from 'react-native-webview';
 import colors from '@/constants/colors';
 import { RefreshCw, Heart } from 'lucide-react-native';
+
+let WebViewModule: React.ComponentType<any> | null = null;
+if (Platform.OS !== 'web') {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    WebViewModule = require('react-native-webview').WebView as React.ComponentType<any>;
+  } catch (e) {
+    console.warn('[Requests] WebView not available:', e);
+  }
+}
 
 export default function AnniversaryScreen() {
   const url = 'https://freedomfm1065.com/mobile-forms/?type=anniversary_list';
@@ -77,10 +86,22 @@ export default function AnniversaryScreen() {
     );
   }
 
+  if (!WebViewModule) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>Request form unavailable in this preview.</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
+          <RefreshCw size={20} color={colors.yellow} />
+          <Text style={styles.retryText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Animated.View style={[styles.webviewContainer, { opacity: fadeAnim }]}>
-        <WebView
+        <WebViewModule
           key={key}
           source={{ uri: url }}
           style={styles.webview}
