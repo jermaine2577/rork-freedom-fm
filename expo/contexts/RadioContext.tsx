@@ -180,18 +180,23 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     const expoAudio = loadExpoAudio();
     if (!expoAudio?.setAudioModeAsync) return;
     try {
-      // 'mixWithOthers': the radio keeps streaming even when other apps
-      // (YouTube, video, games) play audio. Both play simultaneously. The
-      // user can pause the radio manually if they want silence.
+      // Platform-specific:
+      // - iOS: 'duckOthers' makes us a PRIMARY audio source so the lock-screen
+      //   / Control Center Now Playing notification shows up. iOS hides
+      //   remote controls for apps that use 'mixWithOthers' (secondary audio).
+      // - Android: 'mixWithOthers' keeps the radio streaming alongside other
+      //   apps (YouTube etc.) without yielding focus.
+      const iosMode = 'duckOthers' as const;
+      const androidMode = 'mixWithOthers' as const;
       await expoAudio.setAudioModeAsync({
         playsInSilentMode: true,
         shouldPlayInBackground: true,
-        interruptionMode: 'mixWithOthers',
-        interruptionModeAndroid: 'mixWithOthers',
+        interruptionMode: iosMode,
+        interruptionModeAndroid: androidMode,
         shouldRouteThroughEarpiece: false,
         allowsRecording: false,
       });
-      console.log('[Radio] Audio mode configured (mixWithOthers — never yields focus)');
+      console.log('[Radio] Audio mode configured (iOS:duckOthers / Android:mixWithOthers)');
     } catch (e) {
       console.warn('[Radio] setAudioModeAsync failed:', e);
     }
@@ -511,8 +516,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       // paused, and AUDIOFOCUS_GAIN auto-resumes us. This is the key to
       // "wait for the user to stop the other app, then play again" without
       // the JS layer having to fight for focus.
-      // 'mixWithOthers' — radio NEVER pauses for other apps. Both stream together.
-      (player as any).audioMixingMode = 'mixWithOthers';
+      // Platform-specific audioMixingMode:
+      // - iOS: 'auto' keeps us as the primary audio app so the Now Playing
+      //   info / lock-screen controls appear. 'mixWithOthers' would hide them.
+      // - Android: 'mixWithOthers' keeps both streams playing without
+      //   stealing focus from other apps.
+      (player as any).audioMixingMode = Platform.OS === 'ios' ? 'auto' : 'mixWithOthers';
       (player as any).allowsExternalPlayback = true;
       (player as any).volume = volume;
       (player as any).loop = false;
