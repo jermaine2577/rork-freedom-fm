@@ -810,7 +810,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   header: {
-    paddingHorizontal: 16,
+    paddingLeft: 16,
+    paddingRight: 170,
     paddingBottom: 12,
     backgroundColor: '#121212',
   },
@@ -818,6 +819,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700' as const,
     color: '#FFFFFF',
-    textAlign: 'center',
+    textAlign: 'left',
   },
 });
