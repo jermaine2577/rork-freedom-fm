@@ -81,6 +81,8 @@ interface RadioRefs {
   silentKeepalive: boolean;
   /** Restore volume when leaving polite mode. */
   restoreVolume: number;
+  /** Last reported player status from statusChange. */
+  lastStatus: string;
 }
 
 const HLS_CDN_URL = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js';
@@ -135,6 +137,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     interruptedByOtherApp: false,
     silentKeepalive: false,
     restoreVolume: 1.0,
+    lastStatus: '',
   });
 
   const fetchNowPlaying = useCallback(async () => {
@@ -569,10 +572,24 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           }
           stopResumeWatchdog();
         } else if (refs.current.desiredPlaying) {
-          // Stream stopped while user wants playback. With 'mixWithOthers'
-          // the OS never interrupts us — any stop here is a network blip.
-          // Kick off the resume watchdog to reconnect.
-          console.log('[Radio] Playback stopped while desired — reconnecting');
+          // Distinguish a user-initiated pause (lock screen / Control Center
+          // / notification) from a network blip. When the user taps pause on
+          // the lock screen, expo-video fires playingChange:false but the
+          // player status remains 'readyToPlay' (the source is still loaded,
+          // it's just paused). Network blips come with status 'loading' or
+          // 'error'. If we see a clean pause from a ready stream, honor it.
+          const status = refs.current.lastStatus;
+          if (status === 'readyToPlay') {
+            console.log('[Radio] Pause from lock-screen / notification detected — honoring');
+            refs.current.desiredPlaying = false;
+            stopResumeWatchdog();
+            setIsLoading(false);
+            setError(null);
+            return;
+          }
+          // Stream stopped while user wants playback and status isn't ready —
+          // treat as network blip and reconnect.
+          console.log('[Radio] Playback stopped while desired (status:', status, ') — reconnecting');
           refs.current.watchdogAttempts = 0;
           if (refs.current.watchdogTimer) {
             clearTimeout(refs.current.watchdogTimer);
@@ -591,6 +608,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           if (!refs.current.mounted) return;
           if (refs.current.player !== sessionPlayer) return;
           console.log('[Radio] statusChange:', event?.status, event?.error?.message);
+          refs.current.lastStatus = event?.status ?? '';
           if (event?.status === 'readyToPlay') {
             setIsLoading(false);
             clearConnectTimer();
