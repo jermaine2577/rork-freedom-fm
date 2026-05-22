@@ -183,19 +183,14 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     const expoAudio = loadExpoAudio();
     if (!expoAudio?.setAudioModeAsync) return;
     try {
-      // TuneIn-like behavior: be a PRIMARY playback app so the OS routes
-      // phone calls, FaceTime, WhatsApp/VoIP calls, Siri, etc. through the
-      // normal interruption pipeline — radio pauses on call begin and
-      // resumes on call end automatically.
-      //
-      // With 'mixWithOthers' the audio session opts out of interruptions,
-      // which is why incoming calls were playing on top of the stream.
-      //
-      // 'duckOthers' (iOS) / 'doNotMix' (Android) makes us the active
-      // audio session; calls take priority; resume is handled by
-      // audioMixingMode='auto' on the expo-video player.
-      const iosMode = 'duckOthers' as const;
-      const androidMode = 'doNotMix' as const;
+      // Co-exist with other media apps: when the user is watching
+      // YouTube/Facebook/Spotify, Freedom FM should NOT pause them.
+      // 'mixWithOthers' opts out of the OS focus arbitration so other
+      // apps keep playing alongside the radio. Tradeoff: incoming
+      // phone/VoIP calls may overlap the stream; the user can pause
+      // from the lock-screen control if needed.
+      const iosMode = 'mixWithOthers' as const;
+      const androidMode = 'mixWithOthers' as const;
       await expoAudio.setAudioModeAsync({
         playsInSilentMode: true,
         shouldPlayInBackground: true,
@@ -204,7 +199,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         shouldRouteThroughEarpiece: false,
         allowsRecording: false,
       });
-      console.log('[Radio] Audio mode configured (primary playback — calls interrupt)');
+      console.log('[Radio] Audio mode configured (mix with others — coexist with YouTube/Spotify)');
     } catch (e) {
       console.warn('[Radio] setAudioModeAsync failed:', e);
     }
@@ -518,15 +513,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     try {
       (player as any).staysActiveInBackground = true;
       (player as any).showNowPlayingNotification = true;
-      // 'auto' lets the OS arbitrate focus — when another app plays we get
-      // paused, and AUDIOFOCUS_GAIN auto-resumes us. This is the key to
-      // "wait for the user to stop the other app, then play again" without
-      // the JS layer having to fight for focus.
-      // 'auto' lets the OS arbitrate focus. When a phone/VoIP call comes
-      // in, the OS sends an interruption-begin and expo-video pauses us;
-      // on interruption-end (AUDIOFOCUS_GAIN on Android), it resumes
-      // automatically — exactly like TuneIn.
-      (player as any).audioMixingMode = 'auto';
+      // 'mixWithOthers' on the player matches the audio session — the
+      // radio plays alongside YouTube/Spotify/Facebook video without
+      // pausing them or being paused by them.
+      (player as any).audioMixingMode = 'mixWithOthers';
       (player as any).allowsExternalPlayback = true;
       (player as any).volume = volume;
       (player as any).loop = false;
