@@ -715,7 +715,7 @@ const fetchWithProxy = async (proxyUrl: string, targetUrl: string, signal: Abort
 
 const fetchFreshNews = async (): Promise<NewsArticle[]> => {
   const controller = new AbortController();
-  const timeoutDuration = Platform.OS === 'web' ? 45000 : 25000;
+  const timeoutDuration = Platform.OS === 'web' ? 12000 : 10000;
 
   const timeoutId = setTimeout(() => {
     console.log('[NEWS] Request timeout');
@@ -1137,6 +1137,8 @@ export default function NewsScreen() {
     refetchOnWindowFocus: false,
     refetchInterval: false,
     networkMode: 'always',
+    initialData: FALLBACK_NEWS_ARTICLES,
+    initialDataUpdatedAt: 0,
   });
 
   useEffect(() => {
@@ -1150,7 +1152,7 @@ export default function NewsScreen() {
   useEffect(() => {
     try {
       const list = articles ?? [];
-      if (list.length === 0) return;
+      if (list.length === 0 || isFetching) return;
 
       console.log('[NEWS][PREFETCH] Considering prefetch for first articles:', {
         listCount: list.length,
@@ -1194,7 +1196,7 @@ export default function NewsScreen() {
     } catch (effectErr) {
       console.log('[NEWS][PREFETCH] Effect error:', (effectErr as any)?.message);
     }
-  }, [articles, queryClient, visibleCount]);
+  }, [articles, isFetching, queryClient, visibleCount]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

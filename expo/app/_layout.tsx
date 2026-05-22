@@ -14,8 +14,7 @@ import { TermsProvider } from "@/contexts/TermsContext";
 
 import ErrorBoundary from "@/components/ErrorBoundary";
 
-const RADIO_LOGO_URI =
-  "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/b3vamp0ku602q6ojiaqvd";
+const LOCAL_SPLASH_LOGO = require("../assets/images/icon.png");
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -85,7 +84,7 @@ function AnimatedSplash({ onFinish }: { onFinish: () => void }) {
       />
       <Animated.View style={{ opacity }}>
         <Image
-          source={{ uri: RADIO_LOGO_URI }}
+          source={LOCAL_SPLASH_LOGO}
           style={styles.splashLogo}
           resizeMode="contain"
         />
@@ -99,6 +98,14 @@ export default function RootLayout() {
 
   useEffect(() => {
     SplashScreen.hideAsync().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const fallbackTimer = setTimeout(() => {
+      setSplashDone(true);
+    }, 2500);
+
+    return () => clearTimeout(fallbackTimer);
   }, []);
 
   return (
