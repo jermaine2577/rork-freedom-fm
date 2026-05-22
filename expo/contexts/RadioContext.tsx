@@ -234,18 +234,12 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       return;
     }
 
-    // POLITE MODE: another app owns audio focus.
-    //
-    // TRUE polite behavior: do absolutely nothing. Any call to player.play()
-    // — even at volume 0 — re-requests Android audio focus and stops the
-    // other app (YouTube, video, call). So while interrupted we just idle.
-    //
-    // Two resume paths remain, neither of which steals focus:
-    //   1. expo-video's audioMixingMode='auto' lets the OS auto-resume us
-    //      via AUDIOFOCUS_GAIN when the other app releases focus, firing
-    //      playingChange:true on its own.
-    //   2. AppState→active (user returns to Freedom FM) triggers an
-    //      explicit resume in the AppState listener.
+    // Auto-resume strategy:
+    // The user wants playback. Another app (YouTube, FB video, call) may
+    // have caused the OS to pause our stream. We keep retrying indefinitely
+    // with backoff — as soon as the interrupting app stops, our next probe
+    // succeeds and the radio resumes in the background. The user does NOT
+    // need to return to Freedom FM.
     let actuallyPlaying = false;
     try {
       actuallyPlaying = !!(refs.current.player as any)?.playing;
@@ -264,28 +258,32 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     const attempt = refs.current.watchdogAttempts;
     console.log('[Radio] Watchdog attempt', attempt);
 
-    // Only used when there's no foreign app interruption (e.g. a network
-    // blip). Try soft play first, then recreate.
-    if (attempt <= 2 && refs.current.player) {
+    // Alternate soft play() and full recreate. Soft play() is cheap and
+    // works for transient network blips; recreate handles cases where the
+    // HLS session was killed by the OS during a long interruption.
+    const shouldRecreate = attempt % 3 === 0;
+    if (!shouldRecreate && refs.current.player) {
       try {
         refs.current.player.play();
       } catch (e) {
         console.warn('[Radio] Watchdog soft play failed:', e);
       }
-    } else if (attempt <= 5) {
+    } else {
       try {
         playNativeRef.current?.();
       } catch (e) {
         console.warn('[Radio] Watchdog recreate failed:', e);
       }
-    } else {
-      // Give up — likely an interruption we missed flagging. Stop probing.
-      console.log('[Radio] Watchdog: giving up after attempt', attempt);
-      stopResumeWatchdog();
-      return;
     }
 
-    const nextDelay = attempt < 3 ? 2000 : 4000;
+    // Backoff schedule: 2s, 2s, 4s (recreate), 4s, 4s, 8s (recreate),
+    // 8s, 8s, 15s (recreate), then 15s forever. Keeps retrying until the
+    // interrupting app releases audio focus.
+    let nextDelay: number;
+    if (attempt < 3) nextDelay = 2000;
+    else if (attempt < 6) nextDelay = 4000;
+    else if (attempt < 9) nextDelay = 8000;
+    else nextDelay = 15000;
     scheduleNextWatchdogTick(nextDelay);
   }, [scheduleNextWatchdogTick, stopResumeWatchdog]);
 
