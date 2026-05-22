@@ -175,29 +175,23 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     };
   }, []);
 
-  const configureAudioMode = useCallback(async (mode: 'duckOthers' | 'doNotMix' = 'duckOthers') => {
+  const configureAudioMode = useCallback(async (_mode?: 'duckOthers' | 'doNotMix' | 'mixWithOthers') => {
     if (Platform.OS === 'web') return;
     const expoAudio = loadExpoAudio();
     if (!expoAudio?.setAudioModeAsync) return;
     try {
-      // 'duckOthers' (default): we're willing to share the session. When
-      // another app takes focus, the OS pauses us gracefully and (in theory)
-      // sends AUDIOFOCUS_GAIN when that app finishes. In practice, Expo Go
-      // backgrounded JS doesn't reliably get the gain event, so polite mode
-      // also runs a slow silent probe as a fallback.
-      //
-      // 'doNotMix' (used during interruption): tells Android we're a high-
-      // priority media app and want to be notified when focus returns. This
-      // improves the chance that AUDIOFOCUS_GAIN actually delivers.
+      // 'mixWithOthers': the radio keeps streaming even when other apps
+      // (YouTube, video, games) play audio. Both play simultaneously. The
+      // user can pause the radio manually if they want silence.
       await expoAudio.setAudioModeAsync({
         playsInSilentMode: true,
         shouldPlayInBackground: true,
-        interruptionMode: mode,
-        interruptionModeAndroid: mode,
+        interruptionMode: 'mixWithOthers',
+        interruptionModeAndroid: 'mixWithOthers',
         shouldRouteThroughEarpiece: false,
         allowsRecording: false,
       });
-      console.log('[Radio] Audio mode configured (' + mode + ')');
+      console.log('[Radio] Audio mode configured (mixWithOthers — never yields focus)');
     } catch (e) {
       console.warn('[Radio] setAudioModeAsync failed:', e);
     }
@@ -244,12 +238,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     //      playingChange:true on its own.
     //   2. AppState→active (user returns to Freedom FM) triggers an
     //      explicit resume in the AppState listener.
-    if (refs.current.interruptedByOtherApp) {
-      console.log('[Radio] Polite mode: idle, no probing (waiting for OS focus return or user to reopen app)');
-      stopResumeWatchdog();
-      return;
-    }
-
     let actuallyPlaying = false;
     try {
       actuallyPlaying = !!(refs.current.player as any)?.playing;
@@ -523,7 +511,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       // paused, and AUDIOFOCUS_GAIN auto-resumes us. This is the key to
       // "wait for the user to stop the other app, then play again" without
       // the JS layer having to fight for focus.
-      (player as any).audioMixingMode = 'auto';
+      // 'mixWithOthers' — radio NEVER pauses for other apps. Both stream together.
+      (player as any).audioMixingMode = 'mixWithOthers';
       (player as any).allowsExternalPlayback = true;
       (player as any).volume = volume;
       (player as any).loop = false;
@@ -571,44 +560,16 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           }
           stopResumeWatchdog();
         } else if (refs.current.desiredPlaying) {
-          // Stream stopped while user wants playback.
-          // Detect ping-pong: if we were playing for less than 3 seconds, an
-          // external app (YouTube, a call) took audio focus. Mark interrupted
-          // and STOP TRYING TO PLAY — the OS will resume us on
-          // AUDIOFOCUS_GAIN via expo-video's 'auto' mixing mode. We must not
-          // call play() while interrupted; that would stop the other app.
-          const playedForMs = refs.current.lastPlayingAtMs
-            ? Date.now() - refs.current.lastPlayingAtMs
-            : Number.MAX_SAFE_INTEGER;
-          if (playedForMs < 30000) {
-            // Treat almost any "stopped while desired" in the background as
-            // an external interruption. Better safe than starting a probe
-            // loop that fights another app. If it was truly a network blip,
-            // AUDIOFOCUS_GAIN will still hand focus back when nothing else
-            // is playing and expo-video will resume on its own.
-            if (!refs.current.interruptedByOtherApp) {
-              console.log('[Radio] Playback stopped while desired — entering polite mode (idle, no probing)');
-              // Switch to doNotMix so Android treats us as a media app that
-              // wants AUDIOFOCUS_GAIN notifications.
-              configureAudioMode('doNotMix');
-            }
-            refs.current.interruptedByOtherApp = true;
-            // Keep player object alive so the OS can resume it later.
-          }
+          // Stream stopped while user wants playback. With 'mixWithOthers'
+          // the OS never interrupts us — any stop here is a network blip.
+          // Kick off the resume watchdog to reconnect.
+          console.log('[Radio] Playback stopped while desired — reconnecting');
           refs.current.watchdogAttempts = 0;
           if (refs.current.watchdogTimer) {
             clearTimeout(refs.current.watchdogTimer);
             refs.current.watchdogTimer = null;
           }
-          if (refs.current.interruptedByOtherApp) {
-            // Polite mode: do nothing. Rely on expo-video's audioMixingMode
-            // 'auto' to auto-resume on AUDIOFOCUS_GAIN, or on the user
-            // returning to the app to trigger an explicit resume.
-            console.log('[Radio] Polite mode armed — idling, will not probe');
-          } else {
-            // Non-polite (network blip): start fast soft-play/recreate path.
-            startResumeWatchdog();
-          }
+          startResumeWatchdog();
         } else {
           setIsLoading(false);
         }
