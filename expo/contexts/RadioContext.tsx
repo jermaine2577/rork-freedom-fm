@@ -180,13 +180,16 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     const expoAudio = loadExpoAudio();
     if (!expoAudio?.setAudioModeAsync) return;
     try {
-      // Platform-specific:
-      // - iOS: 'duckOthers' makes us a PRIMARY audio source so the lock-screen
-      //   / Control Center Now Playing notification shows up. iOS hides
-      //   remote controls for apps that use 'mixWithOthers' (secondary audio).
-      // - Android: 'mixWithOthers' keeps the radio streaming alongside other
-      //   apps (YouTube etc.) without yielding focus.
-      const iosMode = 'duckOthers' as const;
+      // Both platforms: 'mixWithOthers' so we never stop or duck other apps
+      // (YouTube, video, music). The user can pause via in-app controls or
+      // the lock-screen / Control Center notification.
+      //
+      // Now Playing controls on iOS: showing them does NOT require being the
+      // primary audio source. With category = .playback (set by
+      // shouldPlayInBackground + playsInSilentMode) and
+      // showNowPlayingNotification = true on the player, iOS displays the
+      // Now Playing info even when mixing with others.
+      const iosMode = 'mixWithOthers' as const;
       const androidMode = 'mixWithOthers' as const;
       await expoAudio.setAudioModeAsync({
         playsInSilentMode: true,
@@ -196,7 +199,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         shouldRouteThroughEarpiece: false,
         allowsRecording: false,
       });
-      console.log('[Radio] Audio mode configured (iOS:duckOthers / Android:mixWithOthers)');
+      console.log('[Radio] Audio mode configured (mixWithOthers on both platforms)');
     } catch (e) {
       console.warn('[Radio] setAudioModeAsync failed:', e);
     }
@@ -516,12 +519,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       // paused, and AUDIOFOCUS_GAIN auto-resumes us. This is the key to
       // "wait for the user to stop the other app, then play again" without
       // the JS layer having to fight for focus.
-      // Platform-specific audioMixingMode:
-      // - iOS: 'auto' keeps us as the primary audio app so the Now Playing
-      //   info / lock-screen controls appear. 'mixWithOthers' would hide them.
-      // - Android: 'mixWithOthers' keeps both streams playing without
-      //   stealing focus from other apps.
-      (player as any).audioMixingMode = Platform.OS === 'ios' ? 'auto' : 'mixWithOthers';
+      // 'mixWithOthers' on both platforms: never interrupt other apps.
+      // Now Playing controls still appear on iOS because
+      // showNowPlayingNotification is true and the audio session category
+      // is .playback (set by expo-audio above).
+      (player as any).audioMixingMode = 'mixWithOthers';
       (player as any).allowsExternalPlayback = true;
       (player as any).volume = volume;
       (player as any).loop = false;
