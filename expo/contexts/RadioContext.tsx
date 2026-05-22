@@ -178,28 +178,25 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     };
   }, []);
 
-  const configureAudioMode = useCallback(async (_mode?: 'duckOthers' | 'doNotMix' | 'mixWithOthers') => {
+  const configureAudioMode = useCallback(async () => {
     if (Platform.OS === 'web') return;
     const expoAudio = loadExpoAudio();
     if (!expoAudio?.setAudioModeAsync) return;
     try {
-      // Co-exist with other media apps: when the user is watching
-      // YouTube/Facebook/Spotify, Freedom FM should NOT pause them.
-      // 'mixWithOthers' opts out of the OS focus arbitration so other
-      // apps keep playing alongside the radio. Tradeoff: incoming
-      // phone/VoIP calls may overlap the stream; the user can pause
-      // from the lock-screen control if needed.
-      const iosMode = 'mixWithOthers' as const;
-      const androidMode = 'mixWithOthers' as const;
+      // Co-exist with other media apps: when the user starts YouTube,
+      // Facebook, Spotify, etc., Freedom FM must not request exclusive
+      // focus or pause that app. This also lets the radio keep playing
+      // through/after short videos when the OS permits mixed audio.
+      const mixedAudioMode = 'mixWithOthers' as const;
       await expoAudio.setAudioModeAsync({
         playsInSilentMode: true,
         shouldPlayInBackground: true,
-        interruptionMode: iosMode,
-        interruptionModeAndroid: androidMode,
+        interruptionMode: mixedAudioMode,
+        interruptionModeAndroid: mixedAudioMode,
         shouldRouteThroughEarpiece: false,
         allowsRecording: false,
       });
-      console.log('[Radio] Audio mode configured (mix with others — coexist with YouTube/Spotify)');
+      console.log('[Radio] Audio mode configured (mixed media — YouTube/Facebook continue)');
     } catch (e) {
       console.warn('[Radio] setAudioModeAsync failed:', e);
     }
@@ -235,11 +232,10 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     }
 
     // Auto-resume strategy:
-    // The user wants playback. Another app (YouTube, FB video, call) may
-    // have caused the OS to pause our stream. We keep retrying indefinitely
-    // with backoff — as soon as the interrupting app stops, our next probe
-    // succeeds and the radio resumes in the background. The user does NOT
-    // need to return to Freedom FM.
+    // The user wants playback. A transient stream drop or OS pause may have
+    // stopped the player. Keep retrying softly with backoff so the radio
+    // resumes after the external video/audio stops without taking focus away
+    // from YouTube/Facebook while they are playing.
     let actuallyPlaying = false;
     try {
       actuallyPlaying = !!(refs.current.player as any)?.playing;
@@ -258,27 +254,20 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     const attempt = refs.current.watchdogAttempts;
     console.log('[Radio] Watchdog attempt', attempt);
 
-    // Alternate soft play() and full recreate. Soft play() is cheap and
-    // works for transient network blips; recreate handles cases where the
-    // HLS session was killed by the OS during a long interruption.
-    const shouldRecreate = attempt % 3 === 0;
-    if (!shouldRecreate && refs.current.player) {
+    // Use only soft play() retries here. Recreating the player tears down
+    // lock-screen controls and can re-negotiate audio focus, which is what
+    // makes YouTube/Facebook pause on some devices. Hard recreate remains
+    // limited to real player errors below.
+    if (refs.current.player) {
       try {
         refs.current.player.play();
       } catch (e) {
         console.warn('[Radio] Watchdog soft play failed:', e);
       }
-    } else {
-      try {
-        playNativeRef.current?.();
-      } catch (e) {
-        console.warn('[Radio] Watchdog recreate failed:', e);
-      }
     }
 
-    // Backoff schedule: 2s, 2s, 4s (recreate), 4s, 4s, 8s (recreate),
-    // 8s, 8s, 15s (recreate), then 15s forever. Keeps retrying until the
-    // interrupting app releases audio focus.
+    // Backoff schedule: 2s, 2s, 4s, 4s, 4s, 8s, 8s, 8s, 15s, then 15s forever.
+    // Keeps retrying until the stream is playing again.
     let nextDelay: number;
     if (attempt < 3) nextDelay = 2000;
     else if (attempt < 6) nextDelay = 4000;
@@ -549,17 +538,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             try {
               (sessionPlayer as any).volume = refs.current.restoreVolume || volume || 1.0;
             } catch {}
-            // Restore duckOthers for future cooperative behavior.
-            configureAudioMode('duckOthers');
-            // If the HLS socket was idle for a long time, the stream is
-            // likely stale (server may have closed the connection). Do a
-            // full recreate now that we have focus, so we don't get a 404
-            // mid-resume. This is the ONLY recreate path during recovery.
+            // Keep mixed-audio behavior after recovery so external videos
+            // continue instead of being paused by the radio.
+            configureAudioMode();
             if (idleMs > 30000) {
-              console.log('[Radio] Stream was idle for', idleMs, 'ms — refreshing source on resume');
-              try {
-                playNativeRef.current?.();
-              } catch {}
+              console.log('[Radio] Stream recovered after', idleMs, 'ms idle');
             }
           }
           stopResumeWatchdog();
@@ -863,9 +846,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
   }, [cleanupWebAudio, disposePlayer, stopResumeWatchdog]);
 
   // Reconnect on returning to foreground if user wanted playback.
-  // This is what makes the app behave like TuneIn: if another app interrupted
-  // our audio (e.g. by playing a video), we recover the stream automatically
-  // when the user comes back to Freedom FM.
+  // Keep mixed-audio mode so returning to Freedom FM does not pause
+  // YouTube/Facebook/Spotify if that media is still playing.
   useEffect(() => {
     if (Platform.OS === 'web') return;
     const onChange = async (s: AppStateStatus) => {
@@ -881,16 +863,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       if (s !== 'active') return;
       if (!refs.current.desiredPlaying) return;
 
-      // If we're in polite mode (another app interrupted us), the user has
-      // explicitly returned to Freedom FM. This is now an explicit signal to
-      // resume — even if the other app is still running, the user wants us
-      // back. Reset polite flags so the recreate below isn't blocked.
-      const wasInterrupted = refs.current.interruptedByOtherApp;
-      if (wasInterrupted) {
-        console.log('[Radio] Foreground: user returned while interrupted — taking focus back');
-      }
-
-      // Re-assert audio session (some OEMs drop it after interruption)
+      // Re-assert the mixed audio session; some OEMs drop it after backgrounding.
       await configureAudioMode();
 
       let stillPlaying = false;
@@ -902,22 +875,21 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         return;
       }
 
-      // User came back — reset polite mode so we make a real attempt to take
-      // audio focus again. By the time they're back in our app, the other
-      // app is almost certainly paused/closed.
       refs.current.interruptedByOtherApp = false;
       refs.current.silentKeepalive = false;
       refs.current.watchdogAttempts = 0;
 
-      // Auto-resume on refocus. The previous session was very likely killed
-      // by the interrupting app, so we do a full recreate rather than a soft
-      // play() on a stale player (which tends to silently fail).
-      console.log('[Radio] Foreground: auto-resuming playback');
+      // First try a soft resume so we do not tear down the lock-screen service
+      // or cause another app's video/audio to pause. Only hard errors recreate.
+      console.log('[Radio] Foreground: softly resuming playback');
       setIsLoading(true);
       setError(null);
-      playNative();
+      try {
+        refs.current.player?.play();
+      } catch (e) {
+        console.warn('[Radio] Foreground soft resume failed:', e);
+      }
 
-      // Safety net in case the recreate also gets blocked.
       startResumeWatchdog();
     };
     const sub = AppState.addEventListener('change', onChange);
