@@ -183,20 +183,21 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     const expoAudio = loadExpoAudio();
     if (!expoAudio?.setAudioModeAsync) return;
     try {
-      // Co-exist with other media apps: when the user starts YouTube,
-      // Facebook, Spotify, etc., Freedom FM must not request exclusive
-      // focus or pause that app. This also lets the radio keep playing
-      // through/after short videos when the OS permits mixed audio.
-      const mixedAudioMode = 'mixWithOthers' as const;
+      // iOS: must be primary playback (NOT mixWithOthers) so the
+      // Now Playing info center / lock-screen controls appear. iOS
+      // suppresses Now Playing metadata when the session is mixed.
+      // Android: keep mixWithOthers so YouTube/Facebook/Spotify keep
+      // playing alongside the radio. The Android foreground media
+      // service still shows the notification with controls.
       await expoAudio.setAudioModeAsync({
         playsInSilentMode: true,
         shouldPlayInBackground: true,
-        interruptionMode: mixedAudioMode,
-        interruptionModeAndroid: mixedAudioMode,
+        interruptionMode: Platform.OS === 'ios' ? 'duckOthers' : 'mixWithOthers',
+        interruptionModeAndroid: 'mixWithOthers',
         shouldRouteThroughEarpiece: false,
         allowsRecording: false,
       });
-      console.log('[Radio] Audio mode configured (mixed media — YouTube/Facebook continue)');
+      console.log('[Radio] Audio mode configured (iOS=primary playback for lock-screen, Android=mixed)');
     } catch (e) {
       console.warn('[Radio] setAudioModeAsync failed:', e);
     }
@@ -502,10 +503,11 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     try {
       (player as any).staysActiveInBackground = true;
       (player as any).showNowPlayingNotification = true;
-      // 'mixWithOthers' on the player matches the audio session — the
-      // radio plays alongside YouTube/Spotify/Facebook video without
-      // pausing them or being paused by them.
-      (player as any).audioMixingMode = 'mixWithOthers';
+      // iOS: 'auto' makes expo-video own the Now Playing session so
+      // the lock-screen / Control Center controls appear with title,
+      // artist and artwork. 'mixWithOthers' would hide them entirely.
+      // Android: mixed mode lets YouTube/Spotify keep playing.
+      (player as any).audioMixingMode = Platform.OS === 'ios' ? 'auto' : 'mixWithOthers';
       (player as any).allowsExternalPlayback = true;
       (player as any).volume = volume;
       (player as any).loop = false;
