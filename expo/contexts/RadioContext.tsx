@@ -579,19 +579,25 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           //   succeed as soon as the other app releases the audio session.
           const status = refs.current.lastStatus;
           const appState = (AppState as any).currentState;
-          if (status === 'readyToPlay' && appState === 'active') {
-            console.log('[Radio] Foreground pause (user intent) — honoring');
+          // Android: backgrounded pauses come from the user's notification
+          // tap far more often than from interruptions, and the earlier
+          // product decision was coexistence (never steal focus back from
+          // YouTube/Facebook) — so keep honoring them like Music honors a
+          // deliberate pause.
+          if (status === 'readyToPlay' && (appState === 'active' || Platform.OS !== 'ios')) {
+            console.log('[Radio] Deliberate pause (foreground or Android notification) — honoring');
             refs.current.desiredPlaying = false;
             stopResumeWatchdog();
             setIsLoading(false);
             setError(null);
             return;
           }
-          // Backgrounded pause (or stream stopped while user wants playback):
-          // treat as interruption / network blip and keep retrying. Wait
-          // ~10s before the first probe so a deliberate lock-screen pause
-          // isn't instantly overridden, then retry every 15s until the
-          // interrupting app releases the audio session.
+          // iOS backgrounded pause: treat as an interruption (call, social
+          // video grabbing the speaker) and keep retrying. Wait ~10s before
+          // the first probe so a deliberate lock-screen pause isn't
+          // instantly overridden, then retry every 15s until the
+          // interrupting app releases the audio session — Apple-Music-style
+          // "comes back by itself when the interruption is over".
           console.log('[Radio] Background pause or blip (status:', status, ', appState:', appState, ') — watchdog will resume when the speaker frees up');
           refs.current.interruptedByOtherApp = true;
           refs.current.watchdogAttempts = 9; // next ticks use the 15s backoff tier
