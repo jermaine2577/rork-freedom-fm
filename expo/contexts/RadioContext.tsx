@@ -566,30 +566,36 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
           }
           stopResumeWatchdog();
         } else if (refs.current.desiredPlaying) {
-          // Distinguish a user-initiated pause (lock screen / Control Center
-          // / notification) from a network blip. When the user taps pause on
-          // the lock screen, expo-video fires playingChange:false but the
-          // player status remains 'readyToPlay' (the source is still loaded,
-          // it's just paused). Network blips come with status 'loading' or
-          // 'error'. If we see a clean pause from a ready stream, honor it.
+          // Distinguish a user-initiated pause (in-app button, Control Center,
+          // lock screen while the app is open) from an OS interruption (phone
+          // call, Facebook/YouTube video claiming audio focus). We can't hear
+          // iOS interruption events from JS, but we CAN see whether our app
+          // was in the foreground when the pause arrived:
+          //
+          // - Foreground pause  -> the user did it on purpose. Honor it.
+          // - Background pause  -> an interruption stole the speaker. Keep
+          //   desiredPlaying=true and let the watchdog keep probing; its
+          //   play() calls are refused while the interruption is active and
+          //   succeed as soon as the other app releases the audio session.
           const status = refs.current.lastStatus;
-          if (status === 'readyToPlay') {
-            console.log('[Radio] Pause from lock-screen / notification detected — honoring');
+          const appState = (AppState as any).currentState;
+          if (status === 'readyToPlay' && appState === 'active') {
+            console.log('[Radio] Foreground pause (user intent) — honoring');
             refs.current.desiredPlaying = false;
             stopResumeWatchdog();
             setIsLoading(false);
             setError(null);
             return;
           }
-          // Stream stopped while user wants playback and status isn't ready —
-          // treat as network blip and reconnect.
-          console.log('[Radio] Playback stopped while desired (status:', status, ') — reconnecting');
-          refs.current.watchdogAttempts = 0;
-          if (refs.current.watchdogTimer) {
-            clearTimeout(refs.current.watchdogTimer);
-            refs.current.watchdogTimer = null;
-          }
-          startResumeWatchdog();
+          // Backgrounded pause (or stream stopped while user wants playback):
+          // treat as interruption / network blip and keep retrying. Wait
+          // ~10s before the first probe so a deliberate lock-screen pause
+          // isn't instantly overridden, then retry every 15s until the
+          // interrupting app releases the audio session.
+          console.log('[Radio] Background pause or blip (status:', status, ', appState:', appState, ') — watchdog will resume when the speaker frees up');
+          refs.current.interruptedByOtherApp = true;
+          refs.current.watchdogAttempts = 9; // next ticks use the 15s backoff tier
+          scheduleNextWatchdogTick(10000);
         } else {
           setIsLoading(false);
         }
