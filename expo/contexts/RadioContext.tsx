@@ -178,8 +178,15 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     };
   }, []);
 
+  const audioModeConfiguredRef = useRef(false);
+
   const configureAudioMode = useCallback(async () => {
     if (Platform.OS === 'web') return;
+    // Apply the audio mode EXACTLY ONCE per app session. Re-applying it
+    // while playing (e.g. after an interruption recovery) re-negotiates
+    // the iOS AVAudioSession and can silently drop the Now Playing card
+    // from the lock screen. The mode never changes, so one call is enough.
+    if (audioModeConfiguredRef.current) return;
     const expoAudio = loadExpoAudio();
     if (!expoAudio?.setAudioModeAsync) return;
     try {
@@ -197,9 +204,26 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         shouldRouteThroughEarpiece: false,
         allowsRecording: false,
       });
+      audioModeConfiguredRef.current = true;
       console.log('[Radio] Audio mode configured (iOS=primary playback for lock-screen, Android=mixed)');
     } catch (e) {
       console.warn('[Radio] setAudioModeAsync failed:', e);
+    }
+  }, []);
+
+  // Re-assert the Now Playing flags right before ANY play() call. After an
+  // interruption or a watchdog resume, expo-video does not always republish
+  // the Now Playing info — setting these again just before playback makes
+  // the lock-screen card appear consistently.
+  const applyNowPlayingFlags = useCallback((player: any) => {
+    if (Platform.OS === 'web' || !player) return;
+    try {
+      player.staysActiveInBackground = true;
+      player.showNowPlayingNotification = true;
+      player.audioMixingMode = Platform.OS === 'ios' ? 'auto' : 'mixWithOthers';
+      player.allowsExternalPlayback = true;
+    } catch (e) {
+      console.warn('[Radio] Re-asserting Now Playing flags failed:', e);
     }
   }, []);
 
@@ -261,6 +285,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     // limited to real player errors below.
     if (refs.current.player) {
       try {
+        applyNowPlayingFlags(refs.current.player);
         refs.current.player.play();
       } catch (e) {
         console.warn('[Radio] Watchdog soft play failed:', e);
@@ -275,7 +300,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     else if (attempt < 9) nextDelay = 8000;
     else nextDelay = 15000;
     scheduleNextWatchdogTick(nextDelay);
-  }, [scheduleNextWatchdogTick, stopResumeWatchdog]);
+  }, [applyNowPlayingFlags, scheduleNextWatchdogTick, stopResumeWatchdog]);
 
   useEffect(() => {
     runWatchdogTickRef.current = runWatchdogTick;
@@ -501,14 +526,6 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     // IMPORTANT: set sticky/background flags BEFORE play() so the foreground
     // service is started with the correct type and the notification persists.
     try {
-      (player as any).staysActiveInBackground = true;
-      (player as any).showNowPlayingNotification = true;
-      // iOS: 'auto' makes expo-video own the Now Playing session so
-      // the lock-screen / Control Center controls appear with title,
-      // artist and artwork. 'mixWithOthers' would hide them entirely.
-      // Android: mixed mode lets YouTube/Spotify keep playing.
-      (player as any).audioMixingMode = Platform.OS === 'ios' ? 'auto' : 'mixWithOthers';
-      (player as any).allowsExternalPlayback = true;
       (player as any).volume = volume;
       (player as any).loop = false;
       // expo-video Android: keep service alive when app task is removed.
@@ -516,6 +533,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
     } catch (e) {
       console.warn('[Radio] Setting player flags failed:', e);
     }
+    applyNowPlayingFlags(player);
 
     const sessionPlayer = player;
 
@@ -540,9 +558,8 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
             try {
               (sessionPlayer as any).volume = refs.current.restoreVolume || volume || 1.0;
             } catch {}
-            // Keep mixed-audio behavior after recovery so external videos
-            // continue instead of being paused by the radio.
-            configureAudioMode();
+            // Audio mode is applied once per session; re-applying it here
+            // would drop the iOS Now Playing card. Nothing to reconfigure.
             if (idleMs > 30000) {
               console.log('[Radio] Stream recovered after', idleMs, 'ms idle');
             }
@@ -633,7 +650,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       setError('Unable to play stream. Please try again.');
       setIsLoading(false);
     }
-  }, [buildMetadata, clearConnectTimer, configureAudioMode, disposePlayer, isPlaying, scheduleNextWatchdogTick, startResumeWatchdog, stopResumeWatchdog, volume]);
+  }, [applyNowPlayingFlags, buildMetadata, clearConnectTimer, configureAudioMode, disposePlayer, isPlaying, scheduleNextWatchdogTick, startResumeWatchdog, stopResumeWatchdog, volume]);
 
   useEffect(() => {
     playNativeRef.current = playNative;
@@ -664,6 +681,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
         try {
           setIsLoading(true);
           setError(null);
+          applyNowPlayingFlags(existing);
           existing.play();
           return;
         } catch (e) {
@@ -672,7 +690,7 @@ export const [RadioProvider, useRadio] = createContextHook(() => {
       }
       await playNative();
     }
-  }, [playNative, playWeb]);
+  }, [applyNowPlayingFlags, playNative, playWeb]);
 
   const pause = useCallback(async () => {
     console.log('[Radio] Pause requested');
